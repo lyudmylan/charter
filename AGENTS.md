@@ -1,7 +1,7 @@
 # Rules for work in this repo
 
-Read `docs/product.md` for what Charter is. The contract is `charter.toml`, and it references the
-organization source. Each rule below ends with the identifier of its rule in the contract.
+Read `docs/product.md` for what Charter is. The contract is `charter.toml`; it references the organization
+source. Each rule below ends with the identifier of its rule in the contract.
 
 ## How a change moves
 
@@ -19,6 +19,8 @@ All quality checks of the contract must pass. [checks.quality]
 - `python3 -m unittest discover -s tests`
 - `python3 scripts/charter_check.py check charter.toml`
 - `python3 scripts/charter_check.py instructions AGENTS.md --contract charter.toml`
+- `python3 scripts/charter_check.py text README.md --contract charter.toml`
+- `python3 scripts/charter_check.py text docs/product.md --contract charter.toml`
 
 When a file under a declared code path changes, `docs/product.md` changes too, or the change request
 states why not. [documents.code_paths]
@@ -33,6 +35,5 @@ states why not. [documents.code_paths]
 
 In a review, look also for broken contracts between parts of the system, and for documents that the
 change made stale. [documents.necessary]
-
 Stop and ask a person after 3 failed runs of the acceptance checks, 3 review rounds, or 3 refusals in
 sequence. [limits.acceptance_loop] [limits.review_loop] [limits.refusals]

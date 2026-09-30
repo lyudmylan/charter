@@ -25,7 +25,7 @@ agent = ["claude-code"]
 
 # Risk tiers. The first tier whose paths match a file applies.
 [tiers.high]
-paths = ["charter.toml", "schema/**", "scripts/**", "tests/**", "AGENTS.md", ".github/**"]
+paths = ["charter.toml", "schema/**", "scripts/**", "tests/**", "AGENTS.md", ".github/**"]  # tests/** includes the scenarios
 review = "deep"
 approver = "leader"
 approvals = 1
@@ -52,6 +52,8 @@ quality = [
   "python3 -m unittest discover -s tests",
   "python3 scripts/charter_check.py check charter.toml",
   "python3 scripts/charter_check.py instructions AGENTS.md --contract charter.toml",
+  "python3 scripts/charter_check.py text README.md --contract charter.toml",
+  "python3 scripts/charter_check.py text docs/product.md --contract charter.toml",
 ]
 
 # The lifecycle map: what does the work in each phase, and the built-in abilities of Claude Code that it uses.
