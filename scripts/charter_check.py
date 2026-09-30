@@ -384,10 +384,11 @@ def resolve_source(source: dict, explicit: Path | None, cache_dir: Path) -> tupl
 
 @dataclass
 class Effective:
-    values: dict[str, object]
+    values: dict[str, object]       # the organization values, overridden by the repo values
     fields: dict
     failures: list[str]
     origin: str
+    repo_values: dict[str, object] = None   # the repo values alone, in declaration order
 
 
 def effective_contract(contract: Path, schema: Path, source: Path | None, cache_dir: Path) -> Effective:
@@ -397,19 +398,19 @@ def effective_contract(contract: Path, schema: Path, source: Path | None, cache_
     if repo.role != ROLE_REPO:
         repo.errors.append(msg("not_repo", name=contract))
     if repo.errors:
-        return Effective({}, fields, repo.errors, "")
+        return Effective({}, fields, repo.errors, "", {})
     org_data, origin = resolve_source(repo_data[TABLE_SOURCE], source, cache_dir)
     org = validate(org_data, fields, origin)
     if org.role != ROLE_ORGANIZATION:
         org.errors.append(msg("not_org", name=origin))
     if org.errors:
-        return Effective({}, fields, org.errors, origin)
+        return Effective({}, fields, org.errors, origin, {})
     failures = [
         msg("weakens", field=path, org=org.values[path], repo=value)
         for path, value in repo.values.items()
         if path in org.locks and not KINDS[spec_of(path, fields)[ATTR_KIND]].stricter(org.values[path], value, spec_of(path, fields))
     ]
-    return Effective({**org.values, **repo.values}, fields, failures, origin)
+    return Effective({**org.values, **repo.values}, fields, failures, origin, dict(repo.values))
 
 
 # ---------------------------------------------------------------------------

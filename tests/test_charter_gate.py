@@ -75,6 +75,13 @@ class Link(Temp):
         self.assertEqual(code, cc.FAIL)
         self.assertIn("no open issue", out)
 
+    def test_malformed_issue_entry_cannot_run(self):
+        """gates, check 1: a wrong value gives exit code 2 with the cause."""
+        path = self.facts(**{cg.FACT_LINKED_ISSUES: [{"id": 22}]})
+        code, out = run(cg.CMD_LINK, f"--{cg.ARG_FACTS}", str(path))
+        self.assertEqual(code, cc.CANNOT_RUN)
+        self.assertIn(f"wrong value for {cg.FACT_LINKED_ISSUES}", out)
+
     def test_facts_file_without_a_key_cannot_run(self):
         """gates, check 1: a broken facts file gives exit code 2 with the cause."""
         path = self.dir / "facts.json"
@@ -103,6 +110,16 @@ class Documents(Temp):
         code, out = run(cg.CMD_DOCUMENTS, f"--{cg.ARG_FACTS}", str(path), *self.contract_args())
         self.assertEqual(code, cc.FAIL)
         self.assertIn("no necessary document changed and no reason is recorded", out)
+
+    def test_no_code_paths_declared_is_said(self):
+        """gates, check 1: a contract without code paths passes and says so."""
+        text = REPO.read_text().replace('code_paths = ["src/**"]\n', "")
+        contract = self.dir / "repo.toml"
+        contract.write_text(text)
+        path = self.facts(**{cg.FACT_CHANGED_FILES: ["src/app.py"]})
+        code, out = run(cg.CMD_DOCUMENTS, f"--{cg.ARG_FACTS}", str(path), f"--{cc.ARG_CONTRACT}", str(contract), f"--{cc.ARG_SOURCE}", str(ORG))
+        self.assertEqual(code, cc.PASS, out)
+        self.assertIn("declares no code paths", out)
 
     def test_code_changed_with_a_recorded_reason_passes(self):
         """gates, check 1."""
@@ -134,6 +151,20 @@ class Quality(Temp):
         self.assertEqual(code, cc.FAIL)
         self.assertIn("failed with exit code 3: python3 -c 'import sys; sys.exit(3)'", out)
 
+    def test_shell_syntax_is_refused_with_a_clear_message(self):
+        """gates, check 1."""
+        contract = self.contract_with(["python3 -c pass && python3 -c pass"])
+        code, out = run(cg.CMD_QUALITY, f"--{cc.ARG_CONTRACT}", str(contract), f"--{cc.ARG_SOURCE}", str(ORG))
+        self.assertEqual(code, cc.FAIL)
+        self.assertIn("shell syntax is not supported", out)
+
+    def test_output_of_a_failed_check_is_shown(self):
+        """gates, check 1."""
+        contract = self.contract_with(["python3 -c 'print(\"the cause\"); raise SystemExit(2)'"])
+        code, out = run(cg.CMD_QUALITY, f"--{cc.ARG_CONTRACT}", str(contract), f"--{cc.ARG_SOURCE}", str(ORG))
+        self.assertEqual(code, cc.FAIL)
+        self.assertIn("the cause", out)
+
     def test_missing_program_fails_and_names_it(self):
         """gates, check 1."""
         contract = self.contract_with(["no-such-program-xyz --version"])
@@ -158,6 +189,20 @@ class Verdict(Temp):
         code, out = self.verdict(**{cg.FACT_CHANGED_FILES: ["scripts/x.py", "docs/product.md"]})
         self.assertEqual(code, cc.PASS, out)
         self.assertIn("tier high: review deep, the leader merges (['alice'])", out)
+
+    def test_tier_order_comes_from_the_repo_contract(self):
+        """gates, check 1: an organization file that declares a lower tier first does not change the order."""
+        org = self.dir / "org.toml"
+        org.write_text(ORG.read_text().replace("[tiers.high]\n", "[tiers.low]\nreview = \"light\"\n\n[tiers.high]\n"))
+        path = self.facts(**{cg.FACT_CHANGED_FILES: ["scripts/x.py", "docs/product.md"]})
+        code, out = run(cg.CMD_VERDICT, f"--{cg.ARG_FACTS}", str(path), f"--{cc.ARG_CONTRACT}", str(REPO), f"--{cc.ARG_SOURCE}", str(org))
+        self.assertEqual(code, cc.PASS, out)
+        self.assertIn("tier high:", out)
+
+    def test_approvals_are_named_as_not_checked(self):
+        """gates, check 1: the decision of iteration 1 is visible in the output."""
+        code, out = self.verdict()
+        self.assertIn("approvals are not checked in this version", out)
 
     def test_not_ready_names_each_reason(self):
         """gates, check 1."""
@@ -188,6 +233,21 @@ class Verdict(Temp):
         self.assertEqual(data[cg.JSON_KEY_VERDICT], cg.VERDICT_READY)
         self.assertEqual(data[cg.JSON_KEY_TIER], "low")
         self.assertEqual([g[cg.JSON_KEY_GATE] for g in data[cg.JSON_KEY_GATES]], [cg.CMD_LINK, cg.CMD_DOCUMENTS])
+
+
+class Patterns(unittest.TestCase):
+    def test_star_stays_in_one_segment_and_double_star_crosses(self):
+        """gates, check 1: the pattern language of paths."""
+        cases = [
+            ("src/*", "src/x.py", True), ("src/*", "src/a/b.py", False),
+            ("*.py", "x.py", True), ("*.py", "a/x.py", False),
+            ("scripts/**", "scripts/x.py", True), ("scripts/**", "scripts/a/b.py", True),
+            ("docs/**/*.md", "docs/b.md", True), ("docs/**/*.md", "docs/a/b.md", True), ("docs/**/*.md", "docs/a/b.txt", False),
+            ("**", "any/where.txt", True), ("charter.toml", "charter.toml", True), ("charter.toml", "x/charter.toml", False),
+        ]
+        for pattern, file, expected in cases:
+            with self.subTest(pattern=pattern, file=file):
+                self.assertEqual(cg.matches(file, [pattern]), expected)
 
 
 class NoModel(unittest.TestCase):

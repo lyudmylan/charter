@@ -21,8 +21,8 @@ Exit codes: 0 pass, 1 fail, 2 the check could not run. The message names the cau
 from __future__ import annotations
 
 import argparse
-import fnmatch
 import json
+import re
 import shlex
 import subprocess
 import sys
@@ -47,8 +47,7 @@ FACT_REASON = "reason_for_no_document_change"   # text or null
 FACT_UNRESOLVED_THREADS = "unresolved_review_threads"   # whole number
 FACT_APPROVALS = "approvals"                # ["login"]
 FACT_CHECKS = "checks"                      # {"tests": "pass"}
-FACT_KEYS = (FACT_CHANGE_REQUEST, FACT_LINKED_ISSUES, FACT_CHANGED_FILES, FACT_REASON,
-             FACT_UNRESOLVED_THREADS, FACT_APPROVALS, FACT_CHECKS)
+# FACT_APPROVALS is optional and not checked in this version: the merge by the approver is the approval.
 ISSUE_NUMBER, ISSUE_STATE = "number", "state"
 STATE_OPEN = "open"
 CHECK_PASS = "pass"
@@ -61,6 +60,10 @@ FIELD_ROLE = "roles.{role}"
 TIERS_PREFIX = "tiers."
 TIER_PATHS, TIER_APPROVER, TIER_REVIEW = "paths", "approver", "review"
 
+# A quality command runs without a shell. Unquoted operators would need one.
+SHELL_OPERATOR_CHARS = "();<>|&"
+OUTPUT_TAIL_LINES = 20
+
 # Output.
 VERDICT_READY, VERDICT_NOT_READY = "ready", "not ready"
 OUT_GATE_PASS, OUT_GATE_FAIL = cc.OUT_PASS, cc.OUT_FAIL
@@ -69,17 +72,21 @@ JSON_KEY_TIER, JSON_KEY_APPROVER, JSON_KEY_MERGES, JSON_KEY_GATES, JSON_KEY_SOUR
 
 MSG = {
     "facts_not_json": "not JSON: {path}, {error}",
+    "facts_not_object": "the facts file is not a JSON object: {path}",
+    "facts_bad_value": "the facts file has a wrong value for {key}: {path}",
     "facts_missing_key": "the facts file has no key {key}: {path}",
     "no_linked_issue": "the change request references no issue",
     "no_open_issue": "the change request references no open issue: {issues}",
     "link_ok": "the change request references the open issue {issues}",
+    "no_code_paths": "the contract declares no code paths, so this gate checks nothing",
     "no_code_change": "no file under a code path changed",
     "document_changed": "a necessary document changed: {documents}",
     "reason_recorded": "no document changed; the recorded reason: {reason}",
     "no_document_no_reason": "a file under a code path changed ({files}), but no necessary document changed and no reason is recorded",
     "quality_none": "the contract declares no quality checks",
     "quality_ok": "passed: {command}",
-    "quality_failed": "failed with exit code {code}: {command}",
+    "quality_failed": "failed with exit code {code}: {command}\n{output}",
+    "quality_shell": "shell syntax is not supported, put the command in a script: {command}",
     "quality_cannot_run": "cannot run: {command}: {error}",
     "checks_pending": "checks not passed: {names}",
     "checks_ok": "all checks passed: {names}",
@@ -88,6 +95,7 @@ MSG = {
     "threads_ok": "no unresolved review thread",
     "tier": "tier {tier}: review {review}, the {approver} merges ({who})",
     "no_tier": "no tier matches the changed files",
+    "approvals_not_checked": "approvals are not checked in this version: the merge by the {approver} is the approval",
 }
 
 
@@ -115,15 +123,34 @@ def msg(message_id: str, **values: object) -> str:
 # ---------------------------------------------------------------------------
 
 
+def _is_issue(value: object) -> bool:
+    return (isinstance(value, dict) and isinstance(value.get(ISSUE_NUMBER), int)
+            and isinstance(value.get(ISSUE_STATE), str))
+
+
+FACT_SHAPES = {
+    FACT_CHANGE_REQUEST: lambda v: isinstance(v, int),
+    FACT_LINKED_ISSUES: lambda v: isinstance(v, list) and all(_is_issue(i) for i in v),
+    FACT_CHANGED_FILES: lambda v: isinstance(v, list) and all(isinstance(f, str) for f in v),
+    FACT_REASON: lambda v: v is None or isinstance(v, str),
+    FACT_UNRESOLVED_THREADS: lambda v: isinstance(v, int) and not isinstance(v, bool) and v >= 0,
+    FACT_CHECKS: lambda v: isinstance(v, dict) and all(isinstance(k, str) and isinstance(s, str) for k, s in v.items()),
+}
+
+
 def load_facts(path: Path) -> dict:
     text = cc.read_text(path)
     try:
         facts = json.loads(text)
     except json.JSONDecodeError as e:
         raise cc.CannotRun(msg("facts_not_json", path=path, error=e))
-    for key in FACT_KEYS:
+    if not isinstance(facts, dict):
+        raise cc.CannotRun(msg("facts_not_object", path=path))
+    for key, fits in FACT_SHAPES.items():
         if key not in facts:
             raise cc.CannotRun(msg("facts_missing_key", key=key, path=path))
+        if not fits(facts[key]):
+            raise cc.CannotRun(msg("facts_bad_value", key=key, path=path))
     return facts
 
 
@@ -134,8 +161,32 @@ def effective(args) -> cc.Effective:
     return e
 
 
+def glob_to_regex(pattern: str) -> str:
+    """A path pattern: `*` and `?` stay inside one segment; `**` crosses segments."""
+    out = ""
+    i = 0
+    while i < len(pattern):
+        c = pattern[i]
+        if pattern.startswith("**/", i):
+            out += "(?:.*/)?"
+            i += 3
+        elif pattern.startswith("**", i):
+            out += ".*"
+            i += 2
+        elif c == "*":
+            out += "[^/]*"
+            i += 1
+        elif c == "?":
+            out += "[^/]"
+            i += 1
+        else:
+            out += re.escape(c)
+            i += 1
+    return f"^{out}$"
+
+
 def matches(file: str, patterns: list[str]) -> bool:
-    return any(fnmatch.fnmatchcase(file, p) for p in patterns)
+    return any(re.match(glob_to_regex(p), file) for p in patterns)
 
 
 # ---------------------------------------------------------------------------
@@ -157,6 +208,8 @@ def gate_documents(facts: dict, e: cc.Effective) -> GateResult:
     code_paths = e.values.get(FIELD_CODE_PATHS, [])
     necessary = e.values.get(FIELD_NECESSARY, [])
     changed = facts[FACT_CHANGED_FILES]
+    if not code_paths:
+        return GateResult(CMD_DOCUMENTS, True, [msg("no_code_paths")])
     code_changes = [f for f in changed if matches(f, code_paths)]
     if not code_changes:
         return GateResult(CMD_DOCUMENTS, True, [msg("no_code_change")])
@@ -169,6 +222,18 @@ def gate_documents(facts: dict, e: cc.Effective) -> GateResult:
     return GateResult(CMD_DOCUMENTS, False, [msg("no_document_no_reason", files=code_changes)])
 
 
+def needs_a_shell(command: str) -> bool:
+    """True when the command has an unquoted shell operator, a variable, or a substitution."""
+    lexer = shlex.shlex(command, posix=True, punctuation_chars=True)
+    lexer.whitespace_split = True
+    try:
+        tokens = list(lexer)
+    except ValueError:
+        return True
+    return any(all(ch in SHELL_OPERATOR_CHARS for ch in tok) or tok.startswith("$") or "`" in tok
+               for tok in tokens if tok)
+
+
 def gate_quality(e: cc.Effective, cwd: Path) -> GateResult:
     commands = e.values.get(FIELD_QUALITY, [])
     if not commands:
@@ -176,6 +241,10 @@ def gate_quality(e: cc.Effective, cwd: Path) -> GateResult:
     reasons: list[str] = []
     passed = True
     for command in commands:
+        if needs_a_shell(command):
+            reasons.append(msg("quality_shell", command=command))
+            passed = False
+            continue
         try:
             result = subprocess.run(shlex.split(command), cwd=cwd, capture_output=True, text=True, check=False)
         except (FileNotFoundError, PermissionError) as error:
@@ -185,19 +254,32 @@ def gate_quality(e: cc.Effective, cwd: Path) -> GateResult:
         if result.returncode == 0:
             reasons.append(msg("quality_ok", command=command))
         else:
-            reasons.append(msg("quality_failed", command=command, code=result.returncode))
+            tail = "\n".join((result.stdout + result.stderr).strip().splitlines()[-OUTPUT_TAIL_LINES:])
+            reasons.append(msg("quality_failed", command=command, code=result.returncode, output=tail))
             passed = False
     return GateResult(CMD_QUALITY, passed, reasons)
 
 
-def tier_of(changed: list[str], e: cc.Effective) -> tuple[str | None, dict]:
-    """The tier of the change: the first declared tier that matches any changed file."""
-    tiers: dict[str, dict] = {}
+def tiers_in_order(e: cc.Effective) -> dict[str, dict]:
+    """The tiers, in the declaration order of the repo contract, with the inherited values."""
+    order: list[str] = []
+    for path in e.repo_values:
+        if path.startswith(TIERS_PREFIX):
+            name = path.split(cc.PATH_SEPARATOR)[1]
+            if name not in order:
+                order.append(name)
+    tiers: dict[str, dict] = {name: {} for name in order}
     for path, value in e.values.items():
         if path.startswith(TIERS_PREFIX):
             _, name, key = path.split(cc.PATH_SEPARATOR, 2)
-            tiers.setdefault(name, {})[key] = value
-    for name, spec in tiers.items():                       # declaration order: TOML keeps it
+            if name in tiers:
+                tiers[name][key] = value
+    return tiers
+
+
+def tier_of(changed: list[str], e: cc.Effective) -> tuple[str | None, dict]:
+    """The tier of the change: the first tier of the repo contract that matches any changed file."""
+    for name, spec in tiers_in_order(e).items():
         if any(matches(f, spec.get(TIER_PATHS, [])) for f in changed):
             return name, spec
     return None, {}
@@ -237,6 +319,7 @@ def gate_verdict(facts: dict, e: cc.Effective) -> tuple[bool, list[str], dict]:
         who = e.values.get(FIELD_ROLE.format(role=spec.get(TIER_APPROVER)), [])
         detail[JSON_KEY_MERGES] = who
         reasons.append(msg("tier", tier=tier, review=spec.get(TIER_REVIEW), approver=spec.get(TIER_APPROVER), who=who))
+        reasons.append(msg("approvals_not_checked", approver=spec.get(TIER_APPROVER)))
     detail[JSON_KEY_GATES] = [g.as_dict() for g in gates]
     return passed, reasons, detail
 

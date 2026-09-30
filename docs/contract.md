@@ -115,6 +115,17 @@ The facts file:
 A change request records a reason for a missing document change with one line in its text:
 `No document change: <reason>`. The collecting step copies it into the facts file.
 
+Three rules of the gates:
+
+- **Path patterns.** `*` and `?` stay inside one path segment. `**` crosses segments. `src/*` matches
+  `src/x.py` and not `src/a/b.py`; `scripts/**` matches both. The first tier of the repo contract that
+  matches a changed file is the tier of the change.
+- **Quality commands** run without a shell. A command with an unquoted operator such as `&&` or `|`,
+  a variable, or a substitution is refused with a message: put it in a script. The output of a failed
+  command is shown.
+- **Approvals** are not checked in this version. The merge by the approver of the tier is the approval,
+  and the verdict says so. The field `approvals` of the facts file is optional.
+
 ## The checker
 
 ```
