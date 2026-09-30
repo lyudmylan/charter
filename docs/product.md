@@ -21,11 +21,14 @@ three questions:
 ## How it works
 
 - The **contract** is a file with the rules, the owner of each rule, and the rights of
-  each role. Example: "a change to payment code needs the approval of a person".
+  each role. Example: "a change to payment code needs the approval of a person". The rules
+  of the organization live in a source outside every repo. A repo contract references that
+  source by address and version; it holds no copy. The checker compares the two.
 - A **gate** is a check that must pass before the next step. It is a deterministic
   script that checks the result, not the method.
 - An **acceptance check** states what "it works" means for one work item, in a form that
-  a script can run. A person approves it before the work starts.
+  a script can run. It lives in the repo as a [scenario file](../tests/scenarios/), and a
+  person approves it before the work starts.
 - A **risk tier** says how dangerous a change is, for example low or high. It sets the
   depth of the review and who approves.
 - The **evidence record** keeps what each gate found for every change, and the cost.
