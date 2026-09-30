@@ -62,6 +62,12 @@ class Facts(unittest.TestCase):
         for key in cg.FACT_SHAPES:
             self.assertTrue(cg.FACT_SHAPES[key](facts[key]), key)
 
+    def test_open_change_request_is_preferred_and_closed_never_counts(self):
+        """code-host, check 1: a closed change request of the same commit is not the one."""
+        closed, opened = {cf.PR_NUMBER: 1, cf.PR_STATE: "closed"}, {cf.PR_NUMBER: 2, cf.PR_STATE: cf.PR_OPEN}
+        self.assertEqual(cf.open_change_request([closed, opened]), opened)
+        self.assertIsNone(cf.open_change_request([closed]))
+
     def test_parse_checks(self):
         """code-host, check 1."""
         self.assertEqual(cf.parse_checks(["quality=success", " tests = failure "]), {"quality": "success", "tests": "failure"})

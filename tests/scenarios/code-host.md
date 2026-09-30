@@ -12,6 +12,9 @@ Work item: #5. Approved by a person on 2026-09-30, in the work item.
    test: `tests/test_charter_check.py::Source.test_source_prints_address_file_version_and_cache_path`
    test: `tests/test_charter_facts_github.py::Text.test_newest_completed_check_run_of_each_name`
    test: `tests/test_charter_gate.py::Quality.test_repo_only_needs_no_source`
+   test: `tests/test_charter_facts_github.py::Facts.test_open_change_request_is_preferred_and_closed_never_counts`
+   test: `tests/test_charter_check.py::Source.test_source_refuses_an_organization_file`
+   test: `tests/test_charter_gate.py::Quality.test_repo_only_refuses_an_organization_file`
 
 ## Manual checks
 

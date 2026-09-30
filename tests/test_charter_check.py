@@ -259,6 +259,13 @@ class Source(Temp):
         self.assertEqual(Path(lines[3]), cc.cache_path(SAMPLE_ADDRESS, self.dir))
 
 
+    def test_source_refuses_an_organization_file(self):
+        """code-host, check 1."""
+        code, out = run(cc.CMD_SOURCE, str(ORG), "--cache-dir", str(self.dir))
+        self.assertEqual(code, cc.FAIL)
+        self.assertIn("not a repo contract", out)
+
+
 class TextFiles(Temp):
     def text(self, content: str) -> tuple[int, str]:
         path = self.write("README.md", content)

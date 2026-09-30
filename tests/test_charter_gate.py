@@ -171,6 +171,12 @@ class Quality(Temp):
         code, out = run(cg.CMD_QUALITY, f"--{cc.ARG_CONTRACT}", str(contract), "--repo-only")
         self.assertEqual(code, cc.PASS, out)
 
+    def test_repo_only_refuses_an_organization_file(self):
+        """code-host, check 1."""
+        code, out = run(cg.CMD_QUALITY, f"--{cc.ARG_CONTRACT}", str(ORG), "--repo-only")
+        self.assertEqual(code, cc.CANNOT_RUN)
+        self.assertIn("not a repo contract", out)
+
     def test_missing_program_fails_and_names_it(self):
         """gates, check 1."""
         contract = self.contract_with(["no-such-program-xyz --version"])
