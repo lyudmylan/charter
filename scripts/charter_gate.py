@@ -8,7 +8,8 @@ Commands:
   link      --facts F --contract C     The change request references an open issue.
   documents --facts F --contract C     A change under a code path changes a necessary document,
                                        or the change request records a reason.
-  quality   --contract C               The quality checks of the contract run and pass.
+  quality   --contract C [--repo-only]  The quality checks of the contract run and pass. With --repo-only
+                                       the repo contract is read alone, without its organization source.
   verdict   --facts F --contract C     One verdict: ready or not ready, with the reasons.
 
 Options:
@@ -38,6 +39,7 @@ import charter_check as cc  # noqa: E402
 
 CMD_LINK, CMD_DOCUMENTS, CMD_QUALITY, CMD_VERDICT = "link", "documents", "quality", "verdict"
 ARG_FACTS = "facts"
+ARG_REPO_ONLY = "repo_only"
 
 # Keys of the facts file.
 FACT_CHANGE_REQUEST = "change_request"
@@ -346,8 +348,18 @@ def cmd_documents(args) -> int:
     return report(gate_documents(load_facts(args.facts), effective(args)), args.json)
 
 
+def repo_only(args) -> cc.Effective:
+    """The repo contract alone, without its organization source: for a run that has no access to it."""
+    fields = cc.load_schema(args.schema)
+    repo = cc.validate(cc.load_toml(args.contract), fields, str(args.contract))
+    if repo.errors:
+        raise cc.CannotRun("; ".join(repo.errors))
+    return cc.Effective(dict(repo.values), fields, [], "", dict(repo.values))
+
+
 def cmd_quality(args) -> int:
-    return report(gate_quality(effective(args), args.contract.resolve().parent), args.json)
+    e = repo_only(args) if args.repo_only else effective(args)
+    return report(gate_quality(e, args.contract.resolve().parent), args.json)
 
 
 def cmd_verdict(args) -> int:
@@ -384,6 +396,9 @@ def main(argv: list[str] | None = None) -> int:
             p.add_argument(f"--{cc.ARG_CACHE_DIR.replace('_', '-')}", dest=cc.ARG_CACHE_DIR, type=Path,
                            default=Path(cc.os.environ.get(cc.ENV_CACHE_DIR, cc.DEFAULT_CACHE_DIR)))
         p.add_argument(f"--{cc.ARG_JSON}", action="store_true")
+        if name == CMD_QUALITY:
+            p.add_argument(f"--{ARG_REPO_ONLY.replace('_', '-')}", dest=ARG_REPO_ONLY, action="store_true",
+                           help="read the repo contract alone, without its organization source")
     args = parser.parse_args(argv)
     try:
         return specs[args.command][0](args)

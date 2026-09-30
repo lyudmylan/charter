@@ -165,6 +165,12 @@ class Quality(Temp):
         self.assertEqual(code, cc.FAIL)
         self.assertIn("the cause", out)
 
+    def test_repo_only_needs_no_source(self):
+        """gates, check 1: a run without access to the organization source."""
+        contract = self.contract_with(["python3 -c pass"])
+        code, out = run(cg.CMD_QUALITY, f"--{cc.ARG_CONTRACT}", str(contract), "--repo-only")
+        self.assertEqual(code, cc.PASS, out)
+
     def test_missing_program_fails_and_names_it(self):
         """gates, check 1."""
         contract = self.contract_with(["no-such-program-xyz --version"])

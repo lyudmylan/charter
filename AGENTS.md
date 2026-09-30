@@ -11,25 +11,23 @@ source. Each rule below ends with the identifier of its rule in the contract.
 - The contract, the schema, the scripts, the tests, the workflows, and this file are in the high risk
   tier: a deep review, and the leader approves. [tiers.high.paths]
 - A person approves each change to a contract. [change.person_approves_contract]
+- On GitHub, the workflows `tests` and `verdict` run on each change request. A red check "verdict"
+  blocks the merge; its reasons are in the check and in the job log. [checks.quality]
 
 ## Before a push
 
-All quality checks of the contract must pass. [checks.quality]
-
-- `python3 -m unittest discover -s tests`
-- `python3 scripts/charter_check.py check charter.toml`
-- `python3 scripts/charter_check.py instructions AGENTS.md --contract charter.toml`
-- `python3 scripts/charter_check.py text README.md --contract charter.toml`
-- `python3 scripts/charter_check.py text docs/product.md --contract charter.toml`
+Two commands must pass: `python3 scripts/charter_gate.py quality --contract charter.toml` runs the
+quality checks that the contract lists, and `python3 scripts/charter_check.py all charter.toml` runs the
+contract checks. [checks.quality] [instructions.file] [documents.text_checked]
 
 When a file under a declared code path changes, `docs/product.md` changes too, or the change request
-states why not. [documents.code_paths]
+has one line in this exact form: `No document change: <reason>`. [documents.code_paths]
 
 ## Text of commits, change requests, and issues
 
 - No private material: no file paths of a computer, no mail addresses, no tokens. [text.private_material_patterns]
-- No session links. [text.session_link_patterns]
-- No names of other projects of this organization. [text.project_name_patterns]
+- No session links, and no names of other projects of this organization. [text.session_link_patterns]
+  [text.project_name_patterns]
 
 ## Review and limits
 

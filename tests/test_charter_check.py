@@ -249,6 +249,16 @@ class Instructions(Temp):
         self.assertIn(":3: matches a pattern of text.session_link_patterns", out)
 
 
+class Source(Temp):
+    def test_source_prints_address_file_version_and_cache_path(self):
+        """code-host, check 1: the workflow populates the cache from these lines."""
+        code, out = run(cc.CMD_SOURCE, str(REPO), "--cache-dir", str(self.dir))
+        self.assertEqual(code, cc.PASS, out)
+        lines = out.splitlines()
+        self.assertEqual(lines[:3], [SAMPLE_ADDRESS, "organization.toml", "v1"])
+        self.assertEqual(Path(lines[3]), cc.cache_path(SAMPLE_ADDRESS, self.dir))
+
+
 class TextFiles(Temp):
     def text(self, content: str) -> tuple[int, str]:
         path = self.write("README.md", content)
