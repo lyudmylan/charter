@@ -43,6 +43,7 @@ API = "https://api.github.com"
 API_VERSION = "2022-11-28"
 USER_AGENT = "charter-facts"
 PAGE_SIZE = 100
+RECORD_PAGES = 3   # closed change requests examined for the list of records
 HTTP_NOT_FOUND = 404
 OUTPUT_NUMBER, OUTPUT_SHA = "number", "sha"
 
@@ -62,13 +63,14 @@ query($owner: String!, $name: String!, $number: Int!, $after: String) {
 # The text of a change request.
 ISSUE_REFERENCE = re.compile(r"(?<![\w/])#(\d+)\b")
 REASON_LINE = re.compile(r"^No document change:\s*(.+?)\s*$", re.IGNORECASE | re.MULTILINE)
-FALSE_FAILURE_LINE = re.compile(r"^False failure:\s*([a-z]+)\s*:\s*(.+?)\s*$", re.IGNORECASE | re.MULTILINE)
+FALSE_FAILURE_LINE = re.compile(r"^False failure:\s*([a-z0-9_-]+)\s*:\s*(.+?)\s*$", re.IGNORECASE | re.MULTILINE)
 
 # The record comment on a change request.
 RECORD_MARKER = "<!-- charter-record -->"
 RECORD_TITLE = "## Evidence record"
-RECORD_FENCE = "```json"
-COMMENT_BODY, COMMENT_ID = "body", "id"
+RECORD_FENCE_OPEN, RECORD_FENCE_CLOSE = "````json", "````"   # four backticks: a reason may contain three
+RECORD_AUTHOR = "github-actions[bot]"   # the account that the token of a workflow uses
+COMMENT_BODY, COMMENT_ID, COMMENT_USER, USER_LOGIN = "body", "id", "user", "login"
 PR_MERGED_AT = "merged_at"
 
 # Results of a job or a check run, mapped to the state of a check in the facts file.
@@ -137,19 +139,28 @@ def comment_body(record: dict) -> str:
         ("Time", record.get(cg.RECORD_KEYS[2])),
     ]
     table = "\n".join(f"| {k} | {v} |" for k, v in rows)
-    return f"{RECORD_MARKER}\n{RECORD_TITLE}\n\n| | |\n|---|---|\n{table}\n\n{RECORD_FENCE}\n{json.dumps(record, indent=2)}\n```\n"
+    return (f"{RECORD_MARKER}\n{RECORD_TITLE}\n\n| | |\n|---|---|\n{table}\n\n"
+            f"{RECORD_FENCE_OPEN}\n{json.dumps(record, indent=2)}\n{RECORD_FENCE_CLOSE}\n")
 
 
 def record_from_comment(body: str) -> dict | None:
     """The record inside a comment, or None when the comment is not a record."""
-    if not body or RECORD_MARKER not in body or RECORD_FENCE not in body:
+    if not body or RECORD_MARKER not in body or RECORD_FENCE_OPEN not in body:
         return None
-    start = body.index(RECORD_FENCE) + len(RECORD_FENCE)
-    end = body.find("```", start)
+    start = body.index(RECORD_FENCE_OPEN) + len(RECORD_FENCE_OPEN)
+    end = body.rfind(RECORD_FENCE_CLOSE)
+    if end <= start:
+        return None
     try:
-        return json.loads(body[start:end if end > 0 else None])
+        return json.loads(body[start:end])
     except json.JSONDecodeError:
         return None
+
+
+def is_record_comment(comment: dict, author: str) -> bool:
+    """Only a comment by the workflow account counts; a person cannot forge or hijack the record."""
+    return ((comment.get(COMMENT_USER) or {}).get(USER_LOGIN) == author
+            and RECORD_MARKER in (comment.get(COMMENT_BODY) or ""))
 
 
 def check_state(conclusion: str | None) -> str:
@@ -285,37 +296,34 @@ def collect(repo: str, number: int, given: dict[str, str], run_names: list[str],
     return build_facts(pr, files, issues, unresolved, checks)
 
 
-def put_record(repo: str, number: int, record: dict, github: GitHub) -> str:
+def put_record(repo: str, number: int, record: dict, github: GitHub, author: str) -> str:
     """Create or update the one record comment of a change request. Returns 'created' or 'updated'."""
-    comments = github.pages(f"/repos/{repo}/issues/{number}/comments")
     body = comment_body(record)
-    for comment in comments:
-        if RECORD_MARKER in (comment.get(COMMENT_BODY) or ""):
+    for comment in github.pages(f"/repos/{repo}/issues/{number}/comments"):
+        if is_record_comment(comment, author):
             github.send(f"/repos/{repo}/issues/comments/{comment[COMMENT_ID]}", {COMMENT_BODY: body}, "PATCH")
             return "updated"
     github.send(f"/repos/{repo}/issues/{number}/comments", {COMMENT_BODY: body}, "POST")
     return "created"
 
 
-def merged_records(repo: str, last: int, github: GitHub) -> list[dict]:
-    """The records of the last merged change requests, newest first."""
-    out: list[dict] = []
-    page = 1
-    while len(out) < last:
+def merged_records(repo: str, last: int, github: GitHub, author: str) -> list[dict]:
+    """The records of the last merged change requests, by the time of the merge, newest first."""
+    merged: list[dict] = []
+    for page in range(1, RECORD_PAGES + 1):
         prs = github.get(f"/repos/{repo}/pulls?state=closed&sort=updated&direction=desc&per_page={PAGE_SIZE}&page={page}")
-        if not prs:
+        merged += [pr for pr in prs if pr.get(PR_MERGED_AT)]
+        if len(prs) < PAGE_SIZE:
             break
-        for pr in prs:
-            if not pr.get(PR_MERGED_AT):
-                continue
-            for comment in github.pages(f"/repos/{repo}/issues/{pr[PR_NUMBER]}/comments"):
+    merged.sort(key=lambda pr: pr[PR_MERGED_AT], reverse=True)
+    out: list[dict] = []
+    for pr in merged[:last]:
+        for comment in github.pages(f"/repos/{repo}/issues/{pr[PR_NUMBER]}/comments"):
+            if is_record_comment(comment, author):
                 record = record_from_comment(comment.get(COMMENT_BODY))
                 if record:
                     out.append(record)
-                    break
-            if len(out) >= last:
                 break
-        page += 1
     return out
 
 
@@ -346,9 +354,11 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--repo", required=True, help="owner/name")
     p.add_argument("--pr", type=int, required=True)
     p.add_argument("--file", type=Path, required=True, help="the record, as JSON")
+    p.add_argument("--author", default=RECORD_AUTHOR, help="the account whose comments carry the record")
     p = sub.add_parser(CMD_RECORDS)
     p.add_argument("--repo", required=True, help="owner/name")
     p.add_argument("--last", type=int, default=10)
+    p.add_argument("--author", default=RECORD_AUTHOR, help="the account whose comments carry the record")
     p = sub.add_parser(CMD_COLLECT)
     p.add_argument("--repo", required=True, help="owner/name")
     p.add_argument("--pr", type=int, required=True)
@@ -372,10 +382,10 @@ def main(argv: list[str] | None = None) -> int:
             return cc.PASS
         if args.command == CMD_RECORD:
             record = json.loads(cc.read_text(args.file))
-            print(msg("record_done", action=put_record(args.repo, args.pr, record, github), number=args.pr))
+            print(msg("record_done", action=put_record(args.repo, args.pr, record, github, args.author), number=args.pr))
             return cc.PASS
         if args.command == CMD_RECORDS:
-            for record in merged_records(args.repo, args.last, github):
+            for record in merged_records(args.repo, args.last, github, args.author):
                 print(msg("record_line", number=record.get(cg.FACT_CHANGE_REQUEST), verdict=record.get(cg.JSON_KEY_VERDICT),
                           tier=record.get(cg.JSON_KEY_TIER), time=record.get(cg.RECORD_KEYS[2]),
                           scripts=(record.get(cg.RECORD_KEYS[3]) or "unknown")[:12],

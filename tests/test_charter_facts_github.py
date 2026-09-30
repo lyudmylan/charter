@@ -47,6 +47,18 @@ class Text(unittest.TestCase):
         self.assertEqual(cf.record_from_comment(body), record)
         self.assertIsNone(cf.record_from_comment("a plain comment"))
 
+    def test_three_backticks_inside_a_reason_survive_the_round_trip(self):
+        """evidence-record, check 1."""
+        record = {cg.RECORD_KEYS[4]: [{cg.JSON_KEY_GATE: "documents", "reason": "the gate misread ```docs/x.md```"}]}
+        self.assertEqual(cf.record_from_comment(cf.comment_body(record)), record)
+
+    def test_only_a_comment_by_the_workflow_account_is_the_record(self):
+        """evidence-record, check 1: a person cannot forge or hijack the record."""
+        forged = {cf.COMMENT_USER: {cf.USER_LOGIN: "someone"}, cf.COMMENT_BODY: cf.RECORD_MARKER}
+        real = {cf.COMMENT_USER: {cf.USER_LOGIN: cf.RECORD_AUTHOR}, cf.COMMENT_BODY: cf.RECORD_MARKER}
+        self.assertFalse(cf.is_record_comment(forged, cf.RECORD_AUTHOR))
+        self.assertTrue(cf.is_record_comment(real, cf.RECORD_AUTHOR))
+
     def test_job_result_maps_to_check_state(self):
         """code-host, check 1."""
         self.assertEqual(cf.check_state("success"), cg.CHECK_PASS)

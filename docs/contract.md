@@ -151,7 +151,8 @@ contract change: a person reviews it, and the new source applies after the merge
 
 Each run of the verdict writes the evidence record of the change: the JSON form of the verdict, with
 the fields below. On GitHub, one comment on the change request carries it, updated on each run and
-marked with `<!-- charter-record -->`. The check "verdict" keeps the short text.
+marked with `<!-- charter-record -->` and written by the account of the workflow; a comment by anyone
+else does not count. The check "verdict" keeps the short text.
 
 | Field | Content |
 |---|---|
