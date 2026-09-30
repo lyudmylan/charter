@@ -1,0 +1,78 @@
+# Contract of this repo. The organization rules come from the source below.
+# The checker: python3 scripts/charter_check.py check charter.toml
+schema = 1
+
+[repo]
+name = "charter"
+
+# The organization source. This repo holds no copy of it.
+[source]
+address = "https://github.com/lyudmylan/charter-org"
+file = "organization.toml"
+version = "v1"
+
+[tools]
+issue_tracker = "github-issues"
+code_host = "github"
+ci = "github-actions"
+
+# Who holds a role in this repo. One person holds all human roles today.
+[roles]
+leader = ["lyudmylan"]
+team_lead = ["lyudmylan"]
+engineer = ["lyudmylan"]
+agent = ["claude-code"]
+
+# Risk tiers. The first tier whose paths match a file applies.
+[tiers.high]
+paths = ["charter.toml", "schema/**", "scripts/**", "tests/**", "AGENTS.md", ".github/**"]  # tests/** includes the scenarios
+review = "deep"
+approver = "leader"
+approvals = 1
+
+[tiers.low]
+paths = ["**"]
+review = "light"
+approver = "engineer"
+approvals = 1
+
+# Limits that return control to a person.
+[limits]
+acceptance_loop = 3
+review_loop = 3
+refusals = 3
+
+[documents]
+necessary = ["docs/product.md"]
+code_paths = ["schema/**", "scripts/**"]
+
+# Commands that must pass before a push.
+[checks]
+quality = [
+  "python3 -m unittest discover -s tests",
+  "python3 scripts/charter_check.py check charter.toml",
+  "python3 scripts/charter_check.py instructions AGENTS.md --contract charter.toml",
+  "python3 scripts/charter_check.py text README.md --contract charter.toml",
+  "python3 scripts/charter_check.py text docs/product.md --contract charter.toml",
+]
+
+# The lifecycle map: what does the work in each phase, and the built-in abilities of Claude Code that it uses.
+[lifecycle.direction]
+work = "the leader with an agent, in docs/product.md"
+builtin = []
+
+[lifecycle.plan]
+work = "issues in the tracker, made by hand in iteration 1"
+builtin = ["plan mode"]
+
+[lifecycle.build]
+work = "an agent, until the acceptance checks pass"
+builtin = ["the Bash tool for the quality checks"]
+
+[lifecycle.review]
+work = "a reviewer that is not the author"
+builtin = ["/code-review", "/security-review"]
+
+[lifecycle.merge]
+work = "the merge-readiness verdict, then the approver of the tier"
+builtin = []

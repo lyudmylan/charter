@@ -1,0 +1,43 @@
+# Sample organization file for the tests. Not the real rules of any organization.
+schema = 1
+
+[organization]
+name = "sample-org"
+
+[locks]
+fields = [
+  "text.private_material_patterns",
+  "change.person_approves_contract",
+  "limits.refusals",
+  "tiers.high.review",
+  "tiers.high.approver",
+  "tiers.high.approvals",
+  "documents.necessary",
+  "tools.code_host",
+]
+
+[text]
+private_material_patterns = ["@example.com", "token-"]
+session_link_patterns = ["session_"]
+project_name_patterns = ["secret-project"]
+
+[change]
+person_approves_contract = true
+author_not_reviewer = true
+ticket_per_change = true
+
+[limits]
+acceptance_loop = 3
+review_loop = 3
+refusals = 3
+
+[tiers.high]
+review = "deep"
+approver = "team_lead"
+approvals = 1
+
+[documents]
+necessary = ["docs/product.md"]
+
+[tools]
+code_host = "github"

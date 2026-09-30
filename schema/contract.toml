@@ -1,0 +1,136 @@
+# Schema of a Charter contract.
+#
+# Charter owns this file. An organization file and a repo contract fill values.
+# They do not change the schema.
+#
+# Each field has a kind. The kind gives its type and its direction:
+#
+#   flag    true or false. true is stricter.
+#   limit   a whole number. smaller is stricter.
+#   count   a whole number. larger is stricter.
+#   set     a list of text. a superset is stricter.
+#   choice  one value from the ordered list "order". a later value is stricter.
+#   text    text, or a list of text. no direction: a locked text must stay equal.
+#
+# A set field can carry text_check = "exact" or "ignore_case": text such as an instruction
+# file must not contain any of its patterns. The checker reads this from the schema.
+#
+# A field path with "*" has one dynamic segment, for example "tiers.high.review".
+
+schema = 1
+
+# --- Text rules for commits, change requests, issues, and instruction files ---
+
+[fields."text.private_material_patterns"]
+kind = "set"
+text_check = "exact"
+note = "Text patterns that show private material: file paths of a computer, mail addresses, tokens."
+
+[fields."text.session_link_patterns"]
+kind = "set"
+text_check = "exact"
+note = "Text patterns of a session link."
+
+[fields."text.project_name_patterns"]
+kind = "set"
+text_check = "ignore_case"
+note = "Names of other projects of the organization. They must not appear in the text of a repo."
+
+# --- Rules for a change ---
+
+[fields."change.person_approves_contract"]
+kind = "flag"
+note = "A person approves each change to an organization rule and to a repo contract."
+
+[fields."change.author_not_reviewer"]
+kind = "flag"
+note = "The author of a change is not its reviewer."
+
+[fields."change.ticket_per_change"]
+kind = "flag"
+note = "Each change to a source file has a ticket."
+
+# --- Limits that return control to a person ---
+
+[fields."limits.acceptance_loop"]
+kind = "limit"
+note = "Runs of the acceptance checks before the agent stops."
+
+[fields."limits.review_loop"]
+kind = "limit"
+note = "Rounds between the author and the reviewer before a person decides."
+
+[fields."limits.refusals"]
+kind = "limit"
+note = "Refusals in sequence before the agent stops."
+
+# --- Risk tiers. The segment "*" is the name of the tier. ---
+
+[fields."tiers.*.paths"]
+kind = "set"
+note = "Path patterns of the files in this tier. The first tier that matches a file applies."
+
+[fields."tiers.*.review"]
+kind = "choice"
+order = ["light", "deep"]
+note = "Depth of the review."
+
+[fields."tiers.*.approver"]
+kind = "choice"
+order = ["agent", "engineer", "team_lead", "leader"]
+note = "The role that approves a merge in this tier."
+
+[fields."tiers.*.approvals"]
+kind = "count"
+note = "Approvals that a merge in this tier needs."
+
+# --- Documents ---
+
+[fields."documents.necessary"]
+kind = "set"
+note = "Documents that the repo keeps current."
+
+[fields."documents.code_paths"]
+kind = "set"
+note = "Path patterns. When a file under one of them changes, a necessary document must change too, or the change carries a recorded reason."
+
+# --- Quality checks ---
+
+[fields."checks.quality"]
+kind = "set"
+note = "Commands that must pass before a push."
+
+# --- Tools that the repo uses ---
+
+[fields."tools.issue_tracker"]
+kind = "text"
+
+[fields."tools.code_host"]
+kind = "text"
+
+[fields."tools.ci"]
+kind = "text"
+
+# --- Who holds a role in the repo ---
+
+[fields."roles.leader"]
+kind = "text"
+
+[fields."roles.team_lead"]
+kind = "text"
+
+[fields."roles.engineer"]
+kind = "text"
+
+[fields."roles.agent"]
+kind = "text"
+
+# --- The lifecycle map. The segment "*" is the phase. ---
+
+[fields."lifecycle.*.work"]
+kind = "text"
+note = "What does the work in this phase."
+
+[fields."lifecycle.*.builtin"]
+kind = "text"
+note = "Built-in abilities of the agent runtime that this phase uses."
