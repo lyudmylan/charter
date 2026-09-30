@@ -15,8 +15,8 @@ on:
 
 permissions:
   contents: read
-  pull-requests: read
-  issues: read
+  pull-requests: write
+  issues: write
   checks: write
 
 jobs:
@@ -84,8 +84,17 @@ jobs:
         id: verdict
         run: |
           set +e
-          python3 scripts/charter_gate.py verdict --facts facts.json --contract charter.toml | tee verdict.txt
+          python3 scripts/charter_gate.py verdict --facts facts.json --contract charter.toml \
+            --record record.json --scripts-version "$GITHUB_SHA" | tee verdict.txt
           echo "code=${PIPESTATUS[0]}" >> "$GITHUB_OUTPUT"
+
+      - name: Put the evidence record on the change request
+        if: always()
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR_NUMBER: ${{ steps.pr.outputs.number }}
+        run: |
+          [ -s record.json ] && python3 scripts/charter_facts_github.py record --repo "$GITHUB_REPOSITORY" --pr "$PR_NUMBER" --file record.json || echo "no record: the verdict could not run"
 
       - name: Publish the check "verdict" on the change request
         if: always()

@@ -5,6 +5,9 @@ This is the only script that knows GitHub. Python 3.11 or later, standard librar
 
 Commands:
   find    --repo owner/name (--pr N | --sha SHA)        Print "number=N" and "sha=SHA" of the change request.
+  record  --repo owner/name --pr N --file record.json   Put the evidence record on the change request,
+                                                        as one comment that each run updates.
+  records --repo owner/name --last N                    Print the records of the last merged change requests.
   collect --repo owner/name --pr N --out facts.json     Write the facts file.
           [--sha SHA]                                   The commit that the facts describe.
           [--check name=result]...                      A check result given by the caller.
@@ -34,7 +37,7 @@ import charter_gate as cg  # noqa: E402
 # Configuration
 # ---------------------------------------------------------------------------
 
-CMD_FIND, CMD_COLLECT = "find", "collect"
+CMD_FIND, CMD_COLLECT, CMD_RECORD, CMD_RECORDS = "find", "collect", "record", "records"
 ENV_TOKEN = "GITHUB_TOKEN"
 API = "https://api.github.com"
 API_VERSION = "2022-11-28"
@@ -59,6 +62,14 @@ query($owner: String!, $name: String!, $number: Int!, $after: String) {
 # The text of a change request.
 ISSUE_REFERENCE = re.compile(r"(?<![\w/])#(\d+)\b")
 REASON_LINE = re.compile(r"^No document change:\s*(.+?)\s*$", re.IGNORECASE | re.MULTILINE)
+FALSE_FAILURE_LINE = re.compile(r"^False failure:\s*([a-z]+)\s*:\s*(.+?)\s*$", re.IGNORECASE | re.MULTILINE)
+
+# The record comment on a change request.
+RECORD_MARKER = "<!-- charter-record -->"
+RECORD_TITLE = "## Evidence record"
+RECORD_FENCE = "```json"
+COMMENT_BODY, COMMENT_ID = "body", "id"
+PR_MERGED_AT = "merged_at"
 
 # Results of a job or a check run, mapped to the state of a check in the facts file.
 CONCLUSION_SUCCESS = "success"
@@ -79,6 +90,8 @@ MSG = {
     "http": "GitHub answered {code} for {url}: {detail}",
     "network": "GitHub is not reachable: {url}: {error}",
     "graphql": "GitHub answered errors for the review threads: {errors}",
+    "record_done": "record {action} on change request {number}",
+    "record_line": "#{number}\t{verdict}\ttier {tier}\t{time}\tscripts {scripts}\tfalse failures {false}",
     "written": "facts written: {path} ({files} files, {issues} issues, {threads} unresolved threads, checks {checks})",
 }
 
@@ -105,6 +118,38 @@ def issue_numbers(text: str) -> list[int]:
 def recorded_reason(text: str) -> str | None:
     match = REASON_LINE.search(text or "")
     return match.group(1) if match else None
+
+
+def false_failures(text: str) -> list[dict]:
+    """The false failures that a person recorded in the text: one line each."""
+    return [{cg.JSON_KEY_GATE: gate.lower(), "reason": reason} for gate, reason in FALSE_FAILURE_LINE.findall(text or "")]
+
+
+def comment_body(record: dict) -> str:
+    """The comment that carries the record: a marker, a short table, and the JSON."""
+    checks = ", ".join(f"{name} {state}" for name, state in record.get(cg.FACT_CHECKS, {}).items())
+    rows = [
+        ("Verdict", record.get(cg.JSON_KEY_VERDICT)),
+        ("Tier", f"{record.get(cg.JSON_KEY_TIER)}, the {record.get(cg.JSON_KEY_APPROVER)} merges"),
+        ("Checks", checks or "none"),
+        ("Source", record.get(cg.JSON_KEY_SOURCE)),
+        ("Scripts", record.get(cg.RECORD_KEYS[3]) or "unknown"),
+        ("Time", record.get(cg.RECORD_KEYS[2])),
+    ]
+    table = "\n".join(f"| {k} | {v} |" for k, v in rows)
+    return f"{RECORD_MARKER}\n{RECORD_TITLE}\n\n| | |\n|---|---|\n{table}\n\n{RECORD_FENCE}\n{json.dumps(record, indent=2)}\n```\n"
+
+
+def record_from_comment(body: str) -> dict | None:
+    """The record inside a comment, or None when the comment is not a record."""
+    if not body or RECORD_MARKER not in body or RECORD_FENCE not in body:
+        return None
+    start = body.index(RECORD_FENCE) + len(RECORD_FENCE)
+    end = body.find("```", start)
+    try:
+        return json.loads(body[start:end if end > 0 else None])
+    except json.JSONDecodeError:
+        return None
 
 
 def check_state(conclusion: str | None) -> str:
@@ -140,6 +185,7 @@ def build_facts(pr: dict, files: list[dict], issues: dict[int, dict | None], unr
         cg.FACT_REASON: recorded_reason(text),
         cg.FACT_UNRESOLVED_THREADS: unresolved,
         cg.FACT_CHECKS: {name: check_state(result) for name, result in checks.items()},
+        cg.FACT_FALSE_FAILURES: false_failures(text),
     }
 
 
@@ -152,9 +198,9 @@ class GitHub:
     def __init__(self, token: str):
         self.token = token
 
-    def _request(self, url: str, data: dict | None = None, optional: bool = False) -> object:
+    def _request(self, url: str, data: dict | None = None, optional: bool = False, method: str | None = None) -> object:
         body = json.dumps(data).encode() if data is not None else None
-        request = urllib.request.Request(url, data=body, headers={
+        request = urllib.request.Request(url, data=body, method=method, headers={
             "Authorization": f"Bearer {self.token}",
             "Accept": "application/vnd.github+json",
             "X-GitHub-Api-Version": API_VERSION,
@@ -173,6 +219,9 @@ class GitHub:
 
     def get(self, path: str, optional: bool = False) -> object:
         return self._request(f"{API}{path}", optional=optional)
+
+    def send(self, path: str, data: dict, method: str) -> object:
+        return self._request(f"{API}{path}", data=data, method=method)
 
     def pages(self, path: str) -> list:
         items: list = []
@@ -236,6 +285,40 @@ def collect(repo: str, number: int, given: dict[str, str], run_names: list[str],
     return build_facts(pr, files, issues, unresolved, checks)
 
 
+def put_record(repo: str, number: int, record: dict, github: GitHub) -> str:
+    """Create or update the one record comment of a change request. Returns 'created' or 'updated'."""
+    comments = github.pages(f"/repos/{repo}/issues/{number}/comments")
+    body = comment_body(record)
+    for comment in comments:
+        if RECORD_MARKER in (comment.get(COMMENT_BODY) or ""):
+            github.send(f"/repos/{repo}/issues/comments/{comment[COMMENT_ID]}", {COMMENT_BODY: body}, "PATCH")
+            return "updated"
+    github.send(f"/repos/{repo}/issues/{number}/comments", {COMMENT_BODY: body}, "POST")
+    return "created"
+
+
+def merged_records(repo: str, last: int, github: GitHub) -> list[dict]:
+    """The records of the last merged change requests, newest first."""
+    out: list[dict] = []
+    page = 1
+    while len(out) < last:
+        prs = github.get(f"/repos/{repo}/pulls?state=closed&sort=updated&direction=desc&per_page={PAGE_SIZE}&page={page}")
+        if not prs:
+            break
+        for pr in prs:
+            if not pr.get(PR_MERGED_AT):
+                continue
+            for comment in github.pages(f"/repos/{repo}/issues/{pr[PR_NUMBER]}/comments"):
+                record = record_from_comment(comment.get(COMMENT_BODY))
+                if record:
+                    out.append(record)
+                    break
+            if len(out) >= last:
+                break
+        page += 1
+    return out
+
+
 # ---------------------------------------------------------------------------
 # Command
 # ---------------------------------------------------------------------------
@@ -259,6 +342,13 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--repo", required=True, help="owner/name")
     p.add_argument("--pr", type=int)
     p.add_argument("--sha")
+    p = sub.add_parser(CMD_RECORD)
+    p.add_argument("--repo", required=True, help="owner/name")
+    p.add_argument("--pr", type=int, required=True)
+    p.add_argument("--file", type=Path, required=True, help="the record, as JSON")
+    p = sub.add_parser(CMD_RECORDS)
+    p.add_argument("--repo", required=True, help="owner/name")
+    p.add_argument("--last", type=int, default=10)
     p = sub.add_parser(CMD_COLLECT)
     p.add_argument("--repo", required=True, help="owner/name")
     p.add_argument("--pr", type=int, required=True)
@@ -279,6 +369,17 @@ def main(argv: list[str] | None = None) -> int:
                 parser.error("find needs --pr or --sha")
             number, sha = find(args.repo, github, args.pr, args.sha)
             print(f"{OUTPUT_NUMBER}={number}\n{OUTPUT_SHA}={sha}")
+            return cc.PASS
+        if args.command == CMD_RECORD:
+            record = json.loads(cc.read_text(args.file))
+            print(msg("record_done", action=put_record(args.repo, args.pr, record, github), number=args.pr))
+            return cc.PASS
+        if args.command == CMD_RECORDS:
+            for record in merged_records(args.repo, args.last, github):
+                print(msg("record_line", number=record.get(cg.FACT_CHANGE_REQUEST), verdict=record.get(cg.JSON_KEY_VERDICT),
+                          tier=record.get(cg.JSON_KEY_TIER), time=record.get(cg.RECORD_KEYS[2]),
+                          scripts=(record.get(cg.RECORD_KEYS[3]) or "unknown")[:12],
+                          false=len(record.get(cg.RECORD_KEYS[4]) or [])))
             return cc.PASS
         facts = collect(args.repo, args.pr, parse_checks(args.check), args.check_run, github, args.sha)
         args.out.write_text(json.dumps(facts, indent=2))

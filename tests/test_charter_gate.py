@@ -247,6 +247,34 @@ class Verdict(Temp):
         self.assertEqual([g[cg.JSON_KEY_GATE] for g in data[cg.JSON_KEY_GATES]], [cg.CMD_LINK, cg.CMD_DOCUMENTS])
 
 
+class Record(Temp):
+    def test_record_has_the_documented_form(self):
+        """evidence-record, check 1."""
+        record = self.dir / "record.json"
+        code, out = run(cg.CMD_VERDICT, f"--{cg.ARG_FACTS}", str(self.facts()), *self.contract_args(),
+                        f"--{cg.ARG_RECORD}", str(record), "--scripts-version", "abc123")
+        self.assertEqual(code, cc.PASS, out)
+        self.assertTrue(out.startswith(cg.VERDICT_READY + "\n"))
+        data = json.loads(record.read_text())
+        for key in cg.RECORD_KEYS + (cg.JSON_KEY_VERDICT, cg.JSON_KEY_SOURCE, cg.JSON_KEY_REASONS, cg.JSON_KEY_TIER,
+                                     cg.JSON_KEY_APPROVER, cg.JSON_KEY_MERGES, cg.JSON_KEY_GATES, cg.FACT_CHECKS):
+            self.assertIn(key, data)
+        self.assertEqual(data[cg.RECORD_KEYS[0]], cg.RECORD_FORM)
+        self.assertEqual(data[cg.RECORD_KEYS[1]], 23)
+        self.assertEqual(data[cg.RECORD_KEYS[3]], "abc123")
+        self.assertEqual(data[cg.RECORD_KEYS[4]], [])
+        self.assertEqual(data[cg.RECORD_KEYS[5]], [])
+        self.assertRegex(data[cg.RECORD_KEYS[2]], r"^\d{4}-\d{2}-\d{2}T")
+
+    def test_false_failures_of_the_facts_are_in_the_record(self):
+        """evidence-record, check 2."""
+        record = self.dir / "record.json"
+        facts = self.facts(**{cg.FACT_FALSE_FAILURES: [{cg.JSON_KEY_GATE: "documents", "reason": "the gate misread a path"}]})
+        code, _ = run(cg.CMD_VERDICT, f"--{cg.ARG_FACTS}", str(facts), *self.contract_args(), f"--{cg.ARG_RECORD}", str(record))
+        self.assertEqual(code, cc.PASS)
+        self.assertEqual(json.loads(record.read_text())[cg.RECORD_KEYS[4]][0]["reason"], "the gate misread a path")
+
+
 class Patterns(unittest.TestCase):
     def test_star_stays_in_one_segment_and_double_star_crosses(self):
         """gates, check 1: the pattern language of paths."""

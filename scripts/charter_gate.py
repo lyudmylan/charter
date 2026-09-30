@@ -11,6 +11,7 @@ Commands:
   quality   --contract C [--repo-only]  The quality checks of the contract run and pass. With --repo-only
                                        the repo contract is read alone, without its organization source.
   verdict   --facts F --contract C     One verdict: ready or not ready, with the reasons.
+            [--record FILE] [--scripts-version V]   Also write the evidence record, as JSON.
 
 Options:
   --schema PATH, --source PATH, --cache-dir DIR   As in charter_check.
@@ -22,6 +23,7 @@ Exit codes: 0 pass, 1 fail, 2 the check could not run. The message names the cau
 from __future__ import annotations
 
 import argparse
+import datetime
 import json
 import re
 import shlex
@@ -49,6 +51,7 @@ FACT_REASON = "reason_for_no_document_change"   # text or null
 FACT_UNRESOLVED_THREADS = "unresolved_review_threads"   # whole number
 FACT_APPROVALS = "approvals"                # ["login"]
 FACT_CHECKS = "checks"                      # {"tests": "pass"}
+FACT_FALSE_FAILURES = "false_failures"    # optional: [{"gate": "documents", "reason": "..."}], recorded by a person
 # FACT_APPROVALS is optional and not checked in this version: the merge by the approver is the approval.
 ISSUE_NUMBER, ISSUE_STATE = "number", "state"
 STATE_OPEN = "open"
@@ -71,6 +74,11 @@ VERDICT_READY, VERDICT_NOT_READY = "ready", "not ready"
 OUT_GATE_PASS, OUT_GATE_FAIL = cc.OUT_PASS, cc.OUT_FAIL
 JSON_KEY_GATE, JSON_KEY_RESULT, JSON_KEY_REASONS, JSON_KEY_VERDICT = "gate", "result", "reasons", "verdict"
 JSON_KEY_TIER, JSON_KEY_APPROVER, JSON_KEY_MERGES, JSON_KEY_GATES, JSON_KEY_SOURCE = "tier", "approver", "merges", "gates", cc.OUT_SOURCE
+ARG_RECORD, ARG_SCRIPTS_VERSION = "record", "scripts_version"
+
+# The evidence record: the verdict, plus these fields.
+RECORD_FORM = 1
+RECORD_KEYS = ("record_form", "change_request", "time", "scripts_version", "false_failures", "dropped_findings")
 
 MSG = {
     "facts_not_json": "not JSON: {path}, {error}",
@@ -140,6 +148,10 @@ FACT_SHAPES = {
 }
 
 
+def _is_false_failure(value: object) -> bool:
+    return isinstance(value, dict) and isinstance(value.get(JSON_KEY_GATE), str) and isinstance(value.get("reason"), str)
+
+
 def load_facts(path: Path) -> dict:
     text = cc.read_text(path)
     try:
@@ -153,6 +165,9 @@ def load_facts(path: Path) -> dict:
             raise cc.CannotRun(msg("facts_missing_key", key=key, path=path))
         if not fits(facts[key]):
             raise cc.CannotRun(msg("facts_bad_value", key=key, path=path))
+    optional = facts.get(FACT_FALSE_FAILURES, [])
+    if not (isinstance(optional, list) and all(_is_false_failure(f) for f in optional)):
+        raise cc.CannotRun(msg("facts_bad_value", key=FACT_FALSE_FAILURES, path=path))
     return facts
 
 
@@ -364,12 +379,35 @@ def cmd_quality(args) -> int:
     return report(gate_quality(e, args.contract.resolve().parent), args.json)
 
 
+def build_record(facts: dict, verdict: str, origin: str, reasons: list[str], detail: dict,
+                 scripts_version: str, time: str) -> dict:
+    """The evidence record of one change: the verdict and its facts, in the documented form."""
+    return {
+        RECORD_KEYS[0]: RECORD_FORM,
+        RECORD_KEYS[1]: facts[FACT_CHANGE_REQUEST],
+        RECORD_KEYS[2]: time,
+        RECORD_KEYS[3]: scripts_version,
+        JSON_KEY_VERDICT: verdict,
+        JSON_KEY_SOURCE: origin,
+        JSON_KEY_REASONS: reasons,
+        **detail,
+        FACT_CHECKS: facts[FACT_CHECKS],
+        RECORD_KEYS[4]: facts.get(FACT_FALSE_FAILURES, []),
+        RECORD_KEYS[5]: [],
+    }
+
+
 def cmd_verdict(args) -> int:
     e = effective(args)
-    passed, reasons, detail = gate_verdict(load_facts(args.facts), e)
+    facts = load_facts(args.facts)
+    passed, reasons, detail = gate_verdict(facts, e)
     verdict = VERDICT_READY if passed else VERDICT_NOT_READY
+    record = build_record(facts, verdict, e.origin, reasons, detail, args.scripts_version,
+                          datetime.datetime.now(datetime.timezone.utc).isoformat(timespec="seconds"))
+    if args.record:
+        args.record.write_text(json.dumps(record, indent=2))
     if args.json:
-        print(json.dumps({JSON_KEY_VERDICT: verdict, JSON_KEY_SOURCE: e.origin, JSON_KEY_REASONS: reasons, **detail}, indent=2))
+        print(json.dumps(record, indent=2))
     else:
         print(verdict)
         for r in reasons:
@@ -398,6 +436,10 @@ def main(argv: list[str] | None = None) -> int:
             p.add_argument(f"--{cc.ARG_CACHE_DIR.replace('_', '-')}", dest=cc.ARG_CACHE_DIR, type=Path,
                            default=Path(cc.os.environ.get(cc.ENV_CACHE_DIR, cc.DEFAULT_CACHE_DIR)))
         p.add_argument(f"--{cc.ARG_JSON}", action="store_true")
+        if name == CMD_VERDICT:
+            p.add_argument(f"--{ARG_RECORD}", type=Path, default=None, help="write the evidence record to this file")
+            p.add_argument(f"--{ARG_SCRIPTS_VERSION.replace('_', '-')}", dest=ARG_SCRIPTS_VERSION, default="",
+                           help="the version of the scripts that make the record, for example a commit")
         if name == CMD_QUALITY:
             p.add_argument(f"--{ARG_REPO_ONLY.replace('_', '-')}", dest=ARG_REPO_ONLY, action="store_true",
                            help="read the repo contract alone, without its organization source")

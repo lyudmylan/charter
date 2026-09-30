@@ -22,6 +22,7 @@ contract checks. [checks.quality] [instructions.file] [documents.text_checked]
 
 When a file under a declared code path changes, `docs/product.md` changes too, or the change request
 has one line in this exact form: `No document change: <reason>`. [documents.code_paths]
+A false failure of a gate is recorded with one line: `False failure: <gate>: <reason>`. [checks.quality]
 
 ## Text of commits, change requests, and issues
 
