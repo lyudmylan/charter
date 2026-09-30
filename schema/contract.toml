@@ -12,6 +12,9 @@
 #   choice  one value from the ordered list "order". a later value is stricter.
 #   text    text, or a list of text. no direction: a locked text must stay equal.
 #
+# A set field can carry text_check = "exact" or "ignore_case": text such as an instruction
+# file must not contain any of its patterns. The checker reads this from the schema.
+#
 # A field path with "*" has one dynamic segment, for example "tiers.high.review".
 
 schema = 1
@@ -20,14 +23,17 @@ schema = 1
 
 [fields."text.private_material_patterns"]
 kind = "set"
+text_check = "exact"
 note = "Text patterns that show private material: file paths of a computer, mail addresses, tokens."
 
 [fields."text.session_link_patterns"]
 kind = "set"
+text_check = "exact"
 note = "Text patterns of a session link."
 
 [fields."text.project_name_patterns"]
 kind = "set"
+text_check = "ignore_case"
 note = "Names of other projects of the organization. They must not appear in the text of a repo."
 
 # --- Rules for a change ---

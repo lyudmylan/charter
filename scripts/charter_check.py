@@ -5,6 +5,7 @@ Commands:
   validate FILE                      Validate one file: an organization file or a repo contract.
   check CONTRACT                     Check a repo contract against its organization source.
   instructions FILE --contract C     Check an instruction file against the effective contract.
+  text FILE --contract C             Check any text file against the pattern sets of the contract.
 
 Options:
   --schema PATH      The schema. Default: schema/contract.toml next to this script.
@@ -24,20 +25,160 @@ import re
 import subprocess
 import sys
 import tomllib
+from collections.abc import Callable
+from dataclasses import dataclass
 from pathlib import Path
 
+# ---------------------------------------------------------------------------
+# Configuration. Every name, key, message, and pattern lives here, once.
+# ---------------------------------------------------------------------------
+
+SCHEMA_VERSION = 1
+
+# Exit codes.
 PASS, FAIL, CANNOT_RUN = 0, 1, 2
 
-RESERVED = {"schema", "organization", "repo", "source", "locks"}
-KINDS = {"flag", "limit", "count", "set", "choice", "text"}
+# Commands.
+CMD_VALIDATE, CMD_CHECK, CMD_INSTRUCTIONS, CMD_TEXT = "validate", "check", "instructions", "text"
+
+# Reserved tables and keys of a contract file.
+TABLE_SCHEMA = "schema"
+TABLE_ORGANIZATION = "organization"
+TABLE_REPO = "repo"
+TABLE_SOURCE = "source"
+TABLE_LOCKS = "locks"
+KEY_NAME = "name"
+KEY_FIELDS = "fields"
+SOURCE_KEYS = ("address", "file", "version")
+RESERVED_TABLES = {TABLE_SCHEMA, TABLE_ORGANIZATION, TABLE_REPO, TABLE_SOURCE, TABLE_LOCKS}
+
+# Roles of a file.
+ROLE_ORGANIZATION, ROLE_REPO, ROLE_UNKNOWN = TABLE_ORGANIZATION, TABLE_REPO, "unknown"
+
+# Attributes of a field in the schema.
+ATTR_KIND = "kind"
+ATTR_ORDER = "order"
+ATTR_TEXT_CHECK = "text_check"          # a set of patterns that text must not contain
+TEXT_CHECK_EXACT = "exact"
+TEXT_CHECK_IGNORE_CASE = "ignore_case"
+TEXT_CHECKS = {TEXT_CHECK_EXACT, TEXT_CHECK_IGNORE_CASE}
+
+WILDCARD = "*"
+PATH_SEPARATOR = "."
+
+# The cache of organization sources.
+ENV_CACHE_DIR = "CHARTER_CACHE_DIR"
+DEFAULT_CACHE_DIR = Path.home() / ".charter" / "cache"
+DEFAULT_SCHEMA = Path(__file__).resolve().parent.parent / "schema" / "contract.toml"
+GIT = "git"
+GIT_OPTION_DIR = "-C"
+GIT_SHOW = "show"
+
+# Command line arguments and JSON keys.
+ARG_FILE, ARG_CONTRACT, ARG_SOURCE, ARG_CACHE_DIR, ARG_JSON, ARG_SCHEMA = "file", "contract", "source", "cache_dir", "json", "schema"
+JSON_KEY_EFFECTIVE = "effective"
+
+# Identifiers in an instruction file: [a.b] or [a.b.c].
 ID_PATTERN = re.compile(r"\[([a-z][a-z0-9_]*(?:\.[a-z0-9_]+)+)\]")
+
+# Output prefixes.
+OUT_PASS, OUT_FAIL, OUT_CANNOT_RUN, OUT_VALID, OUT_SOURCE = "pass", "fail", "cannot run", "valid", "source"
+
+# Messages. Each one is used in one place.
+MSG = {
+    "no_file": "no file: {path}",
+    "access_denied": "access denied: {path}",
+    "not_toml": "not TOML: {name}, {error}",
+    "schema_no_fields": "schema has no fields: {path}",
+    "schema_bad_kind": "schema field {field} has an unknown kind",
+    "schema_no_order": "schema field {field} is a choice without order",
+    "schema_bad_text_check": "schema field {field} has an unknown text_check",
+    "bad_schema_version": "{name}: schema must be {version}",
+    "one_role": "{name}: the file must have exactly one of [{org}] or [{repo}]",
+    "missing_name": "{name}: {table}.{key} is missing or not text",
+    "org_has_source": "{name}: an organization file has no [{table}]",
+    "missing_source": "{name}: [{table}] is missing",
+    "missing_source_key": "{name}: {table}.{key} is missing or not text",
+    "repo_has_locks": "{name}: a repo contract has no [{table}]",
+    "bad_locks": "{name}: {table}.{key} must be a list of text",
+    "unknown_field": "{name}: unknown field {field}",
+    "bad_value": "{name}: field {field}: {problem}",
+    "lock_unknown": "{name}: lock names an unknown field {field}",
+    "lock_no_value": "{name}: locked field without value: {field}",
+    "not_repo": "{name}: not a repo contract",
+    "not_org": "{name}: not an organization file",
+    "weakens": "weakens locked rule {field}: organization {org!r}, repo {repo!r}",
+    "source_not_found": "source not found: {address}. Populate the cache: {git} clone {address} {dir}",
+    "bad_address": "the source address cannot be a cache path: {address}",
+    "git_not_found": "{git} not found on this computer",
+    "version_not_found": "version not found: {version} of {file} in {address}. {detail}",
+    "source_origin": "{address} version {version}",
+    "check_pass": "{contract} obeys its organization source",
+    "no_ids": "{path}: no rule identifiers found, expected [a.b] marks",
+    "unknown_id": "{path}: identifier [{id}] has no value in the contract or its source",
+    "pattern_hit": "{path}:{line}: matches a pattern of {field}",
+    "instructions_pass": "{path} agrees with the contract ({count} identifiers, source: {origin})",
+    "text_pass": "{path} contains none of the patterns (source: {origin})",
+}
+
+# ---------------------------------------------------------------------------
+# Kinds. Each kind has its type check and its comparison, in one place.
+# ---------------------------------------------------------------------------
+
+
+def _is_text_or_list(value: object) -> bool:
+    return isinstance(value, str) or (isinstance(value, list) and all(isinstance(v, str) for v in value))
+
+
+def _is_whole_number(value: object) -> bool:
+    return isinstance(value, int) and not isinstance(value, bool) and value >= 0
+
+
+@dataclass(frozen=True)
+class Kind:
+    name: str
+    expected: str                                   # message when a value does not fit
+    accepts: Callable[[object, dict], bool]         # (value, field spec) -> fits the kind
+    stricter: Callable[[object, object, dict], bool]  # (org value, repo value, spec) -> equal or stricter
+    needs_order: bool = False
+
+
+KINDS: dict[str, Kind] = {
+    k.name: k for k in (
+        Kind("flag", "expected true or false",
+             lambda v, s: isinstance(v, bool),
+             lambda org, repo, s: repo is True or org is False),
+        Kind("limit", "expected a whole number of 0 or more",
+             lambda v, s: _is_whole_number(v),
+             lambda org, repo, s: repo <= org),
+        Kind("count", "expected a whole number of 0 or more",
+             lambda v, s: _is_whole_number(v),
+             lambda org, repo, s: repo >= org),
+        Kind("set", "expected a list of text",
+             lambda v, s: isinstance(v, list) and all(isinstance(i, str) for i in v),
+             lambda org, repo, s: set(org).issubset(set(repo))),
+        Kind("choice", "expected one of the values in order",
+             lambda v, s: v in s[ATTR_ORDER],
+             lambda org, repo, s: s[ATTR_ORDER].index(repo) >= s[ATTR_ORDER].index(org),
+             needs_order=True),
+        Kind("text", "expected text or a list of text",
+             lambda v, s: _is_text_or_list(v),
+             lambda org, repo, s: repo == org),
+    )
+}
 
 
 class CannotRun(Exception):
     """The check could not run. The message names the cause."""
 
 
-# --- Loading ---------------------------------------------------------------
+def msg(message_id: str, **values: object) -> str:
+    return MSG[message_id].format(**values)
+
+
+# ---------------------------------------------------------------------------
+# Loading
+# ---------------------------------------------------------------------------
 
 
 def load_toml(path: Path) -> dict:
@@ -45,41 +186,46 @@ def load_toml(path: Path) -> dict:
         with open(path, "rb") as f:
             return tomllib.load(f)
     except FileNotFoundError:
-        raise CannotRun(f"no file: {path}")
+        raise CannotRun(msg("no_file", path=path))
     except PermissionError:
-        raise CannotRun(f"access denied: {path}")
+        raise CannotRun(msg("access_denied", path=path))
     except tomllib.TOMLDecodeError as e:
-        raise CannotRun(f"not TOML: {path}, {e}")
+        raise CannotRun(msg("not_toml", name=path, error=e))
 
 
 def parse_toml_text(text: str, name: str) -> dict:
     try:
         return tomllib.loads(text)
     except tomllib.TOMLDecodeError as e:
-        raise CannotRun(f"not TOML: {name}, {e}")
+        raise CannotRun(msg("not_toml", name=name, error=e))
 
 
 def load_schema(path: Path) -> dict:
     data = load_toml(path)
-    fields = data.get("fields")
+    fields = data.get(KEY_FIELDS)
     if not isinstance(fields, dict) or not fields:
-        raise CannotRun(f"schema has no fields: {path}")
+        raise CannotRun(msg("schema_no_fields", path=path))
     for name, spec in fields.items():
-        if spec.get("kind") not in KINDS:
-            raise CannotRun(f"schema field {name} has an unknown kind")
-        if spec["kind"] == "choice" and not spec.get("order"):
-            raise CannotRun(f"schema field {name} is a choice without order")
+        kind = KINDS.get(spec.get(ATTR_KIND))
+        if kind is None:
+            raise CannotRun(msg("schema_bad_kind", field=name))
+        if kind.needs_order and not spec.get(ATTR_ORDER):
+            raise CannotRun(msg("schema_no_order", field=name))
+        if ATTR_TEXT_CHECK in spec and spec[ATTR_TEXT_CHECK] not in TEXT_CHECKS:
+            raise CannotRun(msg("schema_bad_text_check", field=name))
     return fields
 
 
-# --- Flattening and matching ----------------------------------------------
+# ---------------------------------------------------------------------------
+# Field paths
+# ---------------------------------------------------------------------------
 
 
 def flatten(table: dict, prefix: str = "") -> dict[str, object]:
-    """Turn nested tables into {"a.b.c": value}. Lists of tables are not used."""
+    """Turn nested tables into {"a.b.c": value}."""
     out: dict[str, object] = {}
     for key, value in table.items():
-        path = f"{prefix}.{key}" if prefix else key
+        path = f"{prefix}{PATH_SEPARATOR}{key}" if prefix else key
         if isinstance(value, dict):
             out.update(flatten(value, path))
         else:
@@ -88,285 +234,298 @@ def flatten(table: dict, prefix: str = "") -> dict[str, object]:
 
 
 def match_field(path: str, fields: dict) -> str | None:
-    """Return the schema pattern that matches a concrete field path."""
+    """Return the schema pattern that matches a concrete field path, else None."""
     if path in fields:
         return path
-    parts = path.split(".")
+    parts = path.split(PATH_SEPARATOR)
     for pattern in fields:
-        pp = pattern.split(".")
-        if len(pp) == len(parts) and all(a == b or a == "*" for a, b in zip(pp, parts)):
+        pp = pattern.split(PATH_SEPARATOR)
+        if len(pp) == len(parts) and all(a == b or a == WILDCARD for a, b in zip(pp, parts)):
             return pattern
     return None
 
 
-# --- Validation -------------------------------------------------------------
+def spec_of(path: str, fields: dict) -> dict:
+    return fields[match_field(path, fields)]
 
 
-def check_value(kind: str, value: object, spec: dict) -> str | None:
-    """Return a message when the value does not fit the kind, else None."""
-    if kind == "flag":
-        if not isinstance(value, bool):
-            return "expected true or false"
-    elif kind in ("limit", "count"):
-        if isinstance(value, bool) or not isinstance(value, int) or value < 0:
-            return "expected a whole number of 0 or more"
-    elif kind == "set":
-        if not isinstance(value, list) or not all(isinstance(v, str) for v in value):
-            return "expected a list of text"
-    elif kind == "choice":
-        if value not in spec["order"]:
-            return f"expected one of {spec['order']}"
-    elif kind == "text":
-        if not (isinstance(value, str) or (isinstance(value, list) and all(isinstance(v, str) for v in value))):
-            return "expected text or a list of text"
-    return None
+# ---------------------------------------------------------------------------
+# Validation
+# ---------------------------------------------------------------------------
 
 
-def validate(data: dict, fields: dict, name: str) -> tuple[str, dict[str, object], list[str], list[str]]:
-    """Validate one file. Returns (role, values, locks, errors)."""
+@dataclass
+class Validated:
+    role: str
+    values: dict[str, object]
+    locks: list[str]
+    errors: list[str]
+
+
+def _text_table(data: dict, table: str, name: str, errors: list[str]) -> None:
+    """The table must exist and have a text name."""
+    if not isinstance(data[table].get(KEY_NAME), str):
+        errors.append(msg("missing_name", name=name, table=table, key=KEY_NAME))
+
+
+def validate(data: dict, fields: dict, name: str) -> Validated:
     errors: list[str] = []
-    if data.get("schema") != 1:
-        errors.append(f"{name}: schema must be 1")
-    has_org = isinstance(data.get("organization"), dict)
-    has_repo = isinstance(data.get("repo"), dict)
-    if has_org == has_repo:
-        errors.append(f"{name}: the file must have exactly one of [organization] or [repo]")
-        role = "unknown"
-    else:
-        role = "organization" if has_org else "repo"
+    if data.get(TABLE_SCHEMA) != SCHEMA_VERSION:
+        errors.append(msg("bad_schema_version", name=name, version=SCHEMA_VERSION))
 
-    if role == "organization":
-        if not isinstance(data["organization"].get("name"), str):
-            errors.append(f"{name}: organization.name is missing or not text")
-        if "source" in data:
-            errors.append(f"{name}: an organization file has no [source]")
-    if role == "repo":
-        if not isinstance(data["repo"].get("name"), str):
-            errors.append(f"{name}: repo.name is missing or not text")
-        source = data.get("source")
+    has_org = isinstance(data.get(TABLE_ORGANIZATION), dict)
+    has_repo = isinstance(data.get(TABLE_REPO), dict)
+    if has_org == has_repo:
+        errors.append(msg("one_role", name=name, org=TABLE_ORGANIZATION, repo=TABLE_REPO))
+        role = ROLE_UNKNOWN
+    else:
+        role = ROLE_ORGANIZATION if has_org else ROLE_REPO
+
+    if role == ROLE_ORGANIZATION:
+        _text_table(data, TABLE_ORGANIZATION, name, errors)
+        if TABLE_SOURCE in data:
+            errors.append(msg("org_has_source", name=name, table=TABLE_SOURCE))
+    if role == ROLE_REPO:
+        _text_table(data, TABLE_REPO, name, errors)
+        source = data.get(TABLE_SOURCE)
         if not isinstance(source, dict):
-            errors.append(f"{name}: [source] is missing")
+            errors.append(msg("missing_source", name=name, table=TABLE_SOURCE))
         else:
-            for key in ("address", "file", "version"):
+            for key in SOURCE_KEYS:
                 if not isinstance(source.get(key), str) or not source[key]:
-                    errors.append(f"{name}: source.{key} is missing or not text")
-        if "locks" in data:
-            errors.append(f"{name}: a repo contract has no [locks]")
+                    errors.append(msg("missing_source_key", name=name, table=TABLE_SOURCE, key=key))
+        if TABLE_LOCKS in data:
+            errors.append(msg("repo_has_locks", name=name, table=TABLE_LOCKS))
 
     locks: list[str] = []
-    if role == "organization" and "locks" in data:
-        lock_table = data["locks"]
-        raw = lock_table.get("fields") if isinstance(lock_table, dict) else None
+    if role == ROLE_ORGANIZATION and TABLE_LOCKS in data:
+        raw = data[TABLE_LOCKS].get(KEY_FIELDS) if isinstance(data[TABLE_LOCKS], dict) else None
         if not isinstance(raw, list) or not all(isinstance(v, str) for v in raw):
-            errors.append(f"{name}: locks.fields must be a list of text")
+            errors.append(msg("bad_locks", name=name, table=TABLE_LOCKS, key=KEY_FIELDS))
         else:
             locks = raw
 
     values: dict[str, object] = {}
-    body = {k: v for k, v in data.items() if k not in RESERVED}
+    body = {k: v for k, v in data.items() if k not in RESERVED_TABLES}
     for path, value in flatten(body).items():
         pattern = match_field(path, fields)
         if pattern is None:
-            errors.append(f"{name}: unknown field {path}")
+            errors.append(msg("unknown_field", name=name, field=path))
             continue
         spec = fields[pattern]
-        problem = check_value(spec["kind"], value, spec)
-        if problem:
-            errors.append(f"{name}: field {path}: {problem}")
+        kind = KINDS[spec[ATTR_KIND]]
+        if not kind.accepts(value, spec):
+            errors.append(msg("bad_value", name=name, field=path, problem=kind.expected))
             continue
         values[path] = value
 
     for lock in locks:
         if match_field(lock, fields) is None:
-            errors.append(f"{name}: lock names an unknown field {lock}")
+            errors.append(msg("lock_unknown", name=name, field=lock))
         elif lock not in values:
-            errors.append(f"{name}: locked field without value: {lock}")
-    return role, values, locks, errors
+            errors.append(msg("lock_no_value", name=name, field=lock))
+    return Validated(role, values, locks, errors)
 
 
-# --- Comparison -------------------------------------------------------------
-
-
-def equal_or_stricter(kind: str, org: object, repo: object, spec: dict) -> bool:
-    if kind == "flag":
-        return repo is True or org is False
-    if kind == "limit":
-        return repo <= org
-    if kind == "count":
-        return repo >= org
-    if kind == "set":
-        return set(org).issubset(set(repo))
-    if kind == "choice":
-        return spec["order"].index(repo) >= spec["order"].index(org)
-    return repo == org
-
-
-# --- Source resolution ------------------------------------------------------
+# ---------------------------------------------------------------------------
+# The organization source
+# ---------------------------------------------------------------------------
 
 
 def cache_path(address: str, cache_dir: Path) -> Path:
+    """The clone of a source inside the cache: <cache>/<host>/<owner>/<repo>."""
     stripped = re.sub(r"^[a-z]+://", "", address).rstrip("/")
     stripped = re.sub(r"\.git$", "", stripped)
-    return cache_dir / Path(stripped)
+    parts = [p for p in stripped.split("/") if p]
+    if not parts or any(p in ("..", ".") for p in parts):
+        raise CannotRun(msg("bad_address", address=address))
+    return cache_dir.joinpath(*parts)
 
 
 def resolve_source(source: dict, explicit: Path | None, cache_dir: Path) -> tuple[dict, str]:
-    """Return (organization data, description of where it came from)."""
+    """Return the organization data and a description of where it came from."""
     if explicit is not None:
         return load_toml(explicit), str(explicit)
-    address, file, version = source["address"], source["file"], source["version"]
+    address, file, version = (source[k] for k in SOURCE_KEYS)
     repo_dir = cache_path(address, cache_dir)
     if not repo_dir.is_dir():
-        raise CannotRun(
-            f"source not found: {address}. Populate the cache: git clone {address} {repo_dir}"
-        )
+        raise CannotRun(msg("source_not_found", address=address, git=GIT, dir=repo_dir))
     try:
         result = subprocess.run(
-            ["git", "-C", str(repo_dir), "show", f"{version}:{file}"],
+            [GIT, GIT_OPTION_DIR, str(repo_dir), GIT_SHOW, f"{version}:{file}"],
             capture_output=True, text=True, check=False,
         )
     except FileNotFoundError:
-        raise CannotRun("git not found on this computer")
+        raise CannotRun(msg("git_not_found", git=GIT))
     except PermissionError:
-        raise CannotRun(f"access denied: {repo_dir}")
+        raise CannotRun(msg("access_denied", path=repo_dir))
     if result.returncode != 0:
         detail = result.stderr.strip().splitlines()[-1] if result.stderr.strip() else ""
-        raise CannotRun(f"version not found: {version} of {file} in {address}. {detail}")
-    return parse_toml_text(result.stdout, f"{address}@{version}:{file}"), f"{address} version {version}"
+        raise CannotRun(msg("version_not_found", version=version, file=file, address=address, detail=detail))
+    origin = msg("source_origin", address=address, version=version)
+    return parse_toml_text(result.stdout, origin), origin
 
 
-# --- Commands ---------------------------------------------------------------
+# ---------------------------------------------------------------------------
+# The effective contract
+# ---------------------------------------------------------------------------
+
+
+@dataclass
+class Effective:
+    values: dict[str, object]
+    fields: dict
+    failures: list[str]
+    origin: str
+
+
+def effective_contract(contract: Path, schema: Path, source: Path | None, cache_dir: Path) -> Effective:
+    fields = load_schema(schema)
+    repo_data = load_toml(contract)
+    repo = validate(repo_data, fields, str(contract))
+    if repo.role != ROLE_REPO:
+        repo.errors.append(msg("not_repo", name=contract))
+    if repo.errors:
+        return Effective({}, fields, repo.errors, "")
+    org_data, origin = resolve_source(repo_data[TABLE_SOURCE], source, cache_dir)
+    org = validate(org_data, fields, origin)
+    if org.role != ROLE_ORGANIZATION:
+        org.errors.append(msg("not_org", name=origin))
+    if org.errors:
+        return Effective({}, fields, org.errors, origin)
+    failures = [
+        msg("weakens", field=path, org=org.values[path], repo=value)
+        for path, value in repo.values.items()
+        if path in org.locks and not KINDS[spec_of(path, fields)[ATTR_KIND]].stricter(org.values[path], value, spec_of(path, fields))
+    ]
+    return Effective({**org.values, **repo.values}, fields, failures, origin)
+
+
+# ---------------------------------------------------------------------------
+# Commands
+# ---------------------------------------------------------------------------
+
+
+def emit(prefix: str, text: str) -> None:
+    print(f"{prefix}: {text}")
+
+
+def report_failures(failures: list[str]) -> int:
+    for f in failures:
+        emit(OUT_FAIL, f)
+    return FAIL if failures else PASS
 
 
 def cmd_validate(args) -> int:
-    fields = load_schema(args.schema)
-    data = load_toml(args.file)
-    role, _, _, errors = validate(data, fields, str(args.file))
-    for e in errors:
-        print(f"fail: {e}")
-    if errors:
+    result = validate(load_toml(args.file), load_schema(args.schema), str(args.file))
+    if report_failures(result.errors) == FAIL:
         return FAIL
-    print(f"valid: {args.file} ({role})")
+    emit(OUT_VALID, f"{args.file} ({result.role})")
     return PASS
-
-
-def effective_contract(args) -> tuple[dict, list[str], str]:
-    """Load, validate, and merge. Returns (effective values, failures, source description)."""
-    fields = load_schema(args.schema)
-    repo_data = load_toml(args.contract)
-    role, repo_values, _, errors = validate(repo_data, fields, str(args.contract))
-    if role != "repo":
-        errors.append(f"{args.contract}: not a repo contract")
-    if errors:
-        return {}, errors, ""
-    org_data, origin = resolve_source(repo_data["source"], args.source, args.cache_dir)
-    org_role, org_values, locks, org_errors = validate(org_data, fields, origin)
-    if org_role != "organization":
-        org_errors.append(f"{origin}: not an organization file")
-    if org_errors:
-        return {}, org_errors, origin
-    failures: list[str] = []
-    for path, repo_value in repo_values.items():
-        if path in locks:
-            spec = fields[match_field(path, fields)]
-            if not equal_or_stricter(spec["kind"], org_values[path], repo_value, spec):
-                failures.append(
-                    f"weakens locked rule {path}: organization {org_values[path]!r}, repo {repo_value!r}"
-                )
-    effective = dict(org_values)
-    effective.update(repo_values)
-    effective["_fields"] = fields  # for the instructions command
-    return effective, failures, origin
 
 
 def cmd_check(args) -> int:
-    effective, failures, origin = effective_contract(args)
-    if origin:
-        print(f"source: {origin}")
-    for f in failures:
-        print(f"fail: {f}")
-    if failures:
+    e = effective_contract(args.contract, args.schema, args.source, args.cache_dir)
+    if e.origin:
+        emit(OUT_SOURCE, e.origin)
+    if report_failures(e.failures) == FAIL:
         return FAIL
-    effective.pop("_fields", None)
     if args.json:
-        print(json.dumps({"source": origin, "effective": effective}, indent=2, sort_keys=True))
-    print(f"pass: {args.contract} obeys its organization source")
+        print(json.dumps({OUT_SOURCE: e.origin, JSON_KEY_EFFECTIVE: e.values}, indent=2, sort_keys=True))
+    emit(OUT_PASS, msg("check_pass", contract=args.contract))
     return PASS
 
 
-def cmd_instructions(args) -> int:
-    effective, failures, origin = effective_contract(args)
-    if failures:
-        for f in failures:
-            print(f"fail: {f}")
-        return FAIL
-    effective.pop("_fields", None)
+def text_patterns(e: Effective) -> list[tuple[str, list[str], bool]]:
+    """The pattern sets that text must not contain: (field, patterns, ignore case)."""
+    out = []
+    for path, value in e.values.items():
+        spec = spec_of(path, e.fields)
+        if ATTR_TEXT_CHECK in spec and isinstance(value, list):
+            out.append((path, value, spec[ATTR_TEXT_CHECK] == TEXT_CHECK_IGNORE_CASE))
+    return out
+
+
+def read_text(path: Path) -> str:
     try:
-        text = args.file.read_text(encoding="utf-8")
+        return path.read_text(encoding="utf-8")
     except FileNotFoundError:
-        raise CannotRun(f"no file: {args.file}")
+        raise CannotRun(msg("no_file", path=path))
     except PermissionError:
-        raise CannotRun(f"access denied: {args.file}")
+        raise CannotRun(msg("access_denied", path=path))
+
+
+def pattern_hits(e: Effective, path: Path, text: str) -> list[str]:
+    """Lines of the text that contain a pattern of a text-checked set."""
+    problems: list[str] = []
+    lines = text.splitlines()
+    for field, patterns, ignore_case in text_patterns(e):
+        for pattern in patterns:
+            needle = pattern.lower() if ignore_case else pattern
+            for number, line in enumerate(lines, start=1):
+                haystack = line.lower() if ignore_case else line
+                if needle and needle in haystack:
+                    problems.append(msg("pattern_hit", path=path, line=number, field=field))
+    return problems
+
+
+def cmd_instructions(args) -> int:
+    e = effective_contract(args.contract, args.schema, args.source, args.cache_dir)
+    if report_failures(e.failures) == FAIL:
+        return FAIL
+    text = read_text(args.file)
     problems: list[str] = []
     ids = set(ID_PATTERN.findall(text))
     if not ids:
-        problems.append(f"{args.file}: no rule identifiers found, expected [a.b] marks")
-    for rule_id in sorted(ids):
-        if rule_id not in effective:
-            problems.append(f"{args.file}: identifier [{rule_id}] has no value in the contract or its source")
-    lines = text.splitlines()
-    for field, case_insensitive in (
-        ("text.private_material_patterns", False),
-        ("text.session_link_patterns", False),
-        ("text.project_name_patterns", True),
-    ):
-        for pattern in effective.get(field, []) or []:
-            for number, line in enumerate(lines, start=1):
-                haystack = line.lower() if case_insensitive else line
-                needle = pattern.lower() if case_insensitive else pattern
-                if needle and needle in haystack:
-                    problems.append(f"{args.file}:{number}: matches a pattern of {field}")
-    for p in problems:
-        print(f"fail: {p}")
-    if problems:
+        problems.append(msg("no_ids", path=args.file))
+    problems += [msg("unknown_id", path=args.file, id=i) for i in sorted(ids) if i not in e.values]
+    problems += pattern_hits(e, args.file, text)
+    if report_failures(problems) == FAIL:
         return FAIL
-    print(f"pass: {args.file} agrees with the contract ({len(ids)} identifiers, source: {origin})")
+    emit(OUT_PASS, msg("instructions_pass", path=args.file, count=len(ids), origin=e.origin))
+    return PASS
+
+
+def cmd_text(args) -> int:
+    e = effective_contract(args.contract, args.schema, args.source, args.cache_dir)
+    if report_failures(e.failures) == FAIL:
+        return FAIL
+    if report_failures(pattern_hits(e, args.file, read_text(args.file))) == FAIL:
+        return FAIL
+    emit(OUT_PASS, msg("text_pass", path=args.file, origin=e.origin))
     return PASS
 
 
 def main(argv: list[str] | None = None) -> int:
-    default_schema = Path(__file__).resolve().parent.parent / "schema" / "contract.toml"
-    default_cache = Path(os.environ.get("CHARTER_CACHE_DIR", Path.home() / ".charter" / "cache"))
-
+    default_cache = Path(os.environ.get(ENV_CACHE_DIR, DEFAULT_CACHE_DIR))
     parser = argparse.ArgumentParser(prog="charter_check", description=__doc__,
                                      formatter_class=argparse.RawDescriptionHelpFormatter)
-    parser.add_argument("--schema", type=Path, default=default_schema)
+    parser.add_argument(f"--{ARG_SCHEMA}", type=Path, default=DEFAULT_SCHEMA)
     sub = parser.add_subparsers(dest="command", required=True)
 
-    p_validate = sub.add_parser("validate", help="validate one file")
-    p_validate.add_argument("file", type=Path)
+    p = sub.add_parser(CMD_VALIDATE, help="validate one file")
+    p.add_argument(ARG_FILE, type=Path)
 
-    p_check = sub.add_parser("check", help="check a repo contract against its organization source")
-    p_check.add_argument("contract", type=Path)
-    p_check.add_argument("--source", type=Path, default=None)
-    p_check.add_argument("--cache-dir", type=Path, default=default_cache)
-    p_check.add_argument("--json", action="store_true")
+    p = sub.add_parser(CMD_CHECK, help="check a repo contract against its organization source")
+    p.add_argument(ARG_CONTRACT, type=Path)
+    p.add_argument(f"--{ARG_SOURCE}", type=Path, default=None)
+    p.add_argument(f"--{ARG_CACHE_DIR.replace('_', '-')}", dest=ARG_CACHE_DIR, type=Path, default=default_cache)
+    p.add_argument(f"--{ARG_JSON}", action="store_true")
 
-    p_instr = sub.add_parser("instructions", help="check an instruction file against the contract")
-    p_instr.add_argument("file", type=Path)
-    p_instr.add_argument("--contract", type=Path, required=True)
-    p_instr.add_argument("--source", type=Path, default=None)
-    p_instr.add_argument("--cache-dir", type=Path, default=default_cache)
+    for command, help_text in ((CMD_INSTRUCTIONS, "check an instruction file against the contract"),
+                               (CMD_TEXT, "check any text file against the pattern sets of the contract")):
+        p = sub.add_parser(command, help=help_text)
+        p.add_argument(ARG_FILE, type=Path)
+        p.add_argument(f"--{ARG_CONTRACT}", type=Path, required=True)
+        p.add_argument(f"--{ARG_SOURCE}", type=Path, default=None)
+        p.add_argument(f"--{ARG_CACHE_DIR.replace('_', '-')}", dest=ARG_CACHE_DIR, type=Path, default=default_cache)
 
     args = parser.parse_args(argv)
+    commands = {CMD_VALIDATE: cmd_validate, CMD_CHECK: cmd_check, CMD_INSTRUCTIONS: cmd_instructions, CMD_TEXT: cmd_text}
     try:
-        if args.command == "validate":
-            return cmd_validate(args)
-        if args.command == "check":
-            return cmd_check(args)
-        return cmd_instructions(args)
+        return commands[args.command](args)
     except CannotRun as e:
-        print(f"cannot run: {e}")
+        emit(OUT_CANNOT_RUN, str(e))
         return CANNOT_RUN
 
 

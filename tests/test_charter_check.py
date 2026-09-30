@@ -1,4 +1,7 @@
-"""Tests of the contract checker. Run: python3 -m unittest discover -s tests"""
+"""Tests of the contract checker. Run: python3 -m unittest discover -s tests
+
+Each test names the scenario file and the check that it implements, in its docstring.
+"""
 
 import contextlib
 import io
@@ -12,22 +15,23 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / "scripts"))
-import charter_check  # noqa: E402
+import charter_check as cc  # noqa: E402
 
 SAMPLES = ROOT / "tests" / "samples"
 ORG = SAMPLES / "organization.toml"
 REPO = SAMPLES / "repo.toml"
+SAMPLE_ADDRESS = "https://example.com/org/rules"
 
 
 def run(*argv: str) -> tuple[int, str]:
     out = io.StringIO()
     with contextlib.redirect_stdout(out):
-        code = charter_check.main(list(argv))
+        code = cc.main(list(argv))
     return code, out.getvalue()
 
 
 def repo_with(**changes: str) -> str:
-    """The sample repo contract with one or more lines replaced. Keys are the exact lines."""
+    """The sample repo contract with lines replaced. Keys are the exact lines to replace."""
     text = REPO.read_text()
     for old, new in changes.items():
         assert old in text, old
@@ -50,56 +54,64 @@ class Temp(unittest.TestCase):
 
 class Validate(Temp):
     def test_valid_files_pass(self):
-        self.assertEqual(run("validate", str(ORG))[0], 0)
-        self.assertEqual(run("validate", str(REPO))[0], 0)
+        """contract-checker, check 1."""
+        self.assertEqual(run(cc.CMD_VALIDATE, str(ORG))[0], cc.PASS)
+        self.assertEqual(run(cc.CMD_VALIDATE, str(REPO))[0], cc.PASS)
 
     def test_missing_field_names_the_field(self):
+        """contract-checker, check 2."""
         path = self.write("r.toml", repo_with(**{'version = "v1"\n': ""}))
-        code, out = run("validate", str(path))
-        self.assertEqual(code, 1)
-        self.assertIn("source.version", out)
+        code, out = run(cc.CMD_VALIDATE, str(path))
+        self.assertEqual(code, cc.FAIL)
+        self.assertIn(f"{cc.TABLE_SOURCE}.version", out)
 
     def test_wrong_type_names_the_field(self):
+        """contract-checker, check 2."""
         path = self.write("r.toml", repo_with(**{"refusals = 2": 'refusals = "two"'}))
-        code, out = run("validate", str(path))
-        self.assertEqual(code, 1)
+        code, out = run(cc.CMD_VALIDATE, str(path))
+        self.assertEqual(code, cc.FAIL)
         self.assertIn("limits.refusals", out)
 
     def test_unknown_field_fails(self):
+        """contract-checker, check 2."""
         path = self.write("r.toml", repo_with(**{"refusals = 2": "refusals = 2\nretries = 9"}))
-        code, out = run("validate", str(path))
-        self.assertEqual(code, 1)
-        self.assertIn("unknown field limits.retries", out)
+        code, out = run(cc.CMD_VALIDATE, str(path))
+        self.assertEqual(code, cc.FAIL)
+        self.assertIn(cc.msg("unknown_field", name=path, field="limits.retries"), out)
 
     def test_locked_field_without_value_fails(self):
-        text = ORG.read_text().replace('code_host = "github"\n', "")
-        path = self.write("o.toml", text)
-        code, out = run("validate", str(path))
-        self.assertEqual(code, 1)
-        self.assertIn("locked field without value: tools.code_host", out)
+        """contract-checker, check 2."""
+        path = self.write("o.toml", ORG.read_text().replace('code_host = "github"\n', ""))
+        code, out = run(cc.CMD_VALIDATE, str(path))
+        self.assertEqual(code, cc.FAIL)
+        self.assertIn(cc.msg("lock_no_value", name=path, field="tools.code_host"), out)
 
 
 class Check(Temp):
     def check(self, repo_text: str) -> tuple[int, str]:
         path = self.write("r.toml", repo_text)
-        return run("check", str(path), "--source", str(ORG))
+        return run(cc.CMD_CHECK, str(path), f"--{cc.ARG_SOURCE}", str(ORG))
 
     def test_valid_pair_passes_and_names_the_source(self):
-        code, out = run("check", str(REPO), "--source", str(ORG))
-        self.assertEqual(code, 0)
-        self.assertIn("source: ", out)
-        self.assertIn("pass:", out)
+        """contract-checker, checks 1 and 7."""
+        code, out = run(cc.CMD_CHECK, str(REPO), f"--{cc.ARG_SOURCE}", str(ORG))
+        self.assertEqual(code, cc.PASS)
+        self.assertIn(f"{cc.OUT_SOURCE}: ", out)
+        self.assertIn(f"{cc.OUT_PASS}:", out)
 
     def test_repo_adds_an_unlocked_rule(self):
+        """contract-checker, check 3."""
         code, _ = self.check(repo_with(**{"refusals = 2": "refusals = 2\nacceptance_loop = 9"}))
-        self.assertEqual(code, 0)
+        self.assertEqual(code, cc.PASS)
 
     def test_stricter_in_each_direction_passes(self):
-        # flag stays true, limit 2 < 3, count 2 > 1, set is a superset, choice leader > team_lead, text equal
+        """contract-checker, check 4. Flag stays true; limit 2 < 3; count 2 > 1; set is a superset;
+        choice leader > team_lead; text equal."""
         code, _ = self.check(repo_with(**{"refusals = 2": "refusals = 2\n[change]\nperson_approves_contract = true"}))
-        self.assertEqual(code, 0)
+        self.assertEqual(code, cc.PASS)
 
     def test_weaker_in_each_direction_fails_and_names_the_rule(self):
+        """contract-checker, check 5."""
         cases = {
             "change.person_approves_contract": {"refusals = 2": "refusals = 2\n[change]\nperson_approves_contract = false"},
             "limits.refusals": {"refusals = 2": "refusals = 5"},
@@ -111,94 +123,130 @@ class Check(Temp):
         for rule, change in cases.items():
             with self.subTest(rule=rule):
                 code, out = self.check(repo_with(**change))
-                self.assertEqual(code, 1)
+                self.assertEqual(code, cc.FAIL)
                 self.assertIn(f"weakens locked rule {rule}", out)
 
     def test_json_output_has_effective_values(self):
-        code, out = run("check", str(REPO), "--source", str(ORG), "--json")
-        self.assertEqual(code, 0)
+        """contract-checker, check 1: the effective contract merges the source and the repo."""
+        code, out = run(cc.CMD_CHECK, str(REPO), f"--{cc.ARG_SOURCE}", str(ORG), f"--{cc.ARG_JSON}")
+        self.assertEqual(code, cc.PASS)
         self.assertIn('"limits.refusals": 2', out)
         self.assertIn('"limits.review_loop": 3', out)
 
 
 class CannotRun(Temp):
     def test_no_file(self):
-        code, out = run("validate", str(self.dir / "none.toml"))
-        self.assertEqual(code, 2)
-        self.assertIn("cannot run: no file", out)
+        """contract-checker, check 6."""
+        path = self.dir / "none.toml"
+        code, out = run(cc.CMD_VALIDATE, str(path))
+        self.assertEqual(code, cc.CANNOT_RUN)
+        self.assertIn(f"{cc.OUT_CANNOT_RUN}: {cc.msg('no_file', path=path)}", out)
 
     def test_not_toml(self):
+        """contract-checker, check 6."""
         path = self.write("bad.toml", "schema = [unclosed")
-        code, out = run("validate", str(path))
-        self.assertEqual(code, 2)
-        self.assertIn("cannot run: not TOML", out)
+        code, out = run(cc.CMD_VALIDATE, str(path))
+        self.assertEqual(code, cc.CANNOT_RUN)
+        self.assertIn(f"{cc.OUT_CANNOT_RUN}: not TOML", out)
 
     def test_source_not_found(self):
-        code, out = run("check", str(REPO), "--cache-dir", str(self.dir))
-        self.assertEqual(code, 2)
-        self.assertIn("cannot run: source not found: https://example.com/org/rules", out)
-        self.assertIn("git clone", out)
+        """contract-checker, check 6."""
+        code, out = run(cc.CMD_CHECK, str(REPO), "--cache-dir", str(self.dir))
+        self.assertEqual(code, cc.CANNOT_RUN)
+        self.assertIn(f"{cc.OUT_CANNOT_RUN}: source not found: {SAMPLE_ADDRESS}", out)
+        self.assertIn(f"{cc.GIT} clone", out)
+
+    def test_address_that_escapes_the_cache_is_refused(self):
+        """contract-checker, check 6: a source address cannot point outside the cache."""
+        path = self.write("r.toml", repo_with(**{f'address = "{SAMPLE_ADDRESS}"': 'address = "https://example.com/../../etc"'}))
+        code, out = run(cc.CMD_CHECK, str(path), "--cache-dir", str(self.dir))
+        self.assertEqual(code, cc.CANNOT_RUN)
+        self.assertIn("cannot be a cache path", out)
 
     def make_cache(self) -> Path:
-        cache = self.dir / "example.com" / "org" / "rules"
+        cache = cc.cache_path(SAMPLE_ADDRESS, self.dir)
         cache.mkdir(parents=True)
         shutil.copy(ORG, cache / "organization.toml")
         env = {**os.environ, "GIT_AUTHOR_NAME": "t", "GIT_AUTHOR_EMAIL": "t@t", "GIT_COMMITTER_NAME": "t", "GIT_COMMITTER_EMAIL": "t@t"}
-        for cmd in (["git", "init", "-q"], ["git", "add", "."], ["git", "commit", "-q", "-m", "rules"], ["git", "tag", "v1"]):
+        for cmd in ([cc.GIT, "init", "-q"], [cc.GIT, "add", "."], [cc.GIT, "commit", "-q", "-m", "rules"], [cc.GIT, "tag", "v1"]):
             subprocess.run(cmd, cwd=cache, check=True, env=env, capture_output=True)
         return cache
 
     def test_cache_resolves_and_names_the_version(self):
+        """contract-checker, check 7."""
         self.make_cache()
-        code, out = run("check", str(REPO), "--cache-dir", str(self.dir))
-        self.assertEqual(code, 0, out)
-        self.assertIn("source: https://example.com/org/rules version v1", out)
+        code, out = run(cc.CMD_CHECK, str(REPO), "--cache-dir", str(self.dir))
+        self.assertEqual(code, cc.PASS, out)
+        self.assertIn(f"{cc.OUT_SOURCE}: {cc.msg('source_origin', address=SAMPLE_ADDRESS, version='v1')}", out)
 
     def test_version_not_found(self):
+        """contract-checker, check 6."""
         self.make_cache()
         path = self.write("r.toml", repo_with(**{'version = "v1"': 'version = "v9"'}))
-        code, out = run("check", str(path), "--cache-dir", str(self.dir))
-        self.assertEqual(code, 2)
-        self.assertIn("cannot run: version not found: v9", out)
+        code, out = run(cc.CMD_CHECK, str(path), "--cache-dir", str(self.dir))
+        self.assertEqual(code, cc.CANNOT_RUN)
+        self.assertIn(f"{cc.OUT_CANNOT_RUN}: version not found: v9", out)
 
     @unittest.skipIf(os.name == "nt" or os.geteuid() == 0, "file permissions")
     def test_access_denied(self):
+        """contract-checker, check 6."""
         path = self.write("r.toml", REPO.read_text())
         path.chmod(0)
         try:
-            code, out = run("validate", str(path))
+            code, out = run(cc.CMD_VALIDATE, str(path))
         finally:
             path.chmod(0o600)
-        self.assertEqual(code, 2)
-        self.assertIn("cannot run: access denied", out)
+        self.assertEqual(code, cc.CANNOT_RUN)
+        self.assertIn(f"{cc.OUT_CANNOT_RUN}: {cc.msg('access_denied', path=path)}", out)
 
 
 class Instructions(Temp):
     def instructions(self, text: str) -> tuple[int, str]:
         path = self.write("AGENTS.md", text)
-        return run("instructions", str(path), "--contract", str(REPO), "--source", str(ORG))
+        return run(cc.CMD_INSTRUCTIONS, str(path), f"--{cc.ARG_CONTRACT}", str(REPO), f"--{cc.ARG_SOURCE}", str(ORG))
 
     def test_known_identifiers_pass(self):
+        """repository-instructions, check 1."""
         code, out = self.instructions("Refusals stop at the limit. [limits.refusals]\nOne approver. [tiers.high.approver]\n")
-        self.assertEqual(code, 0, out)
+        self.assertEqual(code, cc.PASS, out)
         self.assertIn("2 identifiers", out)
 
     def test_unknown_identifier_fails(self):
+        """repository-instructions, check 1."""
         code, out = self.instructions("Rule. [limits.retries]\n")
-        self.assertEqual(code, 1)
+        self.assertEqual(code, cc.FAIL)
         self.assertIn("[limits.retries] has no value", out)
 
     def test_no_identifiers_fails(self):
+        """repository-instructions, check 1."""
         code, out = self.instructions("No marks here.\n")
-        self.assertEqual(code, 1)
+        self.assertEqual(code, cc.FAIL)
         self.assertIn("no rule identifiers", out)
 
     def test_private_material_and_project_names_fail(self):
+        """repository-instructions, checks 2 and 3."""
         code, out = self.instructions("Mail a@example.com [limits.refusals]\nThe Secret-Project [limits.refusals]\nsession_1 [limits.refusals]\n")
-        self.assertEqual(code, 1)
+        self.assertEqual(code, cc.FAIL)
         self.assertIn(":1: matches a pattern of text.private_material_patterns", out)
         self.assertIn(":2: matches a pattern of text.project_name_patterns", out)
         self.assertIn(":3: matches a pattern of text.session_link_patterns", out)
+
+
+class TextFiles(Temp):
+    def text(self, content: str) -> tuple[int, str]:
+        path = self.write("README.md", content)
+        return run(cc.CMD_TEXT, str(path), f"--{cc.ARG_CONTRACT}", str(REPO), f"--{cc.ARG_SOURCE}", str(ORG))
+
+    def test_clean_text_passes_without_identifiers(self):
+        """readme, check 1."""
+        code, out = self.text("A plain file with no marks.\n")
+        self.assertEqual(code, cc.PASS, out)
+
+    def test_pattern_in_text_fails(self):
+        """readme, check 1."""
+        code, out = self.text("Write to a@example.com\n")
+        self.assertEqual(code, cc.FAIL)
+        self.assertIn(":1: matches a pattern of text.private_material_patterns", out)
 
 
 if __name__ == "__main__":

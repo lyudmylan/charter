@@ -10,7 +10,9 @@ to the repo.
 | `charter.toml` | The repo | The root of the repo | A reference to the source, and the rules of the repo |
 
 A repo holds no copy of the organization file. The checker reads the source from a cache outside the
-repo (`~/.charter/cache/<host>/<owner>/<repo>`, a git clone), or from a path that CI gives.
+repo, or from a path that CI gives with `--source`. The cache is a git clone at
+`~/.charter/cache/<host>/<owner>/<repo>`; the checker names the clone command when the cache is
+missing. The environment variable `CHARTER_CACHE_DIR` moves the cache.
 
 ## Kinds and directions
 
@@ -25,6 +27,9 @@ A lower owner can make a rule stricter. It cannot weaken a locked rule. The kind
 | `set` | list of text | a superset |
 | `choice` | one value of an ordered list | a later value |
 | `text` | text, or a list of text | no direction; a locked text stays equal |
+
+A `set` field can carry `text_check = "exact"` or `"ignore_case"`. Then a text file must not contain
+any of its patterns. The `instructions` and `text` commands read this from the schema.
 
 ## Fields
 
@@ -80,6 +85,7 @@ A lower owner can make a rule stricter. It cannot weaken a locked rule. The kind
 python3 scripts/charter_check.py validate FILE
 python3 scripts/charter_check.py check charter.toml [--source PATH] [--json]
 python3 scripts/charter_check.py instructions AGENTS.md --contract charter.toml
+python3 scripts/charter_check.py text README.md --contract charter.toml
 ```
 
 Exit codes: 0 pass, 1 fail, 2 the check could not run. With exit code 2 the message names the cause:
