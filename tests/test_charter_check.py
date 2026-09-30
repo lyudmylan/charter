@@ -5,6 +5,7 @@ Each test names the scenario file and the check that it implements, in its docst
 
 import contextlib
 import io
+import json
 import os
 import shutil
 import subprocess
@@ -126,12 +127,16 @@ class Check(Temp):
                 self.assertEqual(code, cc.FAIL)
                 self.assertIn(f"weakens locked rule {rule}", out)
 
-    def test_json_output_has_effective_values(self):
+    def test_json_output_is_json_and_redacts_the_pattern_sets(self):
         """contract-checker, check 1: the effective contract merges the source and the repo."""
         code, out = run(cc.CMD_CHECK, str(REPO), f"--{cc.ARG_SOURCE}", str(ORG), f"--{cc.ARG_JSON}")
         self.assertEqual(code, cc.PASS)
-        self.assertIn('"limits.refusals": 2', out)
-        self.assertIn('"limits.review_loop": 3', out)
+        data = json.loads(out)
+        effective = data[cc.JSON_KEY_EFFECTIVE]
+        self.assertEqual(effective["limits.refusals"], 2)
+        self.assertEqual(effective["limits.review_loop"], 3)
+        self.assertNotIn("secret-project", out)
+        self.assertEqual(effective["text.project_name_patterns"], cc.msg("redacted", count=1))
 
 
 class CannotRun(Temp):
@@ -141,6 +146,12 @@ class CannotRun(Temp):
         code, out = run(cc.CMD_VALIDATE, str(path))
         self.assertEqual(code, cc.CANNOT_RUN)
         self.assertIn(f"{cc.OUT_CANNOT_RUN}: {cc.msg('no_file', path=path)}", out)
+
+    def test_a_directory_is_not_a_file(self):
+        """contract-checker, check 6."""
+        code, out = run(cc.CMD_VALIDATE, str(self.dir))
+        self.assertEqual(code, cc.CANNOT_RUN)
+        self.assertIn(f"{cc.OUT_CANNOT_RUN}: {cc.msg('not_a_file', path=self.dir)}", out)
 
     def test_not_toml(self):
         """contract-checker, check 6."""
@@ -216,6 +227,12 @@ class Instructions(Temp):
         code, out = self.instructions("Rule. [limits.retries]\n")
         self.assertEqual(code, cc.FAIL)
         self.assertIn("[limits.retries] has no value", out)
+
+    def test_bracketed_file_names_are_not_identifiers(self):
+        """repository-instructions, check 1."""
+        code, out = self.instructions("See [charter.toml] and [docs/x.md]. Limit. [limits.refusals]\n")
+        self.assertEqual(code, cc.PASS, out)
+        self.assertIn("1 identifiers", out)
 
     def test_no_identifiers_fails(self):
         """repository-instructions, check 1."""

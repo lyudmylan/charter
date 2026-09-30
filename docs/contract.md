@@ -89,4 +89,7 @@ python3 scripts/charter_check.py text README.md --contract charter.toml
 ```
 
 Exit codes: 0 pass, 1 fail, 2 the check could not run. With exit code 2 the message names the cause:
-no file, not TOML, source not found, access denied, version not found.
+no file, not a file, not UTF-8 text, not TOML, source not found, access denied, version not found.
+
+`check --json` prints one JSON object: the source, the failures, and the effective contract. The
+pattern sets with a `text_check` are redacted in that output, because they can be private.

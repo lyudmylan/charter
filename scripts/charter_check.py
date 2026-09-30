@@ -76,9 +76,10 @@ GIT_SHOW = "show"
 
 # Command line arguments and JSON keys.
 ARG_FILE, ARG_CONTRACT, ARG_SOURCE, ARG_CACHE_DIR, ARG_JSON, ARG_SCHEMA = "file", "contract", "source", "cache_dir", "json", "schema"
-JSON_KEY_EFFECTIVE = "effective"
+JSON_KEY_EFFECTIVE, JSON_KEY_FAILURES = "effective", "failures"
 
-# Identifiers in an instruction file: [a.b] or [a.b.c].
+# Identifiers in an instruction file: [a.b] or [a.b.c]. Only a mark whose first segment is a
+# field group of the schema counts; other bracketed text, such as a file name, is ignored.
 ID_PATTERN = re.compile(r"\[([a-z][a-z0-9_]*(?:\.[a-z0-9_]+)+)\]")
 
 # Output prefixes.
@@ -119,6 +120,10 @@ MSG = {
     "pattern_hit": "{path}:{line}: matches a pattern of {field}",
     "instructions_pass": "{path} agrees with the contract ({count} identifiers, source: {origin})",
     "text_pass": "{path} contains none of the patterns (source: {origin})",
+    "redacted": "redacted: {count} patterns",
+    "not_a_file": "not a file: {path}",
+    "not_utf8": "not UTF-8 text: {path}",
+    "schema_not_table": "schema field {field} is not a table",
 }
 
 # ---------------------------------------------------------------------------
@@ -187,8 +192,12 @@ def load_toml(path: Path) -> dict:
             return tomllib.load(f)
     except FileNotFoundError:
         raise CannotRun(msg("no_file", path=path))
+    except IsADirectoryError:
+        raise CannotRun(msg("not_a_file", path=path))
     except PermissionError:
         raise CannotRun(msg("access_denied", path=path))
+    except UnicodeDecodeError:
+        raise CannotRun(msg("not_utf8", path=path))
     except tomllib.TOMLDecodeError as e:
         raise CannotRun(msg("not_toml", name=path, error=e))
 
@@ -206,6 +215,8 @@ def load_schema(path: Path) -> dict:
     if not isinstance(fields, dict) or not fields:
         raise CannotRun(msg("schema_no_fields", path=path))
     for name, spec in fields.items():
+        if not isinstance(spec, dict):
+            raise CannotRun(msg("schema_not_table", field=name))
         kind = KINDS.get(spec.get(ATTR_KIND))
         if kind is None:
             raise CannotRun(msg("schema_bad_kind", field=name))
@@ -424,14 +435,27 @@ def cmd_validate(args) -> int:
     return PASS
 
 
+def redacted(e: Effective) -> dict[str, object]:
+    """The effective values, with the text-checked sets replaced: they can be private."""
+    out: dict[str, object] = {}
+    for path, value in e.values.items():
+        if ATTR_TEXT_CHECK in spec_of(path, e.fields) and isinstance(value, list):
+            out[path] = msg("redacted", count=len(value))
+        else:
+            out[path] = value
+    return out
+
+
 def cmd_check(args) -> int:
     e = effective_contract(args.contract, args.schema, args.source, args.cache_dir)
+    if args.json:
+        print(json.dumps({OUT_SOURCE: e.origin, JSON_KEY_FAILURES: e.failures, JSON_KEY_EFFECTIVE: redacted(e)},
+                         indent=2, sort_keys=True))
+        return FAIL if e.failures else PASS
     if e.origin:
         emit(OUT_SOURCE, e.origin)
     if report_failures(e.failures) == FAIL:
         return FAIL
-    if args.json:
-        print(json.dumps({OUT_SOURCE: e.origin, JSON_KEY_EFFECTIVE: e.values}, indent=2, sort_keys=True))
     emit(OUT_PASS, msg("check_pass", contract=args.contract))
     return PASS
 
@@ -451,8 +475,12 @@ def read_text(path: Path) -> str:
         return path.read_text(encoding="utf-8")
     except FileNotFoundError:
         raise CannotRun(msg("no_file", path=path))
+    except IsADirectoryError:
+        raise CannotRun(msg("not_a_file", path=path))
     except PermissionError:
         raise CannotRun(msg("access_denied", path=path))
+    except UnicodeDecodeError:
+        raise CannotRun(msg("not_utf8", path=path))
 
 
 def pattern_hits(e: Effective, path: Path, text: str) -> list[str]:
@@ -475,7 +503,8 @@ def cmd_instructions(args) -> int:
         return FAIL
     text = read_text(args.file)
     problems: list[str] = []
-    ids = set(ID_PATTERN.findall(text))
+    groups = {pattern.split(PATH_SEPARATOR)[0] for pattern in e.fields}
+    ids = {i for i in ID_PATTERN.findall(text) if i.split(PATH_SEPARATOR)[0] in groups}
     if not ids:
         problems.append(msg("no_ids", path=args.file))
     problems += [msg("unknown_id", path=args.file, id=i) for i in sorted(ids) if i not in e.values]

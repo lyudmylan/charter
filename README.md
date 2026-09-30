@@ -26,11 +26,8 @@ the team owns the skills, and a person stays in control without approving every 
 
 ## Checks
 
-```
-python3 -m unittest discover -s tests
-python3 scripts/charter_check.py check charter.toml
-python3 scripts/charter_check.py instructions AGENTS.md --contract charter.toml
-```
+The quality checks of this repo are listed once, in `charter.toml` under `checks.quality`. Run them
+all before a push. The tests alone: `python3 -m unittest discover -s tests`.
 
 The checker reads the organization source from a local cache. `docs/contract.md` says how to populate it.
 
