@@ -352,6 +352,8 @@ def repo_only(args) -> cc.Effective:
     """The repo contract alone, without its organization source: for a run that has no access to it."""
     fields = cc.load_schema(args.schema)
     repo = cc.validate(cc.load_toml(args.contract), fields, str(args.contract))
+    if repo.role != cc.ROLE_REPO:
+        repo.errors.append(cc.msg("not_repo", name=args.contract))
     if repo.errors:
         raise cc.CannotRun("; ".join(repo.errors))
     return cc.Effective(dict(repo.values), fields, [], "", dict(repo.values))

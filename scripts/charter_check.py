@@ -565,6 +565,8 @@ def cmd_source(args) -> int:
     fields = load_schema(args.schema)
     data = load_toml(args.contract)
     repo = validate(data, fields, str(args.contract))
+    if repo.role != ROLE_REPO:
+        repo.errors.append(msg("not_repo", name=args.contract))
     if report_failures(repo.errors) == FAIL:
         return FAIL
     source = data[TABLE_SOURCE]

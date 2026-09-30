@@ -6,6 +6,7 @@ This is the only script that knows GitHub. Python 3.11 or later, standard librar
 Commands:
   find    --repo owner/name (--pr N | --sha SHA)        Print "number=N" and "sha=SHA" of the change request.
   collect --repo owner/name --pr N --out facts.json     Write the facts file.
+          [--sha SHA]                                   The commit that the facts describe.
           [--check name=result]...                      A check result given by the caller.
           [--check-run name]...                         A check read from the check runs of the head commit.
 
@@ -65,6 +66,7 @@ CHECK_FAIL, CHECK_PENDING = "fail", "pending"
 
 # Keys of the API responses that this script reads.
 PR_BODY, PR_TITLE, PR_NUMBER, PR_HEAD, HEAD_SHA = "body", "title", "number", "head", "sha"
+PR_STATE, PR_OPEN, PR_BASE, BASE_REF, COMPARE_FILES = "state", "open", "base", "ref", "files"
 FILE_NAME = "filename"
 ISSUE_STATE, ISSUE_IS_PR = "state", "pull_request"
 RUNS, RUN_NAME, RUN_CONCLUSION, RUN_STATUS, RUN_COMPLETED = "check_runs", "name", "conclusion", "status", "completed"
@@ -73,7 +75,7 @@ MSG = {
     "no_token": f"no token: set the environment variable {ENV_TOKEN}",
     "bad_repo": "the repo must be owner/name: {repo}",
     "bad_check": "a check must be name=result: {check}",
-    "no_pr_for_sha": "no change request has the head commit {sha}",
+    "no_pr_for_sha": "no open change request has the head commit {sha}",
     "http": "GitHub answered {code} for {url}: {detail}",
     "network": "GitHub is not reachable: {url}: {error}",
     "graphql": "GitHub answered errors for the review threads: {errors}",
@@ -197,27 +199,39 @@ class GitHub:
             after = threads["pageInfo"]["endCursor"]
 
 
+def open_change_request(prs: list[dict]) -> dict | None:
+    """The first open change request of a list; a closed one never counts."""
+    return next((pr for pr in prs if pr.get(PR_STATE) == PR_OPEN), None)
+
+
 def find(repo: str, github: GitHub, number: int | None, sha: str | None) -> tuple[int, str]:
     """The number and the head commit of a change request, from its number or its head commit."""
     if number is not None:
         pr = github.get(f"/repos/{repo}/pulls/{number}")
         return pr[PR_NUMBER], pr[PR_HEAD][HEAD_SHA]
-    prs = github.get(f"/repos/{repo}/commits/{sha}/pulls")
-    if not prs:
+    pr = open_change_request(github.get(f"/repos/{repo}/commits/{sha}/pulls"))
+    if pr is None:
         raise cc.CannotRun(msg("no_pr_for_sha", sha=sha))
-    return prs[0][PR_NUMBER], sha
+    return pr[PR_NUMBER], sha
 
 
-def collect(repo: str, number: int, given: dict[str, str], run_names: list[str], github: GitHub) -> dict:
+def collect(repo: str, number: int, given: dict[str, str], run_names: list[str], github: GitHub,
+            sha: str | None = None) -> dict:
+    """The facts of a change request. With a commit, the files and the check runs are those of that commit,
+    so that they agree with the check that is published on it."""
     owner, name = repo.split("/", 1)
     pr = github.get(f"/repos/{repo}/pulls/{number}")
-    files = github.pages(f"/repos/{repo}/pulls/{number}/files")
+    commit = sha or pr[PR_HEAD][HEAD_SHA]
+    if sha and sha != pr[PR_HEAD][HEAD_SHA]:
+        files = github.get(f"/repos/{repo}/compare/{pr[PR_BASE][BASE_REF]}...{sha}").get(COMPARE_FILES, [])
+    else:
+        files = github.pages(f"/repos/{repo}/pulls/{number}/files")
     text = f"{pr.get(PR_TITLE) or ''}\n{pr.get(PR_BODY) or ''}"
     issues = {k: github.get(f"/repos/{repo}/issues/{k}", optional=True) for k in issue_numbers(text) if k != number}
     unresolved = github.unresolved_threads(owner, name, number)
     checks: dict[str, str | None] = dict(given)
     if run_names:
-        runs = github.get(f"/repos/{repo}/commits/{pr[PR_HEAD][HEAD_SHA]}/check-runs?per_page={PAGE_SIZE}")
+        runs = github.get(f"/repos/{repo}/commits/{commit}/check-runs?per_page={PAGE_SIZE}")
         checks.update(conclusions(runs.get(RUNS, []), run_names))
     return build_facts(pr, files, issues, unresolved, checks)
 
@@ -250,6 +264,7 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--pr", type=int, required=True)
     p.add_argument("--check", action="append", default=[], help="name=result, given by the caller")
     p.add_argument("--check-run", action="append", default=[], help="name of a check run to read")
+    p.add_argument("--sha", help="the commit that the facts describe; default: the current head")
     p.add_argument("--out", type=Path, required=True)
     args = parser.parse_args(argv)
     try:
@@ -265,7 +280,7 @@ def main(argv: list[str] | None = None) -> int:
             number, sha = find(args.repo, github, args.pr, args.sha)
             print(f"{OUTPUT_NUMBER}={number}\n{OUTPUT_SHA}={sha}")
             return cc.PASS
-        facts = collect(args.repo, args.pr, parse_checks(args.check), args.check_run, github)
+        facts = collect(args.repo, args.pr, parse_checks(args.check), args.check_run, github, args.sha)
         args.out.write_text(json.dumps(facts, indent=2))
         print(msg("written", path=args.out, files=len(facts[cg.FACT_CHANGED_FILES]),
                   issues=len(facts[cg.FACT_LINKED_ISSUES]), threads=facts[cg.FACT_UNRESOLVED_THREADS],

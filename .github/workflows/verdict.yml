@@ -34,11 +34,13 @@ jobs:
         id: pr
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          INPUT_PR: ${{ inputs.pr }}
+          RUN_SHA: ${{ github.event.workflow_run.head_sha }}
         run: |
-          if [ -n "${{ inputs.pr }}" ]; then
-            python3 scripts/charter_facts_github.py find --repo "$GITHUB_REPOSITORY" --pr "${{ inputs.pr }}" >> "$GITHUB_OUTPUT"
+          if [ -n "$INPUT_PR" ]; then
+            python3 scripts/charter_facts_github.py find --repo "$GITHUB_REPOSITORY" --pr "$INPUT_PR" >> "$GITHUB_OUTPUT"
           else
-            python3 scripts/charter_facts_github.py find --repo "$GITHUB_REPOSITORY" --sha "${{ github.event.workflow_run.head_sha }}" >> "$GITHUB_OUTPUT"
+            python3 scripts/charter_facts_github.py find --repo "$GITHUB_REPOSITORY" --sha "$RUN_SHA" >> "$GITHUB_OUTPUT"
           fi
 
       - name: Take the files of the change request, as data
@@ -65,13 +67,16 @@ jobs:
           CODE=$?
           echo "result=$([ $CODE -eq 0 ] && echo success || echo failure)" >> "$GITHUB_OUTPUT"
 
-      - name: Collect the facts of the change request
+      - name: Collect the facts of the change request, for the commit that the check describes
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR_NUMBER: ${{ steps.pr.outputs.number }}
+          PR_SHA: ${{ steps.pr.outputs.sha }}
+          CONTRACT_RESULT: ${{ steps.contract.outputs.result }}
         run: >
           python3 scripts/charter_facts_github.py collect --repo "$GITHUB_REPOSITORY"
-          --pr "${{ steps.pr.outputs.number }}"
-          --check "contract=${{ steps.contract.outputs.result }}"
+          --pr "$PR_NUMBER" --sha "$PR_SHA"
+          --check "contract=$CONTRACT_RESULT"
           --check-run tests
           --out facts.json
 
@@ -86,12 +91,16 @@ jobs:
         if: always()
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          VERDICT_CODE: ${{ steps.verdict.outputs.code }}
+          PR_SHA: ${{ steps.pr.outputs.sha }}
         run: |
-          CONCLUSION=$([ "${{ steps.verdict.outputs.code }}" = "0" ] && echo success || echo failure)
-          TITLE=$(head -n 1 verdict.txt 2>/dev/null || echo "not ready")
-          SUMMARY=$(cat verdict.txt 2>/dev/null || echo "the verdict could not run; see the log")
+          CONCLUSION=$([ "$VERDICT_CODE" = "0" ] && echo success || echo failure)
+          TITLE=$(head -n 1 verdict.txt 2>/dev/null)
+          [ -n "$TITLE" ] || TITLE="the verdict could not run"
+          SUMMARY=$(cat verdict.txt 2>/dev/null)
+          [ -n "$SUMMARY" ] || SUMMARY="the verdict could not run; see the log of the job"
           gh api -X POST "repos/$GITHUB_REPOSITORY/check-runs" \
-            -f name=verdict -f head_sha="${{ steps.pr.outputs.sha }}" -f status=completed -f conclusion="$CONCLUSION" \
+            -f name=verdict -f head_sha="$PR_SHA" -f status=completed -f conclusion="$CONCLUSION" \
             -f "output[title]=$TITLE" -f "output[summary]=$SUMMARY" >/dev/null
           echo "$SUMMARY"
           [ "$CONCLUSION" = "success" ]
