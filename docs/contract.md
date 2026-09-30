@@ -126,6 +126,25 @@ Three rules of the gates:
 - **Approvals** are not checked in this version. The merge by the approver of the tier is the approval,
   and the verdict says so. The field `approvals` of the facts file is optional.
 
+## On the code host
+
+The workflow `.github/workflows/gates.yml` runs on each change request of this repo. It is the only
+part that is specific to GitHub, with the collecting script `scripts/charter_facts_github.py`.
+
+| Job | What it does |
+|---|---|
+| `quality` | Takes the code of the change request and runs the quality checks of the contract. |
+| `verdict` | Takes the main branch, collects the facts of the change request from the GitHub API, and runs the verdict. The ruleset on `main` demands this check. |
+
+The workflow file runs from the main branch (`pull_request_target`), so a change request cannot alter
+its own gate. It can also run by hand for one change request. It reads the private organization source
+with the secret `CHARTER_ORG_TOKEN`, a fine-grained token with read access to that repo only. The
+command `charter_check.py source charter.toml` prints the address and the cache path for that step.
+
+Security note: the job `quality` runs the code of the change request with that token in its
+environment. This is acceptable while the owner is the only author. When other people contribute, the
+workflow is split so that foreign code never sees a token.
+
 ## The checker
 
 ```
@@ -133,6 +152,7 @@ python3 scripts/charter_check.py validate FILE
 python3 scripts/charter_check.py check charter.toml [--source PATH] [--json]
 python3 scripts/charter_check.py instructions AGENTS.md --contract charter.toml
 python3 scripts/charter_check.py text README.md --contract charter.toml
+python3 scripts/charter_check.py source charter.toml
 ```
 
 Exit codes: 0 pass, 1 fail, 2 the check could not run. With exit code 2 the message names the cause:

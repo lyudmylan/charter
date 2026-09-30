@@ -1,0 +1,65 @@
+# The gates of Charter on GitHub. This file runs from the main branch: a change request cannot alter it.
+name: gates
+
+on:
+  pull_request_target:
+    types: [opened, synchronize, reopened, ready_for_review, edited]
+  workflow_dispatch:
+    inputs:
+      pr:
+        description: "Number of the change request"
+        required: true
+
+permissions:
+  contents: read
+  pull-requests: read
+  issues: read
+
+env:
+  PR: ${{ github.event.pull_request.number || inputs.pr }}
+
+jobs:
+  quality:
+    name: quality
+    runs-on: ubuntu-latest
+    steps:
+      - name: Take the code of the change request
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || format('refs/pull/{0}/head', inputs.pr) }}
+          persist-credentials: false
+      - name: Fetch the organization source into the cache
+        env:
+          CHARTER_ORG_TOKEN: ${{ secrets.CHARTER_ORG_TOKEN }}
+        run: |
+          set -e
+          readarray -t SOURCE < <(python3 scripts/charter_check.py source charter.toml)
+          ADDRESS="${SOURCE[0]}"; CACHE="${SOURCE[3]}"
+          git clone --quiet "${ADDRESS/https:\/\//https://x-access-token:${CHARTER_ORG_TOKEN}@}" "$CACHE"
+      - name: Run the quality checks of the contract
+        run: python3 scripts/charter_gate.py quality --contract charter.toml
+
+  verdict:
+    name: verdict
+    needs: quality
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - name: Take the main branch
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Fetch the organization source into the cache
+        env:
+          CHARTER_ORG_TOKEN: ${{ secrets.CHARTER_ORG_TOKEN }}
+        run: |
+          set -e
+          readarray -t SOURCE < <(python3 scripts/charter_check.py source charter.toml)
+          ADDRESS="${SOURCE[0]}"; CACHE="${SOURCE[3]}"
+          git clone --quiet "${ADDRESS/https:\/\//https://x-access-token:${CHARTER_ORG_TOKEN}@}" "$CACHE"
+      - name: Collect the facts of the change request
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: python3 scripts/charter_facts_github.py --repo "$GITHUB_REPOSITORY" --pr "$PR" --check "quality=${{ needs.quality.result }}" --out facts.json
+      - name: Verdict
+        run: python3 scripts/charter_gate.py verdict --facts facts.json --contract charter.toml

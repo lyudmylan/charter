@@ -23,6 +23,7 @@ the team owns the skills, and a person stays in control without approving every 
 | `schema/contract.toml` | The schema of a contract: fields, kinds, directions |
 | `scripts/charter_check.py` | The checker. Python 3.11 or later, standard library only. |
 | `scripts/charter_gate.py` | The gates of a change: link, documents, quality, verdict |
+| `scripts/charter_facts_github.py`, `.github/workflows/gates.yml` | The gates on GitHub: the only parts that know the code host |
 | `tests/` | The tests, the sample files, and the scenarios |
 
 ## Checks

@@ -6,6 +6,7 @@ Commands:
   check CONTRACT                     Check a repo contract against its organization source.
   instructions FILE --contract C     Check an instruction file against the effective contract.
   text FILE --contract C             Check any text file against the pattern sets of the contract.
+  source CONTRACT                    Print the address, the file, the version, and the cache path of the source.
 
 Options:
   --schema PATH      The schema. Default: schema/contract.toml next to this script.
@@ -39,7 +40,7 @@ SCHEMA_VERSION = 1
 PASS, FAIL, CANNOT_RUN = 0, 1, 2
 
 # Commands.
-CMD_VALIDATE, CMD_CHECK, CMD_INSTRUCTIONS, CMD_TEXT = "validate", "check", "instructions", "text"
+CMD_VALIDATE, CMD_CHECK, CMD_INSTRUCTIONS, CMD_TEXT, CMD_SOURCE = "validate", "check", "instructions", "text", "source"
 
 # Reserved tables and keys of a contract file.
 TABLE_SCHEMA = "schema"
@@ -526,6 +527,20 @@ def cmd_text(args) -> int:
     return PASS
 
 
+def cmd_source(args) -> int:
+    """For a step that populates the cache: address, file, version, and the cache path, one per line."""
+    fields = load_schema(args.schema)
+    data = load_toml(args.contract)
+    repo = validate(data, fields, str(args.contract))
+    if report_failures(repo.errors) == FAIL:
+        return FAIL
+    source = data[TABLE_SOURCE]
+    for key in SOURCE_KEYS:
+        print(source[key])
+    print(cache_path(source[SOURCE_KEYS[0]], args.cache_dir))
+    return PASS
+
+
 def main(argv: list[str] | None = None) -> int:
     default_cache = Path(os.environ.get(ENV_CACHE_DIR, DEFAULT_CACHE_DIR))
     parser = argparse.ArgumentParser(prog="charter_check", description=__doc__,
@@ -550,8 +565,13 @@ def main(argv: list[str] | None = None) -> int:
         p.add_argument(f"--{ARG_SOURCE}", type=Path, default=None)
         p.add_argument(f"--{ARG_CACHE_DIR.replace('_', '-')}", dest=ARG_CACHE_DIR, type=Path, default=default_cache)
 
+    p = sub.add_parser(CMD_SOURCE, help="print the source of a repo contract and its cache path")
+    p.add_argument(ARG_CONTRACT, type=Path)
+    p.add_argument(f"--{ARG_CACHE_DIR.replace('_', '-')}", dest=ARG_CACHE_DIR, type=Path, default=default_cache)
+
     args = parser.parse_args(argv)
-    commands = {CMD_VALIDATE: cmd_validate, CMD_CHECK: cmd_check, CMD_INSTRUCTIONS: cmd_instructions, CMD_TEXT: cmd_text}
+    commands = {CMD_VALIDATE: cmd_validate, CMD_CHECK: cmd_check, CMD_INSTRUCTIONS: cmd_instructions,
+                CMD_TEXT: cmd_text, CMD_SOURCE: cmd_source}
     try:
         return commands[args.command](args)
     except CannotRun as e:

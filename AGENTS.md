@@ -11,6 +11,8 @@ source. Each rule below ends with the identifier of its rule in the contract.
 - The contract, the schema, the scripts, the tests, the workflows, and this file are in the high risk
   tier: a deep review, and the leader approves. [tiers.high.paths]
 - A person approves each change to a contract. [change.person_approves_contract]
+- On GitHub, the workflow `gates` runs the checks and the verdict on each change request. A red verdict
+  blocks the merge; its reasons are in the log of the job `verdict`. [checks.quality]
 
 ## Before a push
 
@@ -28,8 +30,8 @@ states why not. [documents.code_paths]
 ## Text of commits, change requests, and issues
 
 - No private material: no file paths of a computer, no mail addresses, no tokens. [text.private_material_patterns]
-- No session links. [text.session_link_patterns]
-- No names of other projects of this organization. [text.project_name_patterns]
+- No session links, and no names of other projects of this organization. [text.session_link_patterns]
+  [text.project_name_patterns]
 
 ## Review and limits
 
