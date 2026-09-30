@@ -3,7 +3,11 @@
 
 This is the only script that knows GitHub. Python 3.11 or later, standard library only.
 
-  python3 scripts/charter_facts_github.py --repo owner/name --pr 24 --check quality=success --out facts.json
+Commands:
+  find    --repo owner/name (--pr N | --sha SHA)        Print "number=N" and "sha=SHA" of the change request.
+  collect --repo owner/name --pr N --out facts.json     Write the facts file.
+          [--check name=result]...                      A check result given by the caller.
+          [--check-run name]...                         A check read from the check runs of the head commit.
 
 The token comes from the environment variable GITHUB_TOKEN. The workflow of GitHub sets it.
 
@@ -29,11 +33,15 @@ import charter_gate as cg  # noqa: E402
 # Configuration
 # ---------------------------------------------------------------------------
 
+CMD_FIND, CMD_COLLECT = "find", "collect"
 ENV_TOKEN = "GITHUB_TOKEN"
 API = "https://api.github.com"
 API_VERSION = "2022-11-28"
 USER_AGENT = "charter-facts"
 PAGE_SIZE = 100
+HTTP_NOT_FOUND = 404
+OUTPUT_NUMBER, OUTPUT_SHA = "number", "sha"
+
 GRAPHQL_THREADS = """
 query($owner: String!, $name: String!, $number: Int!, $after: String) {
   repository(owner: $owner, name: $name) {
@@ -51,23 +59,25 @@ query($owner: String!, $name: String!, $number: Int!, $after: String) {
 ISSUE_REFERENCE = re.compile(r"(?<![\w/])#(\d+)\b")
 REASON_LINE = re.compile(r"^No document change:\s*(.+?)\s*$", re.IGNORECASE | re.MULTILINE)
 
-# Results of a job in a workflow, mapped to the state of a check in the facts file.
-JOB_SUCCESS = "success"
-CHECK_FAIL = "fail"
+# Results of a job or a check run, mapped to the state of a check in the facts file.
+CONCLUSION_SUCCESS = "success"
+CHECK_FAIL, CHECK_PENDING = "fail", "pending"
 
 # Keys of the API responses that this script reads.
-PR_BODY, PR_TITLE, PR_NUMBER = "body", "title", "number"
+PR_BODY, PR_TITLE, PR_NUMBER, PR_HEAD, HEAD_SHA = "body", "title", "number", "head", "sha"
 FILE_NAME = "filename"
 ISSUE_STATE, ISSUE_IS_PR = "state", "pull_request"
+RUNS, RUN_NAME, RUN_CONCLUSION, RUN_STATUS, RUN_COMPLETED = "check_runs", "name", "conclusion", "status", "completed"
 
 MSG = {
     "no_token": f"no token: set the environment variable {ENV_TOKEN}",
     "bad_repo": "the repo must be owner/name: {repo}",
     "bad_check": "a check must be name=result: {check}",
+    "no_pr_for_sha": "no change request has the head commit {sha}",
     "http": "GitHub answered {code} for {url}: {detail}",
     "network": "GitHub is not reachable: {url}: {error}",
     "graphql": "GitHub answered errors for the review threads: {errors}",
-    "written": "facts written: {path} ({files} files, {issues} issues, {threads} unresolved threads)",
+    "written": "facts written: {path} ({files} files, {issues} issues, {threads} unresolved threads, checks {checks})",
 }
 
 
@@ -95,17 +105,30 @@ def recorded_reason(text: str) -> str | None:
     return match.group(1) if match else None
 
 
-def check_state(job_result: str) -> str:
-    return cg.CHECK_PASS if job_result == JOB_SUCCESS else CHECK_FAIL
+def check_state(conclusion: str | None) -> str:
+    """The state of a check from a job result or a check-run conclusion."""
+    if conclusion == CONCLUSION_SUCCESS:
+        return cg.CHECK_PASS
+    return CHECK_PENDING if conclusion is None else CHECK_FAIL
 
 
-def build_facts(pr: dict, files: list[dict], issues: dict[int, dict], unresolved: int,
-                checks: dict[str, str]) -> dict:
-    """The facts file, from the API data. Issues that are change requests are left out."""
+def conclusions(runs: list[dict], names: list[str]) -> dict[str, str | None]:
+    """The conclusion of the newest completed check run of each name; None when none completed."""
+    out: dict[str, str | None] = {name: None for name in names}
+    for run in runs:                                   # the API lists the newest first
+        name = run.get(RUN_NAME)
+        if name in out and out[name] is None and run.get(RUN_STATUS) == RUN_COMPLETED:
+            out[name] = run.get(RUN_CONCLUSION)
+    return out
+
+
+def build_facts(pr: dict, files: list[dict], issues: dict[int, dict | None], unresolved: int,
+                checks: dict[str, str | None]) -> dict:
+    """The facts file, from the API data. Numbers that are not issues are left out."""
     linked = [
         {cg.ISSUE_NUMBER: number, cg.ISSUE_STATE: issue[ISSUE_STATE]}
         for number, issue in issues.items()
-        if ISSUE_IS_PR not in issue
+        if issue is not None and ISSUE_IS_PR not in issue
     ]
     text = f"{pr.get(PR_TITLE) or ''}\n{pr.get(PR_BODY) or ''}"
     return {
@@ -127,7 +150,7 @@ class GitHub:
     def __init__(self, token: str):
         self.token = token
 
-    def _request(self, url: str, data: dict | None = None) -> object:
+    def _request(self, url: str, data: dict | None = None, optional: bool = False) -> object:
         body = json.dumps(data).encode() if data is not None else None
         request = urllib.request.Request(url, data=body, headers={
             "Authorization": f"Bearer {self.token}",
@@ -140,12 +163,14 @@ class GitHub:
             with urllib.request.urlopen(request) as response:
                 return json.load(response)
         except urllib.error.HTTPError as e:
+            if optional and e.code == HTTP_NOT_FOUND:
+                return None
             raise cc.CannotRun(msg("http", code=e.code, url=url, detail=e.read().decode(errors="replace")[:200]))
         except urllib.error.URLError as e:
             raise cc.CannotRun(msg("network", url=url, error=e.reason))
 
-    def get(self, path: str) -> object:
-        return self._request(f"{API}{path}")
+    def get(self, path: str, optional: bool = False) -> object:
+        return self._request(f"{API}{path}", optional=optional)
 
     def pages(self, path: str) -> list:
         items: list = []
@@ -172,14 +197,28 @@ class GitHub:
             after = threads["pageInfo"]["endCursor"]
 
 
-def collect(repo: str, number: int, checks: dict[str, str], token: str) -> dict:
+def find(repo: str, github: GitHub, number: int | None, sha: str | None) -> tuple[int, str]:
+    """The number and the head commit of a change request, from its number or its head commit."""
+    if number is not None:
+        pr = github.get(f"/repos/{repo}/pulls/{number}")
+        return pr[PR_NUMBER], pr[PR_HEAD][HEAD_SHA]
+    prs = github.get(f"/repos/{repo}/commits/{sha}/pulls")
+    if not prs:
+        raise cc.CannotRun(msg("no_pr_for_sha", sha=sha))
+    return prs[0][PR_NUMBER], sha
+
+
+def collect(repo: str, number: int, given: dict[str, str], run_names: list[str], github: GitHub) -> dict:
     owner, name = repo.split("/", 1)
-    github = GitHub(token)
     pr = github.get(f"/repos/{repo}/pulls/{number}")
     files = github.pages(f"/repos/{repo}/pulls/{number}/files")
     text = f"{pr.get(PR_TITLE) or ''}\n{pr.get(PR_BODY) or ''}"
-    issues = {k: github.get(f"/repos/{repo}/issues/{k}") for k in issue_numbers(text) if k != number}
+    issues = {k: github.get(f"/repos/{repo}/issues/{k}", optional=True) for k in issue_numbers(text) if k != number}
     unresolved = github.unresolved_threads(owner, name, number)
+    checks: dict[str, str | None] = dict(given)
+    if run_names:
+        runs = github.get(f"/repos/{repo}/commits/{pr[PR_HEAD][HEAD_SHA]}/check-runs?per_page={PAGE_SIZE}")
+        checks.update(conclusions(runs.get(RUNS, []), run_names))
     return build_facts(pr, files, issues, unresolved, checks)
 
 
@@ -201,10 +240,17 @@ def parse_checks(items: list[str]) -> dict[str, str]:
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="charter_facts_github", description=__doc__,
                                      formatter_class=argparse.RawDescriptionHelpFormatter)
-    parser.add_argument("--repo", required=True, help="owner/name")
-    parser.add_argument("--pr", type=int, required=True)
-    parser.add_argument("--check", action="append", default=[], help="name=result, for each job that ran")
-    parser.add_argument("--out", type=Path, required=True)
+    sub = parser.add_subparsers(dest="command", required=True)
+    p = sub.add_parser(CMD_FIND)
+    p.add_argument("--repo", required=True, help="owner/name")
+    p.add_argument("--pr", type=int)
+    p.add_argument("--sha")
+    p = sub.add_parser(CMD_COLLECT)
+    p.add_argument("--repo", required=True, help="owner/name")
+    p.add_argument("--pr", type=int, required=True)
+    p.add_argument("--check", action="append", default=[], help="name=result, given by the caller")
+    p.add_argument("--check-run", action="append", default=[], help="name of a check run to read")
+    p.add_argument("--out", type=Path, required=True)
     args = parser.parse_args(argv)
     try:
         if "/" not in args.repo:
@@ -212,10 +258,18 @@ def main(argv: list[str] | None = None) -> int:
         token = os.environ.get(ENV_TOKEN)
         if not token:
             raise cc.CannotRun(msg("no_token"))
-        facts = collect(args.repo, args.pr, parse_checks(args.check), token)
+        github = GitHub(token)
+        if args.command == CMD_FIND:
+            if args.pr is None and not args.sha:
+                parser.error("find needs --pr or --sha")
+            number, sha = find(args.repo, github, args.pr, args.sha)
+            print(f"{OUTPUT_NUMBER}={number}\n{OUTPUT_SHA}={sha}")
+            return cc.PASS
+        facts = collect(args.repo, args.pr, parse_checks(args.check), args.check_run, github)
         args.out.write_text(json.dumps(facts, indent=2))
         print(msg("written", path=args.out, files=len(facts[cg.FACT_CHANGED_FILES]),
-                  issues=len(facts[cg.FACT_LINKED_ISSUES]), threads=facts[cg.FACT_UNRESOLVED_THREADS]))
+                  issues=len(facts[cg.FACT_LINKED_ISSUES]), threads=facts[cg.FACT_UNRESOLVED_THREADS],
+                  checks=facts[cg.FACT_CHECKS]))
         return cc.PASS
     except cc.CannotRun as e:
         cc.emit(cc.OUT_CANNOT_RUN, str(e))

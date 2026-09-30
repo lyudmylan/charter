@@ -7,6 +7,8 @@ Commands:
   instructions FILE --contract C     Check an instruction file against the effective contract.
   text FILE --contract C             Check any text file against the pattern sets of the contract.
   source CONTRACT                    Print the address, the file, the version, and the cache path of the source.
+  all CONTRACT                       Run check, then instructions on the declared instruction file, then text
+                                     on each declared text-checked file. The files are relative to the contract.
 
 Options:
   --schema PATH      The schema. Default: schema/contract.toml next to this script.
@@ -40,7 +42,7 @@ SCHEMA_VERSION = 1
 PASS, FAIL, CANNOT_RUN = 0, 1, 2
 
 # Commands.
-CMD_VALIDATE, CMD_CHECK, CMD_INSTRUCTIONS, CMD_TEXT, CMD_SOURCE = "validate", "check", "instructions", "text", "source"
+CMD_VALIDATE, CMD_CHECK, CMD_INSTRUCTIONS, CMD_TEXT, CMD_SOURCE, CMD_ALL = "validate", "check", "instructions", "text", "source", "all"
 
 # Reserved tables and keys of a contract file.
 TABLE_SCHEMA = "schema"
@@ -78,6 +80,10 @@ GIT_SHOW = "show"
 # Command line arguments and JSON keys.
 ARG_FILE, ARG_CONTRACT, ARG_SOURCE, ARG_CACHE_DIR, ARG_JSON, ARG_SCHEMA = "file", "contract", "source", "cache_dir", "json", "schema"
 JSON_KEY_EFFECTIVE, JSON_KEY_FAILURES = "effective", "failures"
+
+# Fields that the "all" command reads.
+FIELD_INSTRUCTIONS_FILE = "instructions.file"
+FIELD_TEXT_CHECKED = "documents.text_checked"
 
 # Identifiers in an instruction file: [a.b] or [a.b.c]. Only a mark whose first segment is a
 # field group of the schema counts; other bracketed text, such as a file name, is ignored.
@@ -121,6 +127,7 @@ MSG = {
     "pattern_hit": "{path}:{line}: matches a pattern of {field}",
     "instructions_pass": "{path} agrees with the contract ({count} identifiers, source: {origin})",
     "text_pass": "{path} contains none of the patterns (source: {origin})",
+    "all_pass": "all contract checks of {contract} passed",
     "redacted": "redacted: {count} patterns",
     "not_a_file": "not a file: {path}",
     "not_utf8": "not UTF-8 text: {path}",
@@ -504,14 +511,9 @@ def cmd_instructions(args) -> int:
     if report_failures(e.failures) == FAIL:
         return FAIL
     text = read_text(args.file)
-    problems: list[str] = []
     groups = {pattern.split(PATH_SEPARATOR)[0] for pattern in e.fields}
     ids = {i for i in ID_PATTERN.findall(text) if i.split(PATH_SEPARATOR)[0] in groups}
-    if not ids:
-        problems.append(msg("no_ids", path=args.file))
-    problems += [msg("unknown_id", path=args.file, id=i) for i in sorted(ids) if i not in e.values]
-    problems += pattern_hits(e, args.file, text)
-    if report_failures(problems) == FAIL:
+    if report_failures(instructions_problems(e, args.file)) == FAIL:
         return FAIL
     emit(OUT_PASS, msg("instructions_pass", path=args.file, count=len(ids), origin=e.origin))
     return PASS
@@ -524,6 +526,37 @@ def cmd_text(args) -> int:
     if report_failures(pattern_hits(e, args.file, read_text(args.file))) == FAIL:
         return FAIL
     emit(OUT_PASS, msg("text_pass", path=args.file, origin=e.origin))
+    return PASS
+
+
+def instructions_problems(e: Effective, path: Path) -> list[str]:
+    """The faults of an instruction file: unknown identifiers, no identifiers, pattern hits."""
+    text = read_text(path)
+    problems: list[str] = []
+    groups = {pattern.split(PATH_SEPARATOR)[0] for pattern in e.fields}
+    ids = {i for i in ID_PATTERN.findall(text) if i.split(PATH_SEPARATOR)[0] in groups}
+    if not ids:
+        problems.append(msg("no_ids", path=path))
+    problems += [msg("unknown_id", path=path, id=i) for i in sorted(ids) if i not in e.values]
+    return problems + pattern_hits(e, path, text)
+
+
+def cmd_all(args) -> int:
+    e = effective_contract(args.contract, args.schema, args.source, args.cache_dir)
+    if e.origin:
+        emit(OUT_SOURCE, e.origin)
+    problems = list(e.failures)
+    if not problems:
+        root = args.contract.resolve().parent
+        instructions = e.values.get(FIELD_INSTRUCTIONS_FILE)
+        if instructions:
+            problems += instructions_problems(e, root / instructions)
+        for name in e.values.get(FIELD_TEXT_CHECKED, []) or []:
+            path = root / name
+            problems += pattern_hits(e, path, read_text(path))
+    if report_failures(problems) == FAIL:
+        return FAIL
+    emit(OUT_PASS, msg("all_pass", contract=args.contract))
     return PASS
 
 
@@ -565,13 +598,18 @@ def main(argv: list[str] | None = None) -> int:
         p.add_argument(f"--{ARG_SOURCE}", type=Path, default=None)
         p.add_argument(f"--{ARG_CACHE_DIR.replace('_', '-')}", dest=ARG_CACHE_DIR, type=Path, default=default_cache)
 
+    p = sub.add_parser(CMD_ALL, help="run all contract checks on the declared files")
+    p.add_argument(ARG_CONTRACT, type=Path)
+    p.add_argument(f"--{ARG_SOURCE}", type=Path, default=None)
+    p.add_argument(f"--{ARG_CACHE_DIR.replace('_', '-')}", dest=ARG_CACHE_DIR, type=Path, default=default_cache)
+
     p = sub.add_parser(CMD_SOURCE, help="print the source of a repo contract and its cache path")
     p.add_argument(ARG_CONTRACT, type=Path)
     p.add_argument(f"--{ARG_CACHE_DIR.replace('_', '-')}", dest=ARG_CACHE_DIR, type=Path, default=default_cache)
 
     args = parser.parse_args(argv)
     commands = {CMD_VALIDATE: cmd_validate, CMD_CHECK: cmd_check, CMD_INSTRUCTIONS: cmd_instructions,
-                CMD_TEXT: cmd_text, CMD_SOURCE: cmd_source}
+                CMD_TEXT: cmd_text, CMD_SOURCE: cmd_source, CMD_ALL: cmd_all}
     try:
         return commands[args.command](args)
     except CannotRun as e:

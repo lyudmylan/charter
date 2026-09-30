@@ -90,6 +90,14 @@ note = "Approvals that a merge in this tier needs."
 kind = "set"
 note = "Documents that the repo keeps current."
 
+[fields."documents.text_checked"]
+kind = "set"
+note = "Files that the text check covers: they must contain none of the text-checked patterns."
+
+[fields."instructions.file"]
+kind = "text"
+note = "The instruction file of the repo. Each rule line in it ends with the identifier of its rule."
+
 [fields."documents.code_paths"]
 kind = "set"
 note = "Path patterns. When a file under one of them changes, a necessary document must change too, or the change carries a recorded reason."

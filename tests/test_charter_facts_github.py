@@ -17,7 +17,7 @@ PR = {
     cf.PR_BODY: "Closes #4.\n\nNo document change: the gates implement what the product document says already.\n\nSee also #4 and #22.",
 }
 FILES = [{cf.FILE_NAME: "scripts/charter_gate.py"}, {cf.FILE_NAME: "docs/contract.md"}]
-ISSUES = {4: {cf.ISSUE_STATE: "open"}, 22: {cf.ISSUE_STATE: "closed"}, 23: {cf.ISSUE_STATE: "open", cf.ISSUE_IS_PR: {}}}
+ISSUES = {4: {cf.ISSUE_STATE: "open"}, 22: {cf.ISSUE_STATE: "closed"}, 23: {cf.ISSUE_STATE: "open", cf.ISSUE_IS_PR: {}}, 999: None}
 
 
 class Text(unittest.TestCase):
@@ -35,19 +35,30 @@ class Text(unittest.TestCase):
         self.assertEqual(cf.check_state("success"), cg.CHECK_PASS)
         self.assertEqual(cf.check_state("failure"), cf.CHECK_FAIL)
         self.assertEqual(cf.check_state("cancelled"), cf.CHECK_FAIL)
+        self.assertEqual(cf.check_state(None), cf.CHECK_PENDING)
+
+    def test_newest_completed_check_run_of_each_name(self):
+        """code-host, check 1."""
+        runs = [
+            {cf.RUN_NAME: "tests", cf.RUN_STATUS: "in_progress", cf.RUN_CONCLUSION: None},
+            {cf.RUN_NAME: "tests", cf.RUN_STATUS: cf.RUN_COMPLETED, cf.RUN_CONCLUSION: "failure"},
+            {cf.RUN_NAME: "tests", cf.RUN_STATUS: cf.RUN_COMPLETED, cf.RUN_CONCLUSION: "success"},
+            {cf.RUN_NAME: "other", cf.RUN_STATUS: cf.RUN_COMPLETED, cf.RUN_CONCLUSION: "success"},
+        ]
+        self.assertEqual(cf.conclusions(runs, ["tests", "missing"]), {"tests": "failure", "missing": None})
 
 
 class Facts(unittest.TestCase):
     def test_facts_from_api_data(self):
-        """code-host, check 1: the facts file has the seven keys, and change requests are not issues."""
-        facts = cf.build_facts(PR, FILES, ISSUES, 2, {"quality": "success"})
+        """code-host, check 1: change requests and numbers that are no issue are left out."""
+        facts = cf.build_facts(PR, FILES, ISSUES, 2, {"quality": "success", "tests": None})
         self.assertEqual(facts[cg.FACT_CHANGE_REQUEST], 24)
         self.assertEqual(facts[cg.FACT_LINKED_ISSUES],
                          [{cg.ISSUE_NUMBER: 4, cg.ISSUE_STATE: "open"}, {cg.ISSUE_NUMBER: 22, cg.ISSUE_STATE: "closed"}])
         self.assertEqual(facts[cg.FACT_CHANGED_FILES], ["scripts/charter_gate.py", "docs/contract.md"])
         self.assertEqual(facts[cg.FACT_REASON], "the gates implement what the product document says already.")
         self.assertEqual(facts[cg.FACT_UNRESOLVED_THREADS], 2)
-        self.assertEqual(facts[cg.FACT_CHECKS], {"quality": cg.CHECK_PASS})
+        self.assertEqual(facts[cg.FACT_CHECKS], {"quality": cg.CHECK_PASS, "tests": cf.CHECK_PENDING})
         for key in cg.FACT_SHAPES:
             self.assertTrue(cg.FACT_SHAPES[key](facts[key]), key)
 

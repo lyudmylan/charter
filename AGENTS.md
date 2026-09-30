@@ -11,17 +11,17 @@ source. Each rule below ends with the identifier of its rule in the contract.
 - The contract, the schema, the scripts, the tests, the workflows, and this file are in the high risk
   tier: a deep review, and the leader approves. [tiers.high.paths]
 - A person approves each change to a contract. [change.person_approves_contract]
-- On GitHub, the workflow `gates` runs the checks and the verdict on each change request. A red verdict
-  blocks the merge; its reasons are in the log of the job `verdict`. [checks.quality]
+- On GitHub, the workflows `tests` and `verdict` run on each change request. A red check "verdict"
+  blocks the merge; its reasons are in the check and in the job log. [checks.quality]
 
 ## Before a push
 
-All quality checks of the contract must pass. They are listed once, in `charter.toml` under
-`checks.quality`. One command runs them all: `python3 scripts/charter_gate.py quality --contract
-charter.toml`. [checks.quality]
+Two commands must pass: `python3 scripts/charter_gate.py quality --contract charter.toml` runs the
+quality checks that the contract lists, and `python3 scripts/charter_check.py all charter.toml` runs the
+contract checks. [checks.quality] [instructions.file] [documents.text_checked]
 
 When a file under a declared code path changes, `docs/product.md` changes too, or the change request
-states why not. [documents.code_paths]
+has one line in this exact form: `No document change: <reason>`. [documents.code_paths]
 
 ## Text of commits, change requests, and issues
 

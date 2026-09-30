@@ -50,7 +50,9 @@ any of its patterns. The `instructions` and `text` commands read this from the s
 | `tiers.<tier>.approvals` | count | Approvals that a merge needs |
 | `documents.necessary` | set | Documents that the repo keeps current |
 | `documents.code_paths` | set | Paths whose change needs a document change or a recorded reason |
-| `checks.quality` | set | Commands that must pass before a push |
+| `documents.text_checked` | set | Files that must contain none of the text-checked patterns |
+| `instructions.file` | text | The instruction file of the repo |
+| `checks.quality` | set | Commands that must pass before a push. They run on the code of the change. |
 | `tools.issue_tracker`, `tools.code_host`, `tools.ci` | text | The tools of the repo |
 | `roles.leader`, `roles.team_lead`, `roles.engineer`, `roles.agent` | text | Who holds a role |
 | `lifecycle.<phase>.work` | text | What does the work in a phase |
@@ -128,22 +130,22 @@ Three rules of the gates:
 
 ## On the code host
 
-The workflow `.github/workflows/gates.yml` runs on each change request of this repo. It is the only
-part that is specific to GitHub, with the collecting script `scripts/charter_facts_github.py`.
+Two workflows run on each change request of this repo. They and the collecting script
+`scripts/charter_facts_github.py` are the only parts that are specific to GitHub.
 
-| Job | What it does |
-|---|---|
-| `quality` | Takes the code of the change request and runs the quality checks of the contract. |
-| `verdict` | Takes the main branch, collects the facts of the change request from the GitHub API, and runs the verdict. The ruleset on `main` demands this check. |
+| Workflow | Trust | What it does |
+|---|---|---|
+| `tests` | Runs the code of the change request. It gets no secret. | Runs the quality checks of the contract with `--repo-only`. |
+| `verdict` | Runs from the main branch, with the scripts of the main branch. It never runs the code of the change request. | Reads the files of the change request as data, fetches the organization source from the address in main, runs the contract checks on those files, collects the facts, runs the verdict, and publishes the check "verdict" on the change request. |
 
-The workflow file runs from the main branch (`pull_request_target`), so a change request cannot alter
-its own gate. It can also run by hand for one change request. It reads the private organization source
-with the secret `CHARTER_ORG_TOKEN`, a fine-grained token with read access to that repo only. The
-command `charter_check.py source charter.toml` prints the address and the cache path for that step.
+The ruleset on `main` demands the check "verdict". The workflow `verdict` starts when `tests`
+completes, and it can also start by hand for one change request. When a reviewer resolves the last
+review thread, run it by hand, or push a commit: a resolved thread starts no run.
 
-Security note: the job `quality` runs the code of the change request with that token in its
-environment. This is acceptable while the owner is the only author. When other people contribute, the
-workflow is split so that foreign code never sees a token.
+The secret `CHARTER_ORG_TOKEN` is a fine-grained token with read access to the organization source
+only. Only the workflow `verdict` holds it. The address of the source comes from the contract in main,
+so a change request cannot send the token elsewhere. A change request that changes the source is a
+contract change: a person reviews it, and the new source applies after the merge.
 
 ## The checker
 
@@ -153,7 +155,11 @@ python3 scripts/charter_check.py check charter.toml [--source PATH] [--json]
 python3 scripts/charter_check.py instructions AGENTS.md --contract charter.toml
 python3 scripts/charter_check.py text README.md --contract charter.toml
 python3 scripts/charter_check.py source charter.toml
+python3 scripts/charter_check.py all charter.toml
 ```
+
+`all` runs `check`, then `instructions` on `instructions.file`, then `text` on each file in
+`documents.text_checked`, relative to the contract. It is the one command for the contract checks.
 
 Exit codes: 0 pass, 1 fail, 2 the check could not run. With exit code 2 the message names the cause:
 no file, not a file, not UTF-8 text, not TOML, source not found, access denied, version not found.
