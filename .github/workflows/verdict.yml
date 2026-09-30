@@ -15,8 +15,8 @@ on:
 
 permissions:
   contents: read
-  pull-requests: read
-  issues: read
+  pull-requests: write
+  issues: write
   checks: write
 
 jobs:
@@ -29,6 +29,10 @@ jobs:
         with:
           ref: ${{ github.event.repository.default_branch }}
           persist-credentials: false
+
+      - name: Note the version of the scripts
+        id: scripts
+        run: echo "version=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
 
       - name: Find the change request
         id: pr
@@ -82,10 +86,25 @@ jobs:
 
       - name: Verdict
         id: verdict
+        env:
+          SCRIPTS_VERSION: ${{ steps.scripts.outputs.version }}
         run: |
           set +e
-          python3 scripts/charter_gate.py verdict --facts facts.json --contract charter.toml | tee verdict.txt
+          python3 scripts/charter_gate.py verdict --facts facts.json --contract charter.toml \
+            --record record.json --scripts-version "$SCRIPTS_VERSION" | tee verdict.txt
           echo "code=${PIPESTATUS[0]}" >> "$GITHUB_OUTPUT"
+
+      - name: Put the evidence record on the change request
+        if: always()
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR_NUMBER: ${{ steps.pr.outputs.number }}
+        run: |
+          if [ -s record.json ]; then
+            python3 scripts/charter_facts_github.py record --repo "$GITHUB_REPOSITORY" --pr "$PR_NUMBER" --file record.json
+          else
+            echo "no record: the verdict could not run"
+          fi
 
       - name: Publish the check "verdict" on the change request
         if: always()

@@ -147,6 +147,30 @@ only. Only the workflow `verdict` holds it. The address of the source comes from
 so a change request cannot send the token elsewhere. A change request that changes the source is a
 contract change: a person reviews it, and the new source applies after the merge.
 
+## The evidence record
+
+Each run of the verdict writes the evidence record of the change: the JSON form of the verdict, with
+the fields below. On GitHub, one comment on the change request carries it, updated on each run and
+marked with `<!-- charter-record -->` and written by the account of the workflow; a comment by anyone
+else does not count. The check "verdict" keeps the short text.
+
+| Field | Content |
+|---|---|
+| `record_form` | The version of this form: 1 |
+| `change_request` | The number of the change request |
+| `time` | When the record was made, UTC |
+| `scripts_version` | The commit of the scripts that made the record |
+| `verdict`, `reasons` | `ready` or `not ready`, and the reasons |
+| `source` | The organization source and its version |
+| `tier`, `approver`, `merges` | The tier of the change, the role that merges, and who holds it |
+| `gates` | Each gate with its result and its reasons |
+| `checks` | The state of each check |
+| `false_failures` | What a person recorded with a line `False failure: <gate>: <reason>` in the change request |
+| `dropped_findings` | Empty until the agent reviewer comes |
+
+`charter_facts_github.py records --repo owner/name --last N` prints the records of the last merged
+change requests, one line each, for a sample review.
+
 ## The checker
 
 ```

@@ -30,6 +30,35 @@ class Text(unittest.TestCase):
         self.assertEqual(cf.recorded_reason("x\nno document change:  because  \ny"), "because")
         self.assertIsNone(cf.recorded_reason("no such line"))
 
+    def test_false_failure_lines(self):
+        """evidence-record, check 2."""
+        text = "x\nFalse failure: Documents: the gate misread a path\nfalse failure: link : the issue was renamed\ny"
+        self.assertEqual(cf.false_failures(text), [{cg.JSON_KEY_GATE: "documents", "reason": "the gate misread a path"},
+                                                   {cg.JSON_KEY_GATE: "link", "reason": "the issue was renamed"}])
+        self.assertEqual(cf.false_failures("no such line"), [])
+
+    def test_record_comment_round_trip(self):
+        """evidence-record, check 1: the comment carries the record, and the record comes back from the comment."""
+        record = {cg.JSON_KEY_VERDICT: "ready", cg.JSON_KEY_TIER: "low", cg.JSON_KEY_APPROVER: "engineer",
+                  cg.FACT_CHECKS: {"tests": "pass"}, cg.JSON_KEY_SOURCE: "s v1", cg.RECORD_KEYS[3]: "abc", cg.RECORD_KEYS[2]: "t"}
+        body = cf.comment_body(record)
+        self.assertIn(cf.RECORD_MARKER, body)
+        self.assertIn("| Verdict | ready |", body)
+        self.assertEqual(cf.record_from_comment(body), record)
+        self.assertIsNone(cf.record_from_comment("a plain comment"))
+
+    def test_three_backticks_inside_a_reason_survive_the_round_trip(self):
+        """evidence-record, check 1."""
+        record = {cg.RECORD_KEYS[4]: [{cg.JSON_KEY_GATE: "documents", "reason": "the gate misread ```docs/x.md```"}]}
+        self.assertEqual(cf.record_from_comment(cf.comment_body(record)), record)
+
+    def test_only_a_comment_by_the_workflow_account_is_the_record(self):
+        """evidence-record, check 1: a person cannot forge or hijack the record."""
+        forged = {cf.COMMENT_USER: {cf.USER_LOGIN: "someone"}, cf.COMMENT_BODY: cf.RECORD_MARKER}
+        real = {cf.COMMENT_USER: {cf.USER_LOGIN: cf.RECORD_AUTHOR}, cf.COMMENT_BODY: cf.RECORD_MARKER}
+        self.assertFalse(cf.is_record_comment(forged, cf.RECORD_AUTHOR))
+        self.assertTrue(cf.is_record_comment(real, cf.RECORD_AUTHOR))
+
     def test_job_result_maps_to_check_state(self):
         """code-host, check 1."""
         self.assertEqual(cf.check_state("success"), cg.CHECK_PASS)
