@@ -1,0 +1,46 @@
+# Sample repo contract for the tests. It obeys the sample organization file.
+schema = 1
+
+[repo]
+name = "sample-repo"
+
+[source]
+address = "https://example.com/org/rules"
+file = "organization.toml"
+version = "v1"
+
+[tiers.high]
+paths = ["contract.toml", "scripts/**"]
+review = "deep"
+approver = "leader"
+approvals = 2
+
+[tiers.low]
+paths = ["**"]
+review = "light"
+approver = "engineer"
+approvals = 1
+
+[limits]
+refusals = 2
+
+[documents]
+necessary = ["docs/product.md", "docs/architecture.md"]
+code_paths = ["src/**"]
+
+[tools]
+issue_tracker = "github-issues"
+code_host = "github"
+ci = "github-actions"
+
+[roles]
+leader = ["alice"]
+engineer = ["alice"]
+agent = ["bot"]
+
+[checks]
+quality = ["python3 -m unittest discover -s tests"]
+
+[lifecycle.plan]
+work = "issues in the tracker"
+builtin = ["plan mode"]
