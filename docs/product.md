@@ -22,8 +22,8 @@ three questions:
 
 - The **contract** is a file with the rules, the owner of each rule, and the rights of
   each role. Example: "a change to payment code needs the approval of a person". The rules
-  of the organization live in a source outside every repo. A repo contract references that
-  source by address and version; it holds no copy. The checker compares the two.
+  of the organization live in their own repo. A repo contract references that repo by
+  address and version; it holds no copy. The checker compares the two.
 - A **gate** is a check that must pass before the next step. It is a deterministic
   script that checks the result, not the method.
 - An **acceptance check** states what "it works" means for one work item, in a form that
