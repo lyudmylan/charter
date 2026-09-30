@@ -79,6 +79,42 @@ any of its patterns. The `instructions` and `text` commands read this from the s
 | Owner of a rule | The file that holds it, and `[locks]` |
 | Lifecycle map | `lifecycle.<phase>.*` |
 
+## The gates
+
+`scripts/charter_gate.py` checks one change. It reads the contract, and the facts of the change request
+from one JSON file. A collecting step writes that file on the code host; the gates know no code host.
+
+```
+python3 scripts/charter_gate.py link      --facts facts.json
+python3 scripts/charter_gate.py documents --facts facts.json --contract charter.toml
+python3 scripts/charter_gate.py quality   --contract charter.toml
+python3 scripts/charter_gate.py verdict   --facts facts.json --contract charter.toml [--json]
+```
+
+| Gate | Passes when |
+|---|---|
+| `link` | The change request references an open issue. |
+| `documents` | No file under `documents.code_paths` changed; or a document in `documents.necessary` changed; or the change request records a reason. |
+| `quality` | Each command in `checks.quality` exits with 0. |
+| `verdict` | `link` and `documents` pass, all reported checks passed, no review thread is unresolved, and a tier matches the changed files. The first line of the output is `ready` or `not ready`; the reasons follow. The verdict names the tier and who merges. |
+
+The facts file:
+
+```json
+{
+  "change_request": 23,
+  "linked_issues": [{"number": 22, "state": "open"}],
+  "changed_files": ["docs/product.md"],
+  "reason_for_no_document_change": null,
+  "unresolved_review_threads": 0,
+  "approvals": ["login"],
+  "checks": {"tests": "pass"}
+}
+```
+
+A change request records a reason for a missing document change with one line in its text:
+`No document change: <reason>`. The collecting step copies it into the facts file.
+
 ## The checker
 
 ```
