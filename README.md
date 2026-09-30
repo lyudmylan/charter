@@ -1,5 +1,8 @@
 # Charter
 
+[![tests](https://github.com/lyudmylan/charter/actions/workflows/tests.yml/badge.svg)](https://github.com/lyudmylan/charter/actions/workflows/tests.yml)
+[![verdict](https://github.com/lyudmylan/charter/actions/workflows/verdict.yml/badge.svg)](https://github.com/lyudmylan/charter/actions/workflows/verdict.yml)
+
 Engineering discipline framework for human-agent teams: the AI-native software development
 lifecycle, through the eyes of the engineering leader. This version is built for Claude Code.
 
