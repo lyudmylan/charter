@@ -22,7 +22,7 @@ A reader of this repo on GitHub sees what Charter is, what the files are, and ho
 
 1. The README exists, is under 40 lines, and contains none of the text patterns of the contract.
    test: `tests/test_charter_check.py::TextFiles.test_pattern_in_text_fails`
-   command: `python3 scripts/charter_check.py text README.md --contract charter.toml`
+   command: `python3 charter/scripts/charter_check.py text README.md --contract charter.toml`
 
 ## Manual checks
 

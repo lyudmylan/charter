@@ -21,7 +21,7 @@ Work item: #20. Approved by a person on 2026-09-30, in the work item.
 ## Automatic checks
 
 1. The document contains none of the text patterns of the contract.
-   command: `python3 scripts/charter_check.py text docs/product.md --contract charter.toml`
+   command: `python3 charter/scripts/charter_check.py text docs/product.md --contract charter.toml`
 
 ## Manual checks
 

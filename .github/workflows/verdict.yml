@@ -42,9 +42,9 @@ jobs:
           RUN_SHA: ${{ github.event.workflow_run.head_sha }}
         run: |
           if [ -n "$INPUT_PR" ]; then
-            python3 scripts/charter_facts_github.py find --repo "$GITHUB_REPOSITORY" --pr "$INPUT_PR" >> "$GITHUB_OUTPUT"
+            python3 charter/scripts/charter_facts_github.py find --repo "$GITHUB_REPOSITORY" --pr "$INPUT_PR" >> "$GITHUB_OUTPUT"
           else
-            python3 scripts/charter_facts_github.py find --repo "$GITHUB_REPOSITORY" --sha "$RUN_SHA" >> "$GITHUB_OUTPUT"
+            python3 charter/scripts/charter_facts_github.py find --repo "$GITHUB_REPOSITORY" --sha "$RUN_SHA" >> "$GITHUB_OUTPUT"
           fi
 
       - name: Take the files of the change request, as data
@@ -59,7 +59,7 @@ jobs:
           CHARTER_ORG_TOKEN: ${{ secrets.CHARTER_ORG_TOKEN }}
         run: |
           set -e
-          SOURCE=$(python3 scripts/charter_check.py source charter.toml) || { echo "$SOURCE"; exit 2; }
+          SOURCE=$(python3 charter/scripts/charter_check.py source charter.toml) || { echo "$SOURCE"; exit 2; }
           readarray -t S <<< "$SOURCE"
           git clone --quiet "${S[0]/https:\/\//https://x-access-token:${CHARTER_ORG_TOKEN}@}" "${S[3]}"
 
@@ -67,7 +67,7 @@ jobs:
         id: contract
         run: |
           set +e
-          python3 scripts/charter_check.py all change/charter.toml
+          python3 charter/scripts/charter_check.py all change/charter.toml
           CODE=$?
           echo "result=$([ $CODE -eq 0 ] && echo success || echo failure)" >> "$GITHUB_OUTPUT"
 
@@ -78,7 +78,7 @@ jobs:
           PR_SHA: ${{ steps.pr.outputs.sha }}
           CONTRACT_RESULT: ${{ steps.contract.outputs.result }}
         run: >
-          python3 scripts/charter_facts_github.py collect --repo "$GITHUB_REPOSITORY"
+          python3 charter/scripts/charter_facts_github.py collect --repo "$GITHUB_REPOSITORY"
           --pr "$PR_NUMBER" --sha "$PR_SHA"
           --check "contract=$CONTRACT_RESULT"
           --check-run tests
@@ -90,7 +90,7 @@ jobs:
           SCRIPTS_VERSION: ${{ steps.scripts.outputs.version }}
         run: |
           set +e
-          python3 scripts/charter_gate.py verdict --facts facts.json --contract charter.toml \
+          python3 charter/scripts/charter_gate.py verdict --facts facts.json --contract charter.toml \
             --record record.json --scripts-version "$SCRIPTS_VERSION" | tee verdict.txt
           echo "code=${PIPESTATUS[0]}" >> "$GITHUB_OUTPUT"
 
@@ -101,7 +101,7 @@ jobs:
           PR_NUMBER: ${{ steps.pr.outputs.number }}
         run: |
           if [ -s record.json ]; then
-            python3 scripts/charter_facts_github.py record --repo "$GITHUB_REPOSITORY" --pr "$PR_NUMBER" --file record.json
+            python3 charter/scripts/charter_facts_github.py record --repo "$GITHUB_REPOSITORY" --pr "$PR_NUMBER" --file record.json
           else
             echo "no record: the verdict could not run"
           fi

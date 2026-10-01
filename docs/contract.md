@@ -5,7 +5,7 @@ to the repo.
 
 | File | Owner | Location | Content |
 |---|---|---|---|
-| `schema/contract.toml` | Charter | This repo | The fields, their kinds, and their directions |
+| `charter/schema/contract.toml` | Charter | This repo | The fields, their kinds, and their directions |
 | `organization.toml` | The organization | A source outside every repo, for example a private repo | The rules of the organization, and which of them are locked |
 | `charter.toml` | The repo | The root of the repo | A reference to the source, and the rules of the repo |
 
@@ -83,14 +83,14 @@ any of its patterns. The `instructions` and `text` commands read this from the s
 
 ## The gates
 
-`scripts/charter_gate.py` checks one change. It reads the contract, and the facts of the change request
+`charter/scripts/charter_gate.py` checks one change. It reads the contract, and the facts of the change request
 from one JSON file. A collecting step writes that file on the code host; the gates know no code host.
 
 ```
-python3 scripts/charter_gate.py link      --facts facts.json
-python3 scripts/charter_gate.py documents --facts facts.json --contract charter.toml
-python3 scripts/charter_gate.py quality   --contract charter.toml
-python3 scripts/charter_gate.py verdict   --facts facts.json --contract charter.toml [--json]
+python3 charter/scripts/charter_gate.py link      --facts facts.json
+python3 charter/scripts/charter_gate.py documents --facts facts.json --contract charter.toml
+python3 charter/scripts/charter_gate.py quality   --contract charter.toml
+python3 charter/scripts/charter_gate.py verdict   --facts facts.json --contract charter.toml [--json]
 ```
 
 | Gate | Passes when |
@@ -131,7 +131,7 @@ Three rules of the gates:
 ## On the code host
 
 Two workflows run on each change request of this repo. They and the collecting script
-`scripts/charter_facts_github.py` are the only parts that are specific to GitHub.
+`charter/scripts/charter_facts_github.py` are the only parts that are specific to GitHub.
 
 | Workflow | Trust | What it does |
 |---|---|---|
@@ -174,12 +174,12 @@ change requests, one line each, for a sample review.
 ## The checker
 
 ```
-python3 scripts/charter_check.py validate FILE
-python3 scripts/charter_check.py check charter.toml [--source PATH] [--json]
-python3 scripts/charter_check.py instructions AGENTS.md --contract charter.toml
-python3 scripts/charter_check.py text README.md --contract charter.toml
-python3 scripts/charter_check.py source charter.toml
-python3 scripts/charter_check.py all charter.toml
+python3 charter/scripts/charter_check.py validate FILE
+python3 charter/scripts/charter_check.py check charter.toml [--source PATH] [--json]
+python3 charter/scripts/charter_check.py instructions AGENTS.md --contract charter.toml
+python3 charter/scripts/charter_check.py text README.md --contract charter.toml
+python3 charter/scripts/charter_check.py source charter.toml
+python3 charter/scripts/charter_check.py all charter.toml
 ```
 
 `all` runs `check`, then `instructions` on `instructions.file`, then `text` on each file in

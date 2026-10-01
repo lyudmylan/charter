@@ -16,8 +16,8 @@ source. Each rule below ends with the identifier of its rule in the contract.
 
 ## Before a push
 
-Two commands must pass: `python3 scripts/charter_gate.py quality --contract charter.toml` runs the
-quality checks that the contract lists, and `python3 scripts/charter_check.py all charter.toml` runs the
+Two commands must pass: `python3 charter/scripts/charter_gate.py quality --contract charter.toml` runs the
+quality checks that the contract lists, and `python3 charter/scripts/charter_check.py all charter.toml` runs the
 contract checks. [checks.quality] [instructions.file] [documents.text_checked]
 
 When a file under a declared code path changes, `docs/product.md` changes too, or the change request

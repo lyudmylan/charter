@@ -23,17 +23,17 @@ the team owns the skills, and a person stays in control without approving every 
 | Path | Content |
 |---|---|
 | `charter.toml` | The contract of this repo |
-| `schema/contract.toml` | The schema of a contract: fields, kinds, directions |
-| `scripts/charter_check.py` | The checker. Python 3.11 or later, standard library only. |
-| `scripts/charter_gate.py` | The gates of a change: link, documents, quality, verdict |
-| `scripts/charter_facts_github.py`, `.github/workflows/` | The gates on GitHub: the only parts that know the code host |
+| `charter/schema/contract.toml` | The schema of a contract: fields, kinds, directions |
+| `charter/scripts/charter_check.py` | The checker. Python 3.11 or later, standard library only. |
+| `charter/scripts/charter_gate.py` | The gates of a change: link, documents, quality, verdict |
+| `charter/scripts/charter_facts_github.py`, `.github/workflows/` | The gates on GitHub: the only parts that know the code host |
 | `tests/` | The tests and the sample files |
 | `charter-practices/` | The practices plugin: light skills with their eval cases. To use it in a session: `claude --plugin-dir charter-practices` |
 
 ## Checks
 
-Before a push, two commands: `python3 scripts/charter_gate.py quality --contract charter.toml` runs the
-quality checks that `charter.toml` lists, and `python3 scripts/charter_check.py all charter.toml` runs
+Before a push, two commands: `python3 charter/scripts/charter_gate.py quality --contract charter.toml` runs the
+quality checks that `charter.toml` lists, and `python3 charter/scripts/charter_check.py all charter.toml` runs
 the contract checks.
 
 The checker reads the organization source from a local cache. `docs/contract.md` says how to populate it.
