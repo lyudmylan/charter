@@ -1,6 +1,6 @@
 # Intent: the intent reviewer, an agent that reviews the intents of a change request, in shadow mode
 
-Work item: #45. Status: planned. Approval: a person merges the change request that adds this file.
+Work item: #45. Status: done. Approval: a person merges the change request that adds this file.
 
 ## Goal
 

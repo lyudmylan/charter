@@ -1,6 +1,6 @@
 # Intent: the core as a plugin, and the marketplace of the two plugins
 
-Work item: #36. Status: planned. Approval: a person merges the change request that adds this file.
+Work item: #36. Status: done. Approval: a person merges the change request that adds this file.
 
 ## Goal
 
@@ -35,6 +35,9 @@ Publication in a marketplace of Anthropic. The setup step. The move of the marke
 3. The plugins install on this computer from the private marketplace. command: `claude plugin install charter@charter`
 
 ## Manual checks
+
+The run of 2026-10-01: the two plugins validate; 70 tests pass; the tags `charter--v0.1.0` and
+`charter-practices--v0.1.0` are pushed; both plugins install from the private marketplace at 0.1.0.
 
 4. The gates of this repo ran from the new place on the change request of this work item: the check "verdict" is green.
    who: the leader. Not automatic: the proof is the check on GitHub.

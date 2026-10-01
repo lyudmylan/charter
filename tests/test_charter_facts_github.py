@@ -59,6 +59,12 @@ class Text(unittest.TestCase):
         self.assertFalse(cf.is_record_comment(forged, cf.RECORD_AUTHOR))
         self.assertTrue(cf.is_record_comment(real, cf.RECORD_AUTHOR))
 
+    def test_finding_lines(self):
+        """intent-reviewer, check 3."""
+        text = "a\nDropped finding: the check is a command, not a test\nFalse finding: the scope is bounded\nb"
+        self.assertEqual(cf.finding_lines(text), (["the check is a command, not a test"], ["the scope is bounded"]))
+        self.assertEqual(cf.finding_lines("none"), ([], []))
+
     def test_job_result_maps_to_check_state(self):
         """code-host, check 1."""
         self.assertEqual(cf.check_state("success"), cg.CHECK_PASS)

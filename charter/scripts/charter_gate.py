@@ -52,6 +52,8 @@ FACT_UNRESOLVED_THREADS = "unresolved_review_threads"   # whole number
 FACT_APPROVALS = "approvals"                # ["login"]
 FACT_CHECKS = "checks"                      # {"tests": "pass"}
 FACT_FALSE_FAILURES = "false_failures"    # optional: [{"gate": "documents", "reason": "..."}], recorded by a person
+FACT_DROPPED_FINDINGS = "dropped_findings"   # optional: ["reason"], the findings of the reviewer that the author dropped
+FACT_FALSE_FINDINGS = "false_findings"       # optional: ["reason"], the findings of the reviewer that the leader marked as false
 # FACT_APPROVALS is optional and not checked in this version: the merge by the approver is the approval.
 ISSUE_NUMBER, ISSUE_STATE = "number", "state"
 STATE_OPEN = "open"
@@ -78,7 +80,7 @@ ARG_RECORD, ARG_SCRIPTS_VERSION = "record", "scripts_version"
 
 # The evidence record: the verdict, plus these fields.
 RECORD_FORM = 1
-RECORD_KEYS = ("record_form", "change_request", "time", "scripts_version", "false_failures", "dropped_findings")
+RECORD_KEYS = ("record_form", "change_request", "time", "scripts_version", "false_failures", "dropped_findings", "false_findings")
 
 MSG = {
     "facts_not_json": "not JSON: {path}, {error}",
@@ -168,6 +170,10 @@ def load_facts(path: Path) -> dict:
     optional = facts.get(FACT_FALSE_FAILURES, [])
     if not (isinstance(optional, list) and all(_is_false_failure(f) for f in optional)):
         raise cc.CannotRun(msg("facts_bad_value", key=FACT_FALSE_FAILURES, path=path))
+    for key in (FACT_DROPPED_FINDINGS, FACT_FALSE_FINDINGS):
+        value = facts.get(key, [])
+        if not (isinstance(value, list) and all(isinstance(v, str) for v in value)):
+            raise cc.CannotRun(msg("facts_bad_value", key=key, path=path))
     return facts
 
 
@@ -393,7 +399,8 @@ def build_record(facts: dict, verdict: str, origin: str, reasons: list[str], det
         **detail,
         FACT_CHECKS: facts[FACT_CHECKS],
         RECORD_KEYS[4]: facts.get(FACT_FALSE_FAILURES, []),
-        RECORD_KEYS[5]: [],
+        RECORD_KEYS[5]: facts.get(FACT_DROPPED_FINDINGS, []),
+        RECORD_KEYS[6]: facts.get(FACT_FALSE_FINDINGS, []),
     }
 
 
