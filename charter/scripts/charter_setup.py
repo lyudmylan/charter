@@ -90,12 +90,13 @@ MSG = {
     "manifest": "the version of Charter cannot be read: {path}",
     "template": "the template is missing: {path}",
     "steps_title": "\nSteps that a person does by hand:",
-    "step_secret": "  1. Set the secret CHARTER_ORG_TOKEN on the repo: a fine-grained token with read access to the organization source only. For the intent reviewer, set CLAUDE_CODE_OAUTH_TOKEN from `claude setup-token`.",
-    "step_ruleset": "  2. Protect the main branch with a ruleset: a change request is required, and the check \"verdict\" is required.",
-    "step_cache": "  3. On each computer, put the organization source in the cache of the checker: git clone {address} {cache}",
-    "step_quality": "  4. Put the test command of this repo in checks.quality of {contract}; the gate fails without one.",
-    "step_claude": "  5. {claude} exists, so Claude Code does not read {instructions}. Add the line `@{instructions}` to {claude}.",
-    "step_intents": "  6. Write the first intent from {template}, and open the change request that adds it.",
+    "step": "  {number}. {step}",
+    "step_secret": "Set the secret CHARTER_ORG_TOKEN on the repo: a fine-grained token with read access to the organization source only. For the intent reviewer, set CLAUDE_CODE_OAUTH_TOKEN from `claude setup-token`.",
+    "step_ruleset": "Protect the main branch with a ruleset: a change request is required, and the check \"verdict\" is required.",
+    "step_cache": "On each computer, put the organization source in the cache of the checker: git clone {address} {cache}",
+    "step_quality": "Put the test command of this repo in checks.quality of {contract}; the gate fails without one.",
+    "step_claude": "{claude} exists, so Claude Code does not read {instructions}. Add the line `@{instructions}` to {claude}.",
+    "step_intents": "Write the first intent from {template}, and open the change request that adds it.",
 }
 
 
@@ -165,14 +166,15 @@ def existing(target: Path) -> list[str]:
 
 
 def manual_steps(target: Path, args: argparse.Namespace, cache_dir: Path) -> list[str]:
-    steps = [msg("steps_title"), msg("step_secret"), msg("step_ruleset"),
+    """The steps that a person does by hand, numbered in sequence; a step that does not apply is left out."""
+    steps = [msg("step_secret"), msg("step_ruleset"),
              msg("step_cache", address=args.source, cache=cc.cache_path(args.source, cache_dir))]
     if not args.quality:
         steps.append(msg("step_quality", contract=CONTRACT_FILE))
     if (target / CLAUDE_FILE).exists():
         steps.append(msg("step_claude", claude=CLAUDE_FILE, instructions=INSTRUCTIONS_FILE))
     steps.append(msg("step_intents", template=INTENT_TEMPLATE))
-    return steps
+    return [msg("steps_title")] + [msg("step", number=n, step=step) for n, step in enumerate(steps, start=1)]
 
 
 def setup(args: argparse.Namespace, target: Path, cache_dir: Path, out) -> int:
