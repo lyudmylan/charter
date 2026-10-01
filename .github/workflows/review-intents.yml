@@ -25,6 +25,7 @@ jobs:
       - uses: anthropics/claude-code-action@v1
         with:
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          github_token: ${{ secrets.GITHUB_TOKEN }}
           prompt: |
             Review the intents that change request #${{ github.event.pull_request.number }} changes.
             Follow charter-practices/skills/intent-review/SKILL.md exactly: it is the checklist and the form of the report.
