@@ -73,8 +73,10 @@ class Text(unittest.TestCase):
             24: {cf.ISSUE_BODY: "Intent: intents/pr.md", cf.ISSUE_STATE: "open", cf.ISSUE_IS_PR: {}},     # a change request
             25: None,                                                                                   # not an issue
             26: {cf.ISSUE_BODY: "no line here, and intents/not-a-line.md in prose", cf.ISSUE_STATE: "open"},
+            27: {cf.ISSUE_BODY: "## Goal\n\ntext\n\n## Intent\n`intents/older-form.md`\n", cf.ISSUE_STATE: "open"},
+            28: {cf.ISSUE_BODY: "Intent: intents/app.plan.md\nIntent: intents/App.MD", cf.ISSUE_STATE: "open"},   # a plan, a wrong case
         }
-        self.assertEqual(cf.intent_paths(issues), ["intents/app.md", "intents/other.md"])
+        self.assertEqual(cf.intent_paths(issues), ["intents/app.md", "intents/other.md", "intents/older-form.md"])
         self.assertEqual(cg.plan_of("intents/app.md"), "intents/app.plan.md")
         facts = cf.build_facts({cf.PR_NUMBER: 7, cf.PR_TITLE: "t", cf.PR_BODY: ""}, [], {}, 0, {},
                                plans={"intents/app.md": True, "intents/other.md": False})

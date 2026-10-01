@@ -40,6 +40,7 @@ import charter_check as cc  # noqa: E402
 # ---------------------------------------------------------------------------
 
 CMD_LINK, CMD_DOCUMENTS, CMD_QUALITY, CMD_VERDICT = "link", "documents", "quality", "verdict"
+CMD_PLAN = "plan"      # a part of the verdict, not a command of its own
 ARG_FACTS = "facts"
 ARG_REPO_ONLY = "repo_only"
 
@@ -132,10 +133,10 @@ MSG = {
     "review_open": "review loop: {where}, highest open severity {severity}: a finding at {threshold} or above keeps the loop open, the author answers",
     "review_limit": "review loop: {where}, highest open severity {severity}: the limit is reached, a person decides",
     "review_closed": "review loop: {where}, highest open severity {severity}: the loop is closed",
-    "plan_intents_only": "plan: not needed, the change is the Plan phase (only files under {dir})",
-    "plan_no_intent": "plan: no linked issue names an intent (a line `Intent: {dir}<part>{suffix}` in the issue)",
-    "plan_missing": "plan: {plan} is missing",
-    "plan_ok": "plan: {plan} exists",
+    "plan_intents_only": "not needed, the change is the Plan phase (only files under {dir})",
+    "plan_no_intent": "no linked issue names an intent (a line `Intent: {dir}<part>{suffix}` in the issue)",
+    "plan_missing": "{plan} is missing",
+    "plan_ok": "{plan} exists",
 }
 
 
@@ -373,32 +374,32 @@ def review_loop_state(facts: dict, e: cc.Effective) -> str:
     return msg("review_open", **values)
 
 
-def plan_state(facts: dict, e: cc.Effective) -> tuple[bool, list[str]]:
-    """The plan of the work item exists before the code. Only when the contract sets the flag. A change
-    of intents alone is the Plan phase and needs no plan. It checks the result, not the order of commits."""
+def gate_plan(facts: dict, e: cc.Effective) -> GateResult | None:
+    """The plan of the work item exists before the code. None when the contract does not set the flag. A
+    change of intents alone is the Plan phase and needs no plan. It checks the result, not the order of commits."""
     if not e.values.get(FIELD_PLAN_BEFORE_CODE):
-        return True, []
+        return None
     changed = facts[FACT_CHANGED_FILES]
     if changed and all(f.startswith(INTENTS_DIR) for f in changed):
-        return True, [msg("plan_intents_only", dir=INTENTS_DIR)]
+        return GateResult(CMD_PLAN, True, [msg("plan_intents_only", dir=INTENTS_DIR)])
     intents = facts.get(FACT_INTENTS, [])
     if not intents:
-        return False, [msg("plan_no_intent", dir=INTENTS_DIR, suffix=INTENT_SUFFIX)]
+        return GateResult(CMD_PLAN, False, [msg("plan_no_intent", dir=INTENTS_DIR, suffix=INTENT_SUFFIX)])
     missing = [plan_of(i[INTENT_PATH]) for i in intents if not i[INTENT_PLAN]]
     present = [plan_of(i[INTENT_PATH]) for i in intents if i[INTENT_PLAN]]
-    reasons = [msg("plan_missing", plan=p) for p in missing] + [msg("plan_ok", plan=p) for p in present]
-    return not missing, reasons
+    return GateResult(CMD_PLAN, not missing,
+                      [msg("plan_missing", plan=p) for p in missing] + [msg("plan_ok", plan=p) for p in present])
 
 
 def gate_verdict(facts: dict, e: cc.Effective) -> tuple[bool, list[str], dict]:
     gates = [gate_link(facts), gate_documents(facts, e)]
+    plan = gate_plan(facts, e)
+    if plan is not None:
+        gates.append(plan)
     reasons: list[str] = []
     passed = all(g.passed for g in gates)
     for g in gates:
         reasons += [f"{g.gate}: {r}" for r in g.reasons]
-    plan_passed, plan_reasons = plan_state(facts, e)
-    passed = passed and plan_passed
-    reasons += plan_reasons
 
     checks: dict[str, str] = facts[FACT_CHECKS]
     not_passed = sorted(name for name, state in checks.items() if state != CHECK_PASS)

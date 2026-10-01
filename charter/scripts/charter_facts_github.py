@@ -69,9 +69,12 @@ FALSE_FAILURE_LINE = re.compile(r"^False failure:\s*([a-z0-9_-]+)\s*:\s*(.+?)\s*
 DROPPED_FINDING_LINE = re.compile(r"^Dropped finding:\s*(.+?)\s*$", re.IGNORECASE | re.MULTILINE)
 FALSE_FINDING_LINE = re.compile(r"^False finding:\s*(.+?)\s*$", re.IGNORECASE | re.MULTILINE)
 
-# The text of an issue: the line that names the intent of the work item.
-INTENT_LINE = re.compile(r"^Intent:\s*`?(" + re.escape(cg.INTENTS_DIR) + r"[A-Za-z0-9._/-]+" + re.escape(cg.INTENT_SUFFIX) + r")`?\s*$",
-                         re.IGNORECASE | re.MULTILINE)
+# The text of an issue: the line that names the intent of the work item, `Intent: intents/<part>.md`, or
+# the older form, a heading `## Intent` with the path on the next line. The path keeps its case; a plan
+# file is not an intent.
+INTENT_PATH = (re.escape(cg.INTENTS_DIR) + r"[A-Za-z0-9._/-]+(?<!" + re.escape(cg.PLAN_SUFFIX[:-len(cg.INTENT_SUFFIX)]) + r")"
+               + re.escape(cg.INTENT_SUFFIX))
+INTENT_LINE = re.compile(r"^(?:[Ii]ntent:|## Intent\s*\n+)\s*`?(" + INTENT_PATH + r")`?\s*$", re.MULTILINE)
 ISSUE_BODY = "body"
 
 # The report of the intent reviewer: one comment by the workflow account, with the marker of the skill.
