@@ -16,7 +16,7 @@ the team owns the skills, and a person stays in control without approving every 
 | [`docs/product.md`](docs/product.md) | What Charter is and why |
 | [`docs/contract.md`](docs/contract.md) | The contract files, their fields, and the checker |
 | [`AGENTS.md`](AGENTS.md) | The rules for work in this repo |
-| [`tests/scenarios/`](tests/scenarios/) | The acceptance checks of each part |
+| [`intents/`](intents/) | The intent of each work item: goal, scope, acceptance checks |
 
 ## Layout
 
@@ -27,7 +27,7 @@ the team owns the skills, and a person stays in control without approving every 
 | `scripts/charter_check.py` | The checker. Python 3.11 or later, standard library only. |
 | `scripts/charter_gate.py` | The gates of a change: link, documents, quality, verdict |
 | `scripts/charter_facts_github.py`, `.github/workflows/` | The gates on GitHub: the only parts that know the code host |
-| `tests/` | The tests, the sample files, and the scenarios |
+| `tests/` | The tests and the sample files |
 | `charter-practices/` | The practices plugin: light skills with their eval cases. To use it in a session: `claude --plugin-dir charter-practices` |
 
 ## Checks

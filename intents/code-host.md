@@ -1,6 +1,23 @@
-# Scenario: the gates run on the code host, and the main branch is protected
+# Intent: the gates run on the code host, and the main branch is protected
 
 Work item: #5. Approved by a person on 2026-09-30, in the work item.
+
+## Goal
+
+The gates run on each change request of this repo, and no change reaches the main branch without them.
+
+## In scope
+
+- A GitHub Actions workflow that runs the checker, the tests, and the four gates on each change request. The merge-readiness verdict is the last step.
+- The workflow definition comes from the main branch, so that a change cannot edit its own gate. Verify what GitHub offers for this (rulesets, required workflows).
+- Protection of the main branch: no direct push, and the verdict is a required check. Verify what the plan of this repo permits for a private repo.
+- The instruction file says what a contributor sees when a gate fails.
+
+## Out of scope
+
+- Other code hosts. The gate scripts stay host-neutral; only the workflow is specific to GitHub.
+
+## Acceptance checks
 
 ## Automatic checks
 

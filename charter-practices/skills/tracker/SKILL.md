@@ -1,6 +1,6 @@
 ---
 name: tracker
-description: Plans and records work in the issue tracker the way this organization does it, with a milestone, epics, issues, and a file for each work item that holds its acceptance checks. Use when the user wants to plan an iteration, create or update a milestone, an epic, or an issue, or close an epic. Do not use for a code review, for an explanation of code or scripts, or for a change to the code itself.
+description: Plans and records work in the issue tracker the way this organization does it, with a milestone, epics, issues, and an intent for each work item that holds its goal, its scope, and its acceptance checks. Use when the user wants to plan an iteration, create or update a milestone, an epic, or an issue, or close an epic. Do not use for a code review, for an explanation of code or scripts, or for a change to the code itself.
 ---
 
 # Tracker
@@ -21,15 +21,15 @@ open an issue for a decision.
 - An epic is what we want to do. Label `epic`. Body: "What we want", the issues as a task list,
   "Decisions made". The milestone "Roadmap" holds the epics of parts that are decided but not scheduled;
   their issues come when the part comes near.
-- An issue is one actionable item. Body: goal, in scope, out of scope, and a link to the file of the
-  work item. Each change to a source file has an issue, also a small one.
+- An issue is one actionable item. Body: goal, in scope, out of scope, and a link to its intent. Each
+  change to a source file has an issue, also a small one.
 
-## The file of a work item
+## The intent of a work item
 
-`tests/scenarios/<part>.md`: goal, in scope, out of scope, acceptance checks. An automatic check names
+`intents/<part>.md`: goal, in scope, out of scope, acceptance checks. An automatic check names
 its test or its command. A manual check names who does it and why it is not automatic; automatic is the
-default. A person approves the file through a change request; that merge is the approval, and the work
-starts after it. Each test cites the file and the number of its check.
+default. A person approves the intent through a change request; that merge is the approval, and the work
+starts after it. Each test cites the intent and the number of its check.
 
 ## Changes and closing
 

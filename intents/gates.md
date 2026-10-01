@@ -1,6 +1,26 @@
-# Scenario: the four gates
+# Intent: the four gates
 
 Work item: #4. Approved by a person on 2026-09-30, in the work item.
+
+## Goal
+
+Four scripts check a change of this repo: the link to its issue, the documents, the quality checks, and the merge-readiness verdict.
+
+## In scope
+
+- Link gate: the change request references an open issue of this repo.
+- Documents gate: when a file under a declared code path changes, the declared document changes too, or the change request carries a recorded reason.
+- Quality-check gate: the commands declared in the contract run and pass. For this repo: the tests of the scripts, and the checker on the contract.
+- Merge-readiness verdict: one script reads the results of the other gates and the state of the change request, and answers "ready" or "not ready" with the reasons. Its five checks: the required checks passed; no unresolved review comment; the approval that the risk tier demands is there; the issue is linked; the documents gate passed.
+- All four read their parameters from the contract. Python, standard library only.
+- Tests with sample inputs for each gate, with a passing case and a failing case.
+
+## Out of scope
+
+- The boundary tests and the release gates.
+- Triage of findings by an agent reviewer. That is on the roadmap.
+
+## Acceptance checks
 
 ## Automatic checks
 

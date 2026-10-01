@@ -25,7 +25,7 @@ agent = ["claude-code"]
 
 # Risk tiers. The first tier whose paths match a file applies.
 [tiers.high]
-paths = ["charter.toml", "schema/**", "scripts/**", "tests/**", "AGENTS.md", ".github/**"]  # tests/** includes the scenarios
+paths = ["charter.toml", "schema/**", "scripts/**", "tests/**", "intents/**", "AGENTS.md", ".github/**"]  # intents hold the approved acceptance checks
 review = "deep"
 approver = "leader"
 approvals = 1

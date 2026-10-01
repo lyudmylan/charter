@@ -1,6 +1,6 @@
 """Tests of the gates. Run: python3 -m unittest discover -s tests
 
-Each test names the scenario file and the check that it implements, in its docstring.
+Each test names the intent and the check that it implements, in its docstring.
 """
 
 import contextlib
