@@ -68,14 +68,14 @@ class Validate(Temp):
 
     def test_wrong_type_names_the_field(self):
         """contract-checker, check 2."""
-        path = self.write("r.toml", repo_with(**{"refusals = 2": 'refusals = "two"'}))
+        path = self.write("r.toml", repo_with(**{"refusals = 3": 'refusals = "two"'}))
         code, out = run(cc.CMD_VALIDATE, str(path))
         self.assertEqual(code, cc.FAIL)
         self.assertIn("limits.refusals", out)
 
     def test_unknown_field_fails(self):
         """contract-checker, check 2."""
-        path = self.write("r.toml", repo_with(**{"refusals = 2": "refusals = 2\nretries = 9"}))
+        path = self.write("r.toml", repo_with(**{"refusals = 3": "refusals = 3\nretries = 9"}))
         code, out = run(cc.CMD_VALIDATE, str(path))
         self.assertEqual(code, cc.FAIL)
         self.assertIn(cc.msg("unknown_field", name=path, field="limits.retries"), out)
@@ -102,20 +102,28 @@ class Check(Temp):
 
     def test_repo_adds_an_unlocked_rule(self):
         """contract-checker, check 3."""
-        code, _ = self.check(repo_with(**{"refusals = 2": "refusals = 2\nacceptance_loop = 9"}))
+        code, _ = self.check(repo_with(**{"refusals = 3": "refusals = 3\nacceptance_loop = 9"}))
         self.assertEqual(code, cc.PASS)
 
     def test_stricter_in_each_direction_passes(self):
-        """contract-checker, check 4. Flag stays true; limit 2 < 3; count 2 > 1; set is a superset;
+        """contract-checker, check 4. Flag stays true; limit equal; count 2 > 1; set is a superset;
         choice leader > team_lead; text equal."""
-        code, _ = self.check(repo_with(**{"refusals = 2": "refusals = 2\n[change]\nperson_approves_contract = true"}))
+        code, _ = self.check(repo_with(**{"refusals = 3": "refusals = 3\n[change]\nperson_approves_contract = true"}))
         self.assertEqual(code, cc.PASS)
+
+    def test_a_locked_limit_is_exact(self):
+        """contract-checker, check 5: a smaller and a larger number both change the policy (#51)."""
+        for value in ("2", "4"):
+            with self.subTest(value=value):
+                code, out = self.check(repo_with(**{"refusals = 3": f"refusals = {value}"}))
+                self.assertEqual(code, cc.FAIL)
+                self.assertIn("changes locked rule limits.refusals", out)
 
     def test_weaker_in_each_direction_fails_and_names_the_rule(self):
         """contract-checker, check 5."""
         cases = {
-            "change.person_approves_contract": {"refusals = 2": "refusals = 2\n[change]\nperson_approves_contract = false"},
-            "limits.refusals": {"refusals = 2": "refusals = 5"},
+            "change.person_approves_contract": {"refusals = 3": "refusals = 3\n[change]\nperson_approves_contract = false"},
+            "limits.refusals": {"refusals = 3": "refusals = 5"},
             "tiers.high.approvals": {"approvals = 2": "approvals = 0"},
             "documents.necessary": {'necessary = ["docs/product.md", "docs/architecture.md"]': 'necessary = ["docs/architecture.md"]'},
             "tiers.high.approver": {'approver = "leader"': 'approver = "engineer"'},
@@ -125,7 +133,7 @@ class Check(Temp):
             with self.subTest(rule=rule):
                 code, out = self.check(repo_with(**change))
                 self.assertEqual(code, cc.FAIL)
-                self.assertIn(f"weakens locked rule {rule}", out)
+                self.assertIn(f"changes locked rule {rule}", out)
 
     def test_json_output_is_json_and_redacts_the_pattern_sets(self):
         """contract-checker, check 1: the effective contract merges the source and the repo."""
@@ -133,8 +141,8 @@ class Check(Temp):
         self.assertEqual(code, cc.PASS)
         data = json.loads(out)
         effective = data[cc.JSON_KEY_EFFECTIVE]
-        self.assertEqual(effective["limits.refusals"], 2)
-        self.assertEqual(effective["limits.review_loop"], 3)
+        self.assertEqual(effective["tiers.high.approvals"], 2)      # the repo's stricter value
+        self.assertEqual(effective["limits.review_loop"], 3)         # inherited from the source
         self.assertNotIn("secret-project", out)
         self.assertEqual(effective["text.project_name_patterns"], cc.msg("redacted", count=1))
 

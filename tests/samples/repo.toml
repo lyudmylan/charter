@@ -22,7 +22,10 @@ approver = "engineer"
 approvals = 1
 
 [limits]
-refusals = 2
+refusals = 3
+
+[review]
+threshold = "medium"
 
 [documents]
 necessary = ["docs/product.md", "docs/architecture.md"]

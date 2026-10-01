@@ -54,10 +54,19 @@ FACT_CHECKS = "checks"                      # {"tests": "pass"}
 FACT_FALSE_FAILURES = "false_failures"    # optional: [{"gate": "documents", "reason": "..."}], recorded by a person
 FACT_DROPPED_FINDINGS = "dropped_findings"   # optional: ["reason"], the findings of the reviewer that the author dropped
 FACT_FALSE_FINDINGS = "false_findings"       # optional: ["reason"], the findings of the reviewer that the leader marked as false
+FACT_REVIEW_ROUNDS = "review_rounds"         # optional: whole number, the completed runs of the reviewer on the change request
+FACT_REVIEW_SEVERITY = "review_highest_severity"   # optional: the last reported severity, or null before the first report
 # FACT_APPROVALS is optional and not checked in this version: the merge by the approver is the approval.
 ISSUE_NUMBER, ISSUE_STATE = "number", "state"
 STATE_OPEN = "open"
 CHECK_PASS = "pass"
+
+# The review loop. A finding at the threshold or above keeps the loop open; the loop ends below it,
+# or when the rounds reach the limit. Then a person decides. Shadow mode: the loop blocks nothing yet.
+SEVERITIES = ("none", "low", "medium", "high", "blocker")   # from the lowest
+FIELD_REVIEW_LOOP = "limits.review_loop"
+FIELD_REVIEW_THRESHOLD = "review.threshold"
+DEFAULT_REVIEW_THRESHOLD = "medium"
 
 # Fields of the contract that the gates read.
 FIELD_CODE_PATHS = "documents.code_paths"
@@ -80,7 +89,8 @@ ARG_RECORD, ARG_SCRIPTS_VERSION = "record", "scripts_version"
 
 # The evidence record: the verdict, plus these fields.
 RECORD_FORM = 1
-RECORD_KEYS = ("record_form", "change_request", "time", "scripts_version", "false_failures", "dropped_findings", "false_findings")
+RECORD_KEYS = ("record_form", "change_request", "time", "scripts_version", "false_failures", "dropped_findings", "false_findings",
+               FACT_REVIEW_ROUNDS, FACT_REVIEW_SEVERITY)
 
 MSG = {
     "facts_not_json": "not JSON: {path}, {error}",
@@ -108,6 +118,13 @@ MSG = {
     "tier": "tier {tier}: review {review}, the {approver} merges ({who})",
     "no_tier": "no tier matches the changed files",
     "approvals_not_checked": "approvals are not checked in this version: the merge by the {approver} is the approval",
+    "review_none": "review loop: no review yet",
+    "review_round": "round {rounds} of {limit}",
+    "review_round_no_limit": "round {rounds}, no limit in the contract",
+    "review_no_line": "review loop: {where}, no severity line in the report",
+    "review_open": "review loop: {where}, highest open severity {severity}: a finding at {threshold} or above keeps the loop open, the author answers",
+    "review_limit": "review loop: {where}, highest open severity {severity}: the limit is reached, a person decides",
+    "review_closed": "review loop: {where}, highest open severity {severity}: the loop is closed",
 }
 
 
@@ -174,6 +191,11 @@ def load_facts(path: Path) -> dict:
         value = facts.get(key, [])
         if not (isinstance(value, list) and all(isinstance(v, str) for v in value)):
             raise cc.CannotRun(msg("facts_bad_value", key=key, path=path))
+    rounds = facts.get(FACT_REVIEW_ROUNDS, 0)
+    if not (isinstance(rounds, int) and not isinstance(rounds, bool) and rounds >= 0):
+        raise cc.CannotRun(msg("facts_bad_value", key=FACT_REVIEW_ROUNDS, path=path))
+    if facts.get(FACT_REVIEW_SEVERITY) not in (None, *SEVERITIES):
+        raise cc.CannotRun(msg("facts_bad_value", key=FACT_REVIEW_SEVERITY, path=path))
     return facts
 
 
@@ -308,6 +330,25 @@ def tier_of(changed: list[str], e: cc.Effective) -> tuple[str | None, dict]:
     return None, {}
 
 
+def review_loop_state(facts: dict, e: cc.Effective) -> str:
+    """One line on the author-reviewer loop. It blocks nothing in this version: shadow mode."""
+    rounds = facts.get(FACT_REVIEW_ROUNDS, 0)
+    severity = facts.get(FACT_REVIEW_SEVERITY)
+    if not rounds:
+        return msg("review_none")
+    limit = e.values.get(FIELD_REVIEW_LOOP)
+    where = msg("review_round", rounds=rounds, limit=limit) if limit is not None else msg("review_round_no_limit", rounds=rounds)
+    if severity is None:
+        return msg("review_no_line", where=where)
+    threshold = e.values.get(FIELD_REVIEW_THRESHOLD, DEFAULT_REVIEW_THRESHOLD)
+    values = dict(where=where, severity=severity, threshold=threshold)
+    if SEVERITIES.index(severity) < SEVERITIES.index(threshold):
+        return msg("review_closed", **values)
+    if limit is not None and rounds >= limit:
+        return msg("review_limit", **values)
+    return msg("review_open", **values)
+
+
 def gate_verdict(facts: dict, e: cc.Effective) -> tuple[bool, list[str], dict]:
     gates = [gate_link(facts), gate_documents(facts, e)]
     reasons: list[str] = []
@@ -332,6 +373,7 @@ def gate_verdict(facts: dict, e: cc.Effective) -> tuple[bool, list[str], dict]:
         reasons.append(msg("threads_open", count=threads))
     else:
         reasons.append(msg("threads_ok"))
+    reasons.append(review_loop_state(facts, e))
 
     tier, spec = tier_of(facts[FACT_CHANGED_FILES], e)
     detail: dict = {JSON_KEY_TIER: tier, JSON_KEY_APPROVER: spec.get(TIER_APPROVER), JSON_KEY_MERGES: []}
@@ -401,6 +443,8 @@ def build_record(facts: dict, verdict: str, origin: str, reasons: list[str], det
         RECORD_KEYS[4]: facts.get(FACT_FALSE_FAILURES, []),
         RECORD_KEYS[5]: facts.get(FACT_DROPPED_FINDINGS, []),
         RECORD_KEYS[6]: facts.get(FACT_FALSE_FINDINGS, []),
+        RECORD_KEYS[7]: facts.get(FACT_REVIEW_ROUNDS, 0),
+        RECORD_KEYS[8]: facts.get(FACT_REVIEW_SEVERITY),
     }
 
 

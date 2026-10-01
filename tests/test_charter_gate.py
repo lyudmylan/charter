@@ -247,6 +247,50 @@ class Verdict(Temp):
         self.assertEqual([g[cg.JSON_KEY_GATE] for g in data[cg.JSON_KEY_GATES]], [cg.CMD_LINK, cg.CMD_DOCUMENTS])
 
 
+class ReviewLoop(Temp):
+    """The sample repo: review_loop 3, threshold medium."""
+
+    def verdict(self, **changes) -> str:
+        code, out = run(cg.CMD_VERDICT, f"--{cg.ARG_FACTS}", str(self.facts(**changes)), *self.contract_args())
+        self.assertEqual(code, cc.PASS, out)     # shadow mode: the loop changes no verdict
+        return out
+
+    def test_no_review_yet(self):
+        """review-loop, check 3."""
+        self.assertIn("review loop: no review yet", self.verdict())
+        self.assertIn("review loop: no review yet", self.verdict(**{cg.FACT_REVIEW_ROUNDS: 0, cg.FACT_REVIEW_SEVERITY: None}))
+
+    def test_open_below_the_limit(self):
+        """review-loop, check 3."""
+        out = self.verdict(**{cg.FACT_REVIEW_ROUNDS: 1, cg.FACT_REVIEW_SEVERITY: "high"})
+        self.assertIn("review loop: round 1 of 3, highest open severity high: a finding at medium or above keeps the loop open", out)
+
+    def test_limit_reached_a_person_decides(self):
+        """review-loop, check 3."""
+        out = self.verdict(**{cg.FACT_REVIEW_ROUNDS: 3, cg.FACT_REVIEW_SEVERITY: "medium"})
+        self.assertIn("review loop: round 3 of 3, highest open severity medium: the limit is reached, a person decides", out)
+
+    def test_closed_below_the_threshold(self):
+        """review-loop, check 3."""
+        for severity in ("low", "none"):
+            with self.subTest(severity=severity):
+                out = self.verdict(**{cg.FACT_REVIEW_ROUNDS: 2, cg.FACT_REVIEW_SEVERITY: severity})
+                self.assertIn(f"review loop: round 2 of 3, highest open severity {severity}: the loop is closed", out)
+
+    def test_a_report_without_the_line_still_shows_the_round(self):
+        """review-loop, check 3."""
+        out = self.verdict(**{cg.FACT_REVIEW_ROUNDS: 2, cg.FACT_REVIEW_SEVERITY: None})
+        self.assertIn("review loop: round 2 of 3, no severity line in the report", out)
+
+    def test_a_wrong_severity_or_count_cannot_run(self):
+        """review-loop, check 3: the facts are validated."""
+        for changes in ({cg.FACT_REVIEW_SEVERITY: "huge"}, {cg.FACT_REVIEW_ROUNDS: -1}, {cg.FACT_REVIEW_ROUNDS: "3"}):
+            with self.subTest(changes=changes):
+                code, out = run(cg.CMD_VERDICT, f"--{cg.ARG_FACTS}", str(self.facts(**changes)), *self.contract_args())
+                self.assertEqual(code, cc.CANNOT_RUN)
+                self.assertIn("wrong value", out)
+
+
 class Record(Temp):
     def test_record_has_the_documented_form(self):
         """evidence-record, check 1."""
@@ -264,6 +308,8 @@ class Record(Temp):
         self.assertEqual(data[cg.RECORD_KEYS[3]], "abc123")
         self.assertEqual(data[cg.RECORD_KEYS[4]], [])
         self.assertEqual(data[cg.RECORD_KEYS[5]], [])
+        self.assertEqual(data[cg.FACT_REVIEW_ROUNDS], 0)
+        self.assertIsNone(data[cg.FACT_REVIEW_SEVERITY])
         self.assertRegex(data[cg.RECORD_KEYS[2]], r"^\d{4}-\d{2}-\d{2}T")
 
     def test_false_failures_of_the_facts_are_in_the_record(self):

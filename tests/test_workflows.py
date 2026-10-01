@@ -34,5 +34,16 @@ class ReviewIntents(unittest.TestCase):
         self.assertIn("contents: read", self.text)
 
 
+class Verdict(unittest.TestCase):
+    text = (WORKFLOWS / "verdict.yml").read_text()
+
+    def test_runs_after_the_tests_and_after_the_reviewer_and_counts_the_rounds(self):
+        """review-loop, check 4."""
+        self.assertIn("workflows: [tests, review-intents]", self.text)
+        self.assertIn("--review-workflow review-intents.yml", self.text)
+        self.assertIn("concurrency:\n  group: verdict-", self.text)
+        self.assertIn("--schema change/charter/schema/contract.toml all change/charter.toml", self.text)
+
+
 if __name__ == "__main__":
     unittest.main()
