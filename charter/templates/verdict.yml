@@ -30,8 +30,6 @@ jobs:
   verdict:
     name: verdict
     runs-on: ubuntu-latest
-    env:
-      CHARTER_SCRIPTS: ${{ runner.temp }}/charter/charter/scripts
     steps:
       - name: Take the main branch
         uses: actions/checkout@v4
@@ -44,6 +42,7 @@ jobs:
         run: |
           VERSION=$(python3 -c 'import tomllib; print(tomllib.load(open("charter.toml", "rb"))["charter"]["version"])')
           git clone --quiet --depth 1 --branch "charter--v$VERSION" %{charter_address} "$RUNNER_TEMP/charter"
+          echo "CHARTER_SCRIPTS=$RUNNER_TEMP/charter/charter/scripts" >> "$GITHUB_ENV"
           echo "version=charter--v$VERSION" >> "$GITHUB_OUTPUT"
 
       - name: Find the change request

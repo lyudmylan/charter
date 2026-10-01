@@ -6,6 +6,7 @@ Each test names the intent and the check that it implements, in its docstring.
 import contextlib
 import io
 import json
+import re
 import shutil
 import sys
 import tempfile
@@ -117,6 +118,17 @@ class Templates(Temp):
         verdict = (self.dir / cs.WORKFLOWS / "verdict.yml").read_text()
         self.assertIn('"$CHARTER_SCRIPTS/charter_gate.py" verdict', verdict)
         self.assertIn("ref: ${{ github.event.repository.default_branch }}", verdict)
+
+    def test_no_runner_context_in_a_job_env(self):
+        """setup-step, check 1 (#58): GitHub refuses the `runner` context in a job-level env; the file then
+        does not parse, and the run has no job and no log."""
+        self.assertEqual(self.setup()[0], cc.PASS)
+        for name in ("tests.yml", "verdict.yml", "review-intents.yml"):
+            text = (self.dir / cs.WORKFLOWS / name).read_text()
+            with self.subTest(workflow=name):
+                self.assertIsNone(re.search(r"^    env:\n(?:      .*\n)*?      \w+: \$\{\{ runner\.", text, re.M),
+                                  "a job-level env uses the runner context")
+                self.assertIn('>> "$GITHUB_ENV"', text) if name != "review-intents.yml" else None
 
     def test_lifecycle_map_has_the_six_phases(self):
         """default-lifecycle-map, check 1: six phases, the tracker skill in Plan, the document points to the template."""
