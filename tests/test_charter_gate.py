@@ -13,7 +13,7 @@ import unittest
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
-sys.path.insert(0, str(ROOT / "scripts"))
+sys.path.insert(0, str(ROOT / "charter" / "scripts"))
 import charter_check as cc  # noqa: E402
 import charter_gate as cg  # noqa: E402
 
@@ -293,7 +293,7 @@ class Patterns(unittest.TestCase):
 class NoModel(unittest.TestCase):
     def test_the_gate_script_imports_no_network_or_model_library(self):
         """gates, check 3."""
-        text = (ROOT / "scripts" / "charter_gate.py").read_text()
+        text = (ROOT / "charter" / "scripts" / "charter_gate.py").read_text()
         for name in ("anthropic", "openai", "urllib", "http.client", "requests", "socket"):
             self.assertNotIn(f"import {name}", text)
             self.assertNotIn(f"from {name}", text)

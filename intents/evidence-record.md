@@ -35,5 +35,5 @@ Each change request carries a structured record of what the gates found.
 ## Manual checks
 
 3. After a run, the change request shows exactly one record comment, updated on each run. who: the leader.
-4. `python3 scripts/charter_facts_github.py records --repo lyudmylan/charter --last 5` prints the records of
+4. `python3 charter/scripts/charter_facts_github.py records --repo lyudmylan/charter --last 5` prints the records of
    the last merged changes. who: the leader.

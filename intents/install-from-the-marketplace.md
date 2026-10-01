@@ -8,7 +8,7 @@ The two plugins of Charter install from the Charter repo with `claude plugin ins
 
 ## In scope
 
-- The core moves into the plugin folder `charter/`: its manifest, `scripts/`, `schema/`. The tests, the
+- The core moves into the plugin folder `charter/`: its manifest, `charter/scripts/`, `schema/`. The tests, the
   intents, the documents, and the workflows of this repo stay at the root.
 - During the beta, the marketplace file lives in a private repo of the owner, `charter-marketplace`, and
   lists the two plugins from the public Charter repo by their folders (a GitHub source with a path). The

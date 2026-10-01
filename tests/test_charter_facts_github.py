@@ -5,7 +5,7 @@ import unittest
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
-sys.path.insert(0, str(ROOT / "scripts"))
+sys.path.insert(0, str(ROOT / "charter" / "scripts"))
 import charter_check as cc  # noqa: E402
 import charter_facts_github as cf  # noqa: E402
 import charter_gate as cg  # noqa: E402
@@ -16,7 +16,7 @@ PR = {
     cf.PR_TITLE: "Add the four gates",
     cf.PR_BODY: "Closes #4.\n\nNo document change: the gates implement what the product document says already.\n\nSee also #4 and #22.",
 }
-FILES = [{cf.FILE_NAME: "scripts/charter_gate.py"}, {cf.FILE_NAME: "docs/contract.md"}]
+FILES = [{cf.FILE_NAME: "charter/scripts/charter_gate.py"}, {cf.FILE_NAME: "docs/contract.md"}]
 ISSUES = {4: {cf.ISSUE_STATE: "open"}, 22: {cf.ISSUE_STATE: "closed"}, 23: {cf.ISSUE_STATE: "open", cf.ISSUE_IS_PR: {}}, 999: None}
 
 
@@ -84,7 +84,7 @@ class Facts(unittest.TestCase):
         self.assertEqual(facts[cg.FACT_CHANGE_REQUEST], 24)
         self.assertEqual(facts[cg.FACT_LINKED_ISSUES],
                          [{cg.ISSUE_NUMBER: 4, cg.ISSUE_STATE: "open"}, {cg.ISSUE_NUMBER: 22, cg.ISSUE_STATE: "closed"}])
-        self.assertEqual(facts[cg.FACT_CHANGED_FILES], ["scripts/charter_gate.py", "docs/contract.md"])
+        self.assertEqual(facts[cg.FACT_CHANGED_FILES], ["charter/scripts/charter_gate.py", "docs/contract.md"])
         self.assertEqual(facts[cg.FACT_REASON], "the gates implement what the product document says already.")
         self.assertEqual(facts[cg.FACT_UNRESOLVED_THREADS], 2)
         self.assertEqual(facts[cg.FACT_CHECKS], {"quality": cg.CHECK_PASS, "tests": cf.CHECK_PENDING})

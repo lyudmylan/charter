@@ -17,4 +17,4 @@ jobs:
         with:
           persist-credentials: false
       - name: Run the quality checks of the contract on this code
-        run: python3 scripts/charter_gate.py quality --contract charter.toml --repo-only
+        run: python3 charter/scripts/charter_gate.py quality --contract charter.toml --repo-only

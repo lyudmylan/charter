@@ -28,7 +28,7 @@ An agent that works in this repo knows the rules of the repo from the first turn
 3. The file contains no names of other projects. The list of names lives in the private organization
    source, and the checker reads it from there.
    test: `tests/test_charter_check.py::Instructions.test_private_material_and_project_names_fail`
-4. The real file passes. command: `python3 scripts/charter_check.py instructions AGENTS.md --contract charter.toml`
+4. The real file passes. command: `python3 charter/scripts/charter_check.py instructions AGENTS.md --contract charter.toml`
 
 ## Manual checks
 

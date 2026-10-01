@@ -8,7 +8,7 @@ One command sets a repo up for Charter.
 
 ## In scope
 
-- `charter/scripts/charter_setup.py`, Python 3.11 and the standard library. It takes flags or asks: the
+- `charter/charter/scripts/charter_setup.py`, Python 3.11 and the standard library. It takes flags or asks: the
   name of the repo, the address and the version of the organization source, the issue tracker, the code
   host, the CI, and who holds the roles.
 - It writes: `charter.toml` from the template, `AGENTS.md`, the folder `intents/` with a template of an
