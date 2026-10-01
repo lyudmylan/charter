@@ -40,6 +40,7 @@ import charter_check as cc  # noqa: E402
 # ---------------------------------------------------------------------------
 
 CMD_LINK, CMD_DOCUMENTS, CMD_QUALITY, CMD_VERDICT = "link", "documents", "quality", "verdict"
+CMD_PLAN = "plan"      # a part of the verdict, not a command of its own
 ARG_FACTS = "facts"
 ARG_REPO_ONLY = "repo_only"
 
@@ -56,10 +57,17 @@ FACT_DROPPED_FINDINGS = "dropped_findings"   # optional: ["reason"], the finding
 FACT_FALSE_FINDINGS = "false_findings"       # optional: ["reason"], the findings of the reviewer that the leader marked as false
 FACT_REVIEW_ROUNDS = "review_rounds"         # optional: whole number, the completed runs of the reviewer on the change request
 FACT_REVIEW_SEVERITY = "review_highest_severity"   # optional: the last reported severity, or null before the first report
+FACT_INTENTS = "intents"                     # optional: [{"path": "intents/x.md", "plan": true}], from the linked issues
 # FACT_APPROVALS is optional and not checked in this version: the merge by the approver is the approval.
 ISSUE_NUMBER, ISSUE_STATE = "number", "state"
+INTENT_PATH, INTENT_PLAN = "path", "plan"
 STATE_OPEN = "open"
 CHECK_PASS = "pass"
+
+# The plan of a work item: next to its intent, accepted before the code.
+FIELD_PLAN_BEFORE_CODE = "build.plan_before_code"
+INTENTS_DIR = "intents/"
+INTENT_SUFFIX, PLAN_SUFFIX = ".md", ".plan.md"
 
 # The review loop. A finding at the threshold or above keeps the loop open; the loop ends below it,
 # or when the rounds reach the limit. Then a person decides. Shadow mode: the loop blocks nothing yet.
@@ -90,7 +98,7 @@ ARG_RECORD, ARG_SCRIPTS_VERSION = "record", "scripts_version"
 # The evidence record: the verdict, plus these fields.
 RECORD_FORM = 1
 RECORD_KEYS = ("record_form", "change_request", "time", "scripts_version", "false_failures", "dropped_findings", "false_findings",
-               FACT_REVIEW_ROUNDS, FACT_REVIEW_SEVERITY)
+               FACT_REVIEW_ROUNDS, FACT_REVIEW_SEVERITY, FACT_INTENTS)
 
 MSG = {
     "facts_not_json": "not JSON: {path}, {error}",
@@ -125,6 +133,10 @@ MSG = {
     "review_open": "review loop: {where}, highest open severity {severity}: a finding at {threshold} or above keeps the loop open, the author answers",
     "review_limit": "review loop: {where}, highest open severity {severity}: the limit is reached, a person decides",
     "review_closed": "review loop: {where}, highest open severity {severity}: the loop is closed",
+    "plan_intents_only": "not needed, the change is the Plan phase (only files under {dir})",
+    "plan_no_intent": "no linked issue names an intent (a line `Intent: {dir}<part>{suffix}` in the issue)",
+    "plan_missing": "{plan} is missing",
+    "plan_ok": "{plan} exists",
 }
 
 
@@ -196,7 +208,20 @@ def load_facts(path: Path) -> dict:
         raise cc.CannotRun(msg("facts_bad_value", key=FACT_REVIEW_ROUNDS, path=path))
     if facts.get(FACT_REVIEW_SEVERITY) not in (None, *SEVERITIES):
         raise cc.CannotRun(msg("facts_bad_value", key=FACT_REVIEW_SEVERITY, path=path))
+    intents = facts.get(FACT_INTENTS, [])
+    if not (isinstance(intents, list) and all(_is_intent(i) for i in intents)):
+        raise cc.CannotRun(msg("facts_bad_value", key=FACT_INTENTS, path=path))
     return facts
+
+
+def _is_intent(value: object) -> bool:
+    return (isinstance(value, dict) and isinstance(value.get(INTENT_PATH), str)
+            and isinstance(value.get(INTENT_PLAN), bool))
+
+
+def plan_of(intent: str) -> str:
+    """The plan of an intent: `intents/<part>.plan.md` next to `intents/<part>.md`."""
+    return intent[:-len(INTENT_SUFFIX)] + PLAN_SUFFIX if intent.endswith(INTENT_SUFFIX) else intent + PLAN_SUFFIX
 
 
 def effective(args) -> cc.Effective:
@@ -349,8 +374,28 @@ def review_loop_state(facts: dict, e: cc.Effective) -> str:
     return msg("review_open", **values)
 
 
+def gate_plan(facts: dict, e: cc.Effective) -> GateResult | None:
+    """The plan of the work item exists before the code. None when the contract does not set the flag. A
+    change of intents alone is the Plan phase and needs no plan. It checks the result, not the order of commits."""
+    if not e.values.get(FIELD_PLAN_BEFORE_CODE):
+        return None
+    changed = facts[FACT_CHANGED_FILES]
+    if changed and all(f.startswith(INTENTS_DIR) for f in changed):
+        return GateResult(CMD_PLAN, True, [msg("plan_intents_only", dir=INTENTS_DIR)])
+    intents = facts.get(FACT_INTENTS, [])
+    if not intents:
+        return GateResult(CMD_PLAN, False, [msg("plan_no_intent", dir=INTENTS_DIR, suffix=INTENT_SUFFIX)])
+    missing = [plan_of(i[INTENT_PATH]) for i in intents if not i[INTENT_PLAN]]
+    present = [plan_of(i[INTENT_PATH]) for i in intents if i[INTENT_PLAN]]
+    return GateResult(CMD_PLAN, not missing,
+                      [msg("plan_missing", plan=p) for p in missing] + [msg("plan_ok", plan=p) for p in present])
+
+
 def gate_verdict(facts: dict, e: cc.Effective) -> tuple[bool, list[str], dict]:
     gates = [gate_link(facts), gate_documents(facts, e)]
+    plan = gate_plan(facts, e)
+    if plan is not None:
+        gates.append(plan)
     reasons: list[str] = []
     passed = all(g.passed for g in gates)
     for g in gates:
@@ -445,6 +490,7 @@ def build_record(facts: dict, verdict: str, origin: str, reasons: list[str], det
         RECORD_KEYS[6]: facts.get(FACT_FALSE_FINDINGS, []),
         RECORD_KEYS[7]: facts.get(FACT_REVIEW_ROUNDS, 0),
         RECORD_KEYS[8]: facts.get(FACT_REVIEW_SEVERITY),
+        RECORD_KEYS[9]: facts.get(FACT_INTENTS, []),
     }
 
 

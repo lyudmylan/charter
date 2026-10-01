@@ -13,8 +13,6 @@ jobs:
   tests:
     name: tests
     runs-on: ubuntu-latest
-    env:
-      CHARTER_SCRIPTS: ${{ runner.temp }}/charter/charter/scripts
     steps:
       - uses: actions/checkout@v4
         with:
@@ -23,5 +21,6 @@ jobs:
         run: |
           VERSION=$(python3 -c 'import tomllib; print(tomllib.load(open("charter.toml", "rb"))["charter"]["version"])')
           git clone --quiet --depth 1 --branch "charter--v$VERSION" %{charter_address} "$RUNNER_TEMP/charter"
+          echo "CHARTER_SCRIPTS=$RUNNER_TEMP/charter/charter/scripts" >> "$GITHUB_ENV"
       - name: Run the quality checks of the contract on this code
         run: python3 "$CHARTER_SCRIPTS/charter_gate.py" quality --contract charter.toml --repo-only

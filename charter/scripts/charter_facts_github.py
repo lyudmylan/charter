@@ -69,6 +69,14 @@ FALSE_FAILURE_LINE = re.compile(r"^False failure:\s*([a-z0-9_-]+)\s*:\s*(.+?)\s*
 DROPPED_FINDING_LINE = re.compile(r"^Dropped finding:\s*(.+?)\s*$", re.IGNORECASE | re.MULTILINE)
 FALSE_FINDING_LINE = re.compile(r"^False finding:\s*(.+?)\s*$", re.IGNORECASE | re.MULTILINE)
 
+# The text of an issue: the line that names the intent of the work item, `Intent: intents/<part>.md`, or
+# the older form, a heading `## Intent` with the path on the next line. The path keeps its case; a plan
+# file is not an intent.
+INTENT_PATH = (re.escape(cg.INTENTS_DIR) + r"[A-Za-z0-9._/-]+(?<!" + re.escape(cg.PLAN_SUFFIX[:-len(cg.INTENT_SUFFIX)]) + r")"
+               + re.escape(cg.INTENT_SUFFIX))
+INTENT_LINE = re.compile(r"^(?:[Ii]ntent:|## Intent\s*\n+)\s*`?(" + INTENT_PATH + r")`?\s*$", re.MULTILINE)
+ISSUE_BODY = "body"
+
 # The report of the intent reviewer: one comment by the workflow account, with the marker of the skill.
 REVIEW_MARKER = "<!-- charter-intent-review -->"
 SEVERITY_LINE = re.compile(r"^Highest open severity:\s*(" + "|".join(cg.SEVERITIES) + r")\b", re.IGNORECASE | re.MULTILINE)
@@ -140,6 +148,18 @@ def false_failures(text: str) -> list[dict]:
 def finding_lines(text: str) -> tuple[list[str], list[str]]:
     """The findings that the author dropped, and the findings that the leader marked as false."""
     return DROPPED_FINDING_LINE.findall(text or ""), FALSE_FINDING_LINE.findall(text or "")
+
+
+def intent_paths(issues: dict[int, dict | None]) -> list[str]:
+    """The intents that the linked issues name, in order, each once."""
+    seen: list[str] = []
+    for issue in issues.values():
+        if issue is None or ISSUE_IS_PR in issue:
+            continue
+        for path in INTENT_LINE.findall(issue.get(ISSUE_BODY) or ""):
+            if path not in seen:
+                seen.append(path)
+    return seen
 
 
 def highest_severity(comments: list[dict], author: str) -> str | None:
@@ -215,9 +235,11 @@ def conclusions(runs: list[dict], names: list[str]) -> dict[str, str | None]:
 
 
 def build_facts(pr: dict, files: list[dict], issues: dict[int, dict | None], unresolved: int,
-                checks: dict[str, str | None], review: tuple[int, str | None] | None = None) -> dict:
+                checks: dict[str, str | None], review: tuple[int, str | None] | None = None,
+                plans: dict[str, bool] | None = None) -> dict:
     """The facts file, from the API data. Numbers that are not issues are left out. The review loop
-    facts are written only when the caller named a reviewer workflow."""
+    facts are written only when the caller named a reviewer workflow. `plans` says, for each intent that
+    a linked issue names, whether its plan exists at the commit."""
     linked = [
         {cg.ISSUE_NUMBER: number, cg.ISSUE_STATE: issue[ISSUE_STATE]}
         for number, issue in issues.items()
@@ -235,6 +257,7 @@ def build_facts(pr: dict, files: list[dict], issues: dict[int, dict | None], unr
         cg.FACT_FALSE_FAILURES: false_failures(text),
         cg.FACT_DROPPED_FINDINGS: finding_lines(text)[0],
         cg.FACT_FALSE_FINDINGS: finding_lines(text)[1],
+        cg.FACT_INTENTS: [{cg.INTENT_PATH: path, cg.INTENT_PLAN: bool(exists)} for path, exists in (plans or {}).items()],
         **loop,
     }
 
@@ -339,7 +362,9 @@ def collect(repo: str, number: int, given: dict[str, str], run_names: list[str],
                           f"?event={EVENT_PULL_REQUEST}&branch={branch}&per_page={PAGE_SIZE}")
         comments = github.pages(f"/repos/{repo}/issues/{number}/comments")
         review = (review_rounds(runs.get(WORKFLOW_RUNS, []), pr), highest_severity(comments, author))
-    return build_facts(pr, files, issues, unresolved, checks, review)
+    plans = {intent: github.get(f"/repos/{repo}/contents/{cg.plan_of(intent)}?ref={commit}", optional=True) is not None
+             for intent in intent_paths(issues)}
+    return build_facts(pr, files, issues, unresolved, checks, review, plans)
 
 
 def put_record(repo: str, number: int, record: dict, github: GitHub, author: str) -> str:

@@ -46,6 +46,10 @@ refusals = 3
 [review]
 threshold = "medium"
 
+# The Build phase: each work item has its plan, intents/<part>.plan.md, before the code.
+[build]
+plan_before_code = true
+
 [documents]
 necessary = ["docs/product.md"]
 code_paths = ["charter/**"]

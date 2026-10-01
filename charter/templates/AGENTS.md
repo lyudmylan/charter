@@ -20,7 +20,12 @@ path of the shell while the plugin is enabled.
 
 A work item has an intent in `intents/<part>.md`: the goal, what is in scope, what is out of scope, and
 the acceptance checks. `intents/_template.md` is the form. A person approves the intent through a change
-request before the work starts. The skill `tracker` writes the issue and the intent. [tiers.high.paths]
+request before the work starts. The skill `tracker` writes the issue and the intent; the issue names the
+intent with one line, `Intent: intents/<part>.md`. [tiers.high.paths]
+Before the code, the plan `intents/<part>.plan.md`: the steps, the files to change, the tests to add, in
+the words of the author. The agent stops and asks the person who holds the work item to accept it; the
+code starts after the acceptance. The verdict checks that the plan exists; a change request that changes
+only intents needs no plan. [build.plan_before_code]
 
 ## Before a push
 
