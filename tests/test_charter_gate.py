@@ -246,6 +246,34 @@ class Verdict(Temp):
         self.assertEqual(data[cg.JSON_KEY_TIER], "low")
         self.assertEqual([g[cg.JSON_KEY_GATE] for g in data[cg.JSON_KEY_GATES]], [cg.CMD_LINK, cg.CMD_DOCUMENTS])
 
+    def test_plan_before_code(self):
+        """plan-before-the-code, check 1."""
+        with_flag = self.dir / "repo-with-plan-flag.toml"
+        with_flag.write_text(REPO.read_text() + f"\n[build]\n{cg.FIELD_PLAN_BEFORE_CODE.split('.')[1]} = true\n")
+        args = [f"--{cc.ARG_CONTRACT}", str(with_flag), f"--{cc.ARG_SOURCE}", str(ORG)]
+        intent = {cg.INTENT_PATH: "intents/app.md", cg.INTENT_PLAN: False}
+
+        code, out = run(cg.CMD_VERDICT, f"--{cg.ARG_FACTS}", str(self.facts(**{cg.FACT_INTENTS: [intent]})), *args)
+        self.assertEqual(code, cc.FAIL)
+        self.assertIn("plan: intents/app.plan.md is missing", out)
+
+        code, out = run(cg.CMD_VERDICT, f"--{cg.ARG_FACTS}", str(self.facts(**{cg.FACT_INTENTS: [{**intent, cg.INTENT_PLAN: True}]})), *args)
+        self.assertEqual(code, cc.PASS, out)
+        self.assertIn("plan: intents/app.plan.md exists", out)
+
+        code, out = run(cg.CMD_VERDICT, f"--{cg.ARG_FACTS}", str(self.facts()), *args)
+        self.assertEqual(code, cc.FAIL)
+        self.assertIn("plan: no linked issue names an intent", out)
+
+        intents_only = {cg.FACT_CHANGED_FILES: ["intents/app.md"]}
+        code, out = run(cg.CMD_VERDICT, f"--{cg.ARG_FACTS}", str(self.facts(**intents_only)), *args)
+        self.assertEqual(code, cc.PASS, out)
+        self.assertIn("plan: not needed, the change is the Plan phase", out)
+
+        code, out = self.verdict(**{cg.FACT_INTENTS: [intent]})     # the sample contract has no flag
+        self.assertEqual(code, cc.PASS, out)
+        self.assertNotIn("plan:", out)
+
 
 class ReviewLoop(Temp):
     """The sample repo: review_loop 3, threshold medium."""

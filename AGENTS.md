@@ -14,6 +14,14 @@ source. Each rule below ends with the identifier of its rule in the contract.
 - On GitHub, the workflows `tests` and `verdict` run on each change request. A red check "verdict"
   blocks the merge; its reasons are in the check and in the job log. [checks.quality]
 
+## Before the code
+
+A work item has an intent, `intents/<part>.md`, approved through a change request; its issue names it
+with one line, `Intent: intents/<part>.md`. Before the code, the plan `intents/<part>.plan.md`: the steps,
+the files to change, the tests to add, in the words of the author, accepted by the person who holds the
+work item. The verdict checks that the plan exists. A change request that changes only intents needs no
+plan: that is the Plan phase itself. [build.plan_before_code]
+
 ## Before a push
 
 Two commands must pass: `python3 charter/scripts/charter_gate.py quality --contract charter.toml` runs the

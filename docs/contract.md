@@ -45,6 +45,7 @@ any of its patterns. The `instructions` and `text` commands read this from the s
 | `limits.review_loop` | limit | Rounds between author and reviewer before a person decides |
 | `limits.refusals` | limit | Refusals in sequence before the agent stops |
 | `review.threshold` | choice | `blocker`, `high`, `medium`, or `low`: the lowest severity of a finding that keeps the review loop open. Without a value: `medium` |
+| `build.plan_before_code` | flag | Each work item has its plan, `intents/<part>.plan.md`, before the code; the verdict checks that it exists |
 | `tiers.<tier>.paths` | set | Path patterns of the files in the tier |
 | `tiers.<tier>.review` | choice | `light` or `deep` |
 | `tiers.<tier>.approver` | choice | `agent`, `engineer`, `team_lead`, or `leader` |
@@ -100,7 +101,7 @@ python3 charter/scripts/charter_gate.py verdict   --facts facts.json --contract 
 | `link` | The change request references an open issue. |
 | `documents` | No file under `documents.code_paths` changed; or a document in `documents.necessary` changed; or the change request records a reason. |
 | `quality` | Each command in `checks.quality` exits with 0. |
-| `verdict` | `link` and `documents` pass, all reported checks passed, no review thread is unresolved, and a tier matches the changed files. The first line of the output is `ready` or `not ready`; the reasons follow. The verdict names the tier and who merges. |
+| `verdict` | `link` and `documents` pass, all reported checks passed, no review thread is unresolved, a tier matches the changed files, and, when the contract sets `build.plan_before_code`, the plan of each intent that a linked issue names exists at the head commit (a change of intents alone needs no plan). The first line of the output is `ready` or `not ready`; the reasons follow. The verdict names the tier and who merges. |
 
 The facts file:
 
@@ -114,13 +115,16 @@ The facts file:
   "approvals": ["login"],
   "checks": {"tests": "pass"},
   "review_rounds": 2,
-  "review_highest_severity": "low"
+  "review_highest_severity": "low",
+  "intents": [{"path": "intents/app.md", "plan": true}]
 }
 ```
 
 A change request records a reason for a missing document change with one line in its text:
 `No document change: <reason>`. The collecting step copies it into the facts file. The two review
-fields are optional: the collecting step writes them when it is given the reviewer workflow.
+fields are optional: the collecting step writes them when it is given the reviewer workflow. The field
+`intents` lists the intents that the linked issues name with a line `Intent: intents/<part>.md`, and
+whether the plan `intents/<part>.plan.md` of each exists at the head commit.
 
 Three rules of the gates:
 
@@ -198,6 +202,7 @@ else does not count. The check "verdict" keeps the short text.
 | `dropped_findings` | The findings of the intent reviewer that the author dropped, from lines `Dropped finding: <reason>` |
 | `false_findings` | The findings of the intent reviewer that the leader marked as false, from lines `False finding: <reason>` |
 | `review_rounds`, `review_highest_severity` | The rounds of the review loop (0 before the first), and the severity line of the newest report (`null` before the first, or when the report has no such line) |
+| `intents` | The intents that the linked issues name, each with whether its plan exists |
 
 `charter_facts_github.py records --repo owner/name --last N` prints the records of the last merged
 change requests, one line each, for a sample review.

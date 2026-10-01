@@ -71,6 +71,12 @@ kind = "choice"
 order = ["blocker", "high", "medium", "low"]
 note = "The lowest severity of a finding that keeps the review loop open. Below it, the loop ends."
 
+# --- The Build phase ---
+
+[fields."build.plan_before_code"]
+kind = "flag"
+note = "Each work item has its plan, intents/<part>.plan.md, before the code. The verdict checks that the plan exists at the head commit."
+
 # --- Risk tiers. The segment "*" is the name of the tier. ---
 
 [fields."tiers.*.paths"]

@@ -56,10 +56,17 @@ FACT_DROPPED_FINDINGS = "dropped_findings"   # optional: ["reason"], the finding
 FACT_FALSE_FINDINGS = "false_findings"       # optional: ["reason"], the findings of the reviewer that the leader marked as false
 FACT_REVIEW_ROUNDS = "review_rounds"         # optional: whole number, the completed runs of the reviewer on the change request
 FACT_REVIEW_SEVERITY = "review_highest_severity"   # optional: the last reported severity, or null before the first report
+FACT_INTENTS = "intents"                     # optional: [{"path": "intents/x.md", "plan": true}], from the linked issues
 # FACT_APPROVALS is optional and not checked in this version: the merge by the approver is the approval.
 ISSUE_NUMBER, ISSUE_STATE = "number", "state"
+INTENT_PATH, INTENT_PLAN = "path", "plan"
 STATE_OPEN = "open"
 CHECK_PASS = "pass"
+
+# The plan of a work item: next to its intent, accepted before the code.
+FIELD_PLAN_BEFORE_CODE = "build.plan_before_code"
+INTENTS_DIR = "intents/"
+INTENT_SUFFIX, PLAN_SUFFIX = ".md", ".plan.md"
 
 # The review loop. A finding at the threshold or above keeps the loop open; the loop ends below it,
 # or when the rounds reach the limit. Then a person decides. Shadow mode: the loop blocks nothing yet.
@@ -90,7 +97,7 @@ ARG_RECORD, ARG_SCRIPTS_VERSION = "record", "scripts_version"
 # The evidence record: the verdict, plus these fields.
 RECORD_FORM = 1
 RECORD_KEYS = ("record_form", "change_request", "time", "scripts_version", "false_failures", "dropped_findings", "false_findings",
-               FACT_REVIEW_ROUNDS, FACT_REVIEW_SEVERITY)
+               FACT_REVIEW_ROUNDS, FACT_REVIEW_SEVERITY, FACT_INTENTS)
 
 MSG = {
     "facts_not_json": "not JSON: {path}, {error}",
@@ -125,6 +132,10 @@ MSG = {
     "review_open": "review loop: {where}, highest open severity {severity}: a finding at {threshold} or above keeps the loop open, the author answers",
     "review_limit": "review loop: {where}, highest open severity {severity}: the limit is reached, a person decides",
     "review_closed": "review loop: {where}, highest open severity {severity}: the loop is closed",
+    "plan_intents_only": "plan: not needed, the change is the Plan phase (only files under {dir})",
+    "plan_no_intent": "plan: no linked issue names an intent (a line `Intent: {dir}<part>{suffix}` in the issue)",
+    "plan_missing": "plan: {plan} is missing",
+    "plan_ok": "plan: {plan} exists",
 }
 
 
@@ -196,7 +207,20 @@ def load_facts(path: Path) -> dict:
         raise cc.CannotRun(msg("facts_bad_value", key=FACT_REVIEW_ROUNDS, path=path))
     if facts.get(FACT_REVIEW_SEVERITY) not in (None, *SEVERITIES):
         raise cc.CannotRun(msg("facts_bad_value", key=FACT_REVIEW_SEVERITY, path=path))
+    intents = facts.get(FACT_INTENTS, [])
+    if not (isinstance(intents, list) and all(_is_intent(i) for i in intents)):
+        raise cc.CannotRun(msg("facts_bad_value", key=FACT_INTENTS, path=path))
     return facts
+
+
+def _is_intent(value: object) -> bool:
+    return (isinstance(value, dict) and isinstance(value.get(INTENT_PATH), str)
+            and isinstance(value.get(INTENT_PLAN), bool))
+
+
+def plan_of(intent: str) -> str:
+    """The plan of an intent: `intents/<part>.plan.md` next to `intents/<part>.md`."""
+    return intent[:-len(INTENT_SUFFIX)] + PLAN_SUFFIX if intent.endswith(INTENT_SUFFIX) else intent + PLAN_SUFFIX
 
 
 def effective(args) -> cc.Effective:
@@ -349,12 +373,32 @@ def review_loop_state(facts: dict, e: cc.Effective) -> str:
     return msg("review_open", **values)
 
 
+def plan_state(facts: dict, e: cc.Effective) -> tuple[bool, list[str]]:
+    """The plan of the work item exists before the code. Only when the contract sets the flag. A change
+    of intents alone is the Plan phase and needs no plan. It checks the result, not the order of commits."""
+    if not e.values.get(FIELD_PLAN_BEFORE_CODE):
+        return True, []
+    changed = facts[FACT_CHANGED_FILES]
+    if changed and all(f.startswith(INTENTS_DIR) for f in changed):
+        return True, [msg("plan_intents_only", dir=INTENTS_DIR)]
+    intents = facts.get(FACT_INTENTS, [])
+    if not intents:
+        return False, [msg("plan_no_intent", dir=INTENTS_DIR, suffix=INTENT_SUFFIX)]
+    missing = [plan_of(i[INTENT_PATH]) for i in intents if not i[INTENT_PLAN]]
+    present = [plan_of(i[INTENT_PATH]) for i in intents if i[INTENT_PLAN]]
+    reasons = [msg("plan_missing", plan=p) for p in missing] + [msg("plan_ok", plan=p) for p in present]
+    return not missing, reasons
+
+
 def gate_verdict(facts: dict, e: cc.Effective) -> tuple[bool, list[str], dict]:
     gates = [gate_link(facts), gate_documents(facts, e)]
     reasons: list[str] = []
     passed = all(g.passed for g in gates)
     for g in gates:
         reasons += [f"{g.gate}: {r}" for r in g.reasons]
+    plan_passed, plan_reasons = plan_state(facts, e)
+    passed = passed and plan_passed
+    reasons += plan_reasons
 
     checks: dict[str, str] = facts[FACT_CHECKS]
     not_passed = sorted(name for name, state in checks.items() if state != CHECK_PASS)
@@ -445,6 +489,7 @@ def build_record(facts: dict, verdict: str, origin: str, reasons: list[str], det
         RECORD_KEYS[6]: facts.get(FACT_FALSE_FINDINGS, []),
         RECORD_KEYS[7]: facts.get(FACT_REVIEW_ROUNDS, 0),
         RECORD_KEYS[8]: facts.get(FACT_REVIEW_SEVERITY),
+        RECORD_KEYS[9]: facts.get(FACT_INTENTS, []),
     }
 
 

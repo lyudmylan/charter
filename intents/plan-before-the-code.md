@@ -1,6 +1,6 @@
 # Intent: plan.md, the implementation plan of a work item, accepted before the code
 
-Work item: #35. Status: planned. Approval: a person merges the change request that adds this file.
+Work item: #35. Status: done. Approval: a person merges the change request that adds this file.
 
 ## Goal
 
@@ -19,7 +19,9 @@ Anthropic describes for the Build phase.
   exists. It checks the result, not the sequence of commits. With the flag on, a change request whose issue
   names no intent is not ready. A change request that changes only files under `intents/` needs no plan:
   that is the Plan phase itself.
-- The contract: a flag `build.plan_before_code`, which an organization can lock.
+- The contract: a flag `build.plan_before_code`, which an organization can lock. This repo and the
+  template of the setup step set it. The schema changes, so both plugins become 0.3.0; an adopter takes
+  the gate when its contract names that version.
 
 ## Out of scope
 

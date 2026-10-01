@@ -65,6 +65,22 @@ class Text(unittest.TestCase):
         self.assertEqual(cf.finding_lines(text), (["the check is a command, not a test"], ["the scope is bounded"]))
         self.assertEqual(cf.finding_lines("none"), ([], []))
 
+    def test_intent_path_from_issue(self):
+        """plan-before-the-code, check 2."""
+        issues = {
+            22: {cf.ISSUE_BODY: "## Goal\n\nIntent: intents/app.md\n\nmore", cf.ISSUE_STATE: "open"},
+            23: {cf.ISSUE_BODY: "Intent: `intents/app.md`\nIntent: intents/other.md", cf.ISSUE_STATE: "open"},
+            24: {cf.ISSUE_BODY: "Intent: intents/pr.md", cf.ISSUE_STATE: "open", cf.ISSUE_IS_PR: {}},     # a change request
+            25: None,                                                                                   # not an issue
+            26: {cf.ISSUE_BODY: "no line here, and intents/not-a-line.md in prose", cf.ISSUE_STATE: "open"},
+        }
+        self.assertEqual(cf.intent_paths(issues), ["intents/app.md", "intents/other.md"])
+        self.assertEqual(cg.plan_of("intents/app.md"), "intents/app.plan.md")
+        facts = cf.build_facts({cf.PR_NUMBER: 7, cf.PR_TITLE: "t", cf.PR_BODY: ""}, [], {}, 0, {},
+                               plans={"intents/app.md": True, "intents/other.md": False})
+        self.assertEqual(facts[cg.FACT_INTENTS], [{cg.INTENT_PATH: "intents/app.md", cg.INTENT_PLAN: True},
+                                                  {cg.INTENT_PATH: "intents/other.md", cg.INTENT_PLAN: False}])
+
     def test_job_result_maps_to_check_state(self):
         """code-host, check 1."""
         self.assertEqual(cf.check_state("success"), cg.CHECK_PASS)

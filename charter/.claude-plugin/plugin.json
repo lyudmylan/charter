@@ -1,6 +1,6 @@
 {
   "name": "charter",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "The core of Charter: the contract, the gates, the evidence record. Engineering discipline for human-agent teams.",
   "license": "Apache-2.0"
 }
