@@ -26,7 +26,10 @@ Anthropic describes for the Build phase.
 
 ## Out of scope
 
-A check of the content of the plan by a model.
+A check of the content of the plan by a model. A plan for the change request that adds the rule: it is
+the bootstrap, its code was written before the rule existed, and the verdict of that change request runs
+under the contract of the main branch, where the flag is not set yet. The first change under the rule is
+the next one.
 
 ## Acceptance checks
 
@@ -41,5 +44,6 @@ A check of the content of the plan by a model.
 
 ## Manual checks
 
-3. The real change of the second repo carries its plan before its code. who: the leader. Not automatic: the
-   second repo is outside this repo.
+3. The next real change of this repo carries its plan before its code, accepted by the leader before the
+   code. who: the leader. Not automatic: the order of the acceptance and the code is a fact of the
+   conversation, not of the repo.
