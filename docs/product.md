@@ -27,8 +27,8 @@ three questions:
 - A **gate** is a check that must pass before the next step. It is a deterministic
   script that checks the result, not the method.
 - An **acceptance check** states what "it works" means for one work item, in a form that
-  a script can run. It lives in the repo as a [scenario file](../tests/scenarios/), and a
-  person approves it before the work starts.
+  a script can run. It is part of the [intent](../intents/) of the work item, and a person
+  approves it before the work starts.
 - A **risk tier** says how dangerous a change is, for example low or high. It sets the
   depth of the review and who approves.
 - The **evidence record** keeps what each gate found for every change, and the cost.
@@ -57,12 +57,12 @@ Charter adds in each phase.
 
 | Phase | Artifacts of Charter | Verification | Included in Charter |
 |---|---|---|---|
-| Plan | The product document: the direction. The file of a work item: goal, in scope, out of scope, acceptance checks. The issue tracker: milestone, epic, issue. | A person approves the file of the work item. | Yes |
-| Design | The architecture map. The decision records. | To decide | Roadmap |
-| Build | The change on a branch. The repository instructions. The gates, as scripts. | The acceptance checks pass. The quality checks pass before the push. | Yes |
-| Test | The tests and the acceptance checks, which the agent cannot change alone. The evals of the skills. | A reviewer that is not the author. The check "verdict". | Yes |
-| Deploy | The evidence record. The merge by the approver of the risk tier. The release stages. | A person decides production. | Partly |
-| Maintain | Incidents as issues. Each failure becomes a check. Each model upgrade is tested. | Monitoring | Partly |
+| Plan | `product.md`: the direction. The [intent](../intents/) of a work item: goal, in scope, out of scope, acceptance checks. The issue tracker: milestone, epic, issue. | A person approves the intent through a change request. | Yes |
+| Design | The design spec of the work item. The architecture map, kept current. | A person approves the design spec. | Roadmap |
+| Build | `plan.md`, accepted before the code. The change on a branch. The repository instructions. The gates, as code. | The plan exists before the code. The quality checks pass before the push. | Partly |
+| Test | The acceptance checks, which the agent cannot change alone. The tests. The evals of the skills. | A reviewer that is not the author. The check "verdict". | Yes |
+| Deploy | The evidence record. The merge by the approver of the risk tier. The release stages to production. | A person decides production. | Partly |
+| Maintain | A failure re-enters the cycle as an intent and ends as a check. Each model upgrade is tested. | Monitoring. | Partly |
 
 Every phase has its own verification. The issue tracker connects all phases, from the plan to
 production and back.
