@@ -28,6 +28,7 @@ the team owns the skills, and a person stays in control without approving every 
 | `scripts/charter_gate.py` | The gates of a change: link, documents, quality, verdict |
 | `scripts/charter_facts_github.py`, `.github/workflows/` | The gates on GitHub: the only parts that know the code host |
 | `tests/` | The tests, the sample files, and the scenarios |
+| `charter-practices/` | The practices plugin: light skills with their eval cases. To use it in a session: `claude --plugin-dir charter-practices` |
 
 ## Checks
 
