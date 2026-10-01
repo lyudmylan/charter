@@ -41,6 +41,8 @@ class Verdict(unittest.TestCase):
         """review-loop, check 4."""
         self.assertIn("workflows: [tests, review-intents]", self.text)
         self.assertIn("--review-workflow review-intents.yml", self.text)
+        self.assertIn("concurrency:\n  group: verdict-", self.text)
+        self.assertIn("--schema change/charter/schema/contract.toml all change/charter.toml", self.text)
 
 
 if __name__ == "__main__":

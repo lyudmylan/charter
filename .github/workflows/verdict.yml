@@ -69,11 +69,11 @@ jobs:
           readarray -t S <<< "$SOURCE"
           git clone --quiet "${S[0]/https:\/\//https://x-access-token:${CHARTER_ORG_TOKEN}@}" "${S[3]}"
 
-      - name: Check the contract files of the change request, with the scripts of main
+      - name: Check the contract files of the change request, with the scripts of main and the schema of the change
         id: contract
         run: |
           set +e
-          python3 charter/scripts/charter_check.py all change/charter.toml
+          python3 charter/scripts/charter_check.py --schema change/charter/schema/contract.toml all change/charter.toml
           CODE=$?
           echo "result=$([ $CODE -eq 0 ] && echo success || echo failure)" >> "$GITHUB_OUTPUT"
 

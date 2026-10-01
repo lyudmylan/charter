@@ -140,7 +140,7 @@ Two workflows run on each change request of this repo. They and the collecting s
 | Workflow | Trust | What it does |
 |---|---|---|
 | `tests` | Runs the code of the change request. It gets no secret. | Runs the quality checks of the contract with `--repo-only`. |
-| `verdict` | Runs from the main branch, with the scripts of the main branch. It never runs the code of the change request. | Reads the files of the change request as data, fetches the organization source from the address in main, runs the contract checks on those files, collects the facts, runs the verdict, and publishes the check "verdict" on the change request. |
+| `verdict` | Runs from the main branch, with the scripts of the main branch. It never runs the code of the change request. | Reads the files of the change request as data, fetches the organization source from the address in main, runs the contract checks on those files with the schema of the change request (a data file, so that a change request can add a field and use it), collects the facts, runs the verdict, and publishes the check "verdict" on the change request. |
 
 The ruleset on `main` demands the check "verdict". The workflow `verdict` starts when `tests` or
 `review-intents` completes, so that the record carries the last round of the review, and it can also

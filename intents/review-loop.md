@@ -19,9 +19,12 @@ the contract ends the loop; the leader reads one line per change request, not th
   the author: wait for the reviewer, correct or drop each finding at the threshold or above, push, repeat
   by the stop rule, and report one line. It marks no finding as false: that is the leader's line.
 - Visible count. The collector counts the completed runs of the reviewer workflow on the change request
-  and reads the severity line of its report; the verdict prints one line on the loop and the record keeps
-  the two facts. The workflow `verdict` also starts when `review-intents` completes, so that the record
-  carries the last round. Shadow mode: the line changes no verdict.
+  and reads the severity line of its report; the verdict prints the line
+  `review loop: round <n> of <limit>, highest open severity <level>: ...` and the record keeps the two
+  facts. The workflow `verdict` also starts when `review-intents` completes, so that the record carries
+  the last round; its runs for one commit run one after the other. It reads the schema of the change
+  request as data, so that a change request can add a field and use it. Shadow mode: the line changes no
+  verdict.
 - The lock of a limit (#51). A locked limit is exact: a repo cannot set a smaller or a larger number,
   because the number of rounds before a person steps in is a policy of the owner of the lock.
 
@@ -61,5 +64,6 @@ change request, on the roadmap as #53.
 ## Manual checks
 
 6. On the change request that adds this file, the loop runs once by hand with the skill: the reviewer's
-   report carries severities and the closing line, the verdict prints the round, and the leader reads one
-   line. who: the leader. Not automatic: the run needs the token of the plan on GitHub.
+   report carries severities and the closing line, the author agent stops at the threshold and at the
+   limit as the skill says, and the leader reads one line. who: the leader. Not automatic: the run needs
+   the token of the plan on GitHub.
