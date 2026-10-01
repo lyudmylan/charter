@@ -16,6 +16,14 @@ CHECK_LINE = re.compile(r"^(\d+)\. ")
 PYTHON = "python3"
 HEADING_AUTOMATIC = "## Automatic checks"
 HEADING_MANUAL = "## Manual checks"
+STATUS_LINE = re.compile(r"^Work item: #\d+\. Status: (planned|done)\.", re.M)
+STATUS_DONE = "done"
+
+
+def status_of(text: str) -> str:
+    """planned: the tests may not exist yet. done, the default: they must exist."""
+    m = STATUS_LINE.search(text)
+    return m.group(1) if m else STATUS_DONE
 
 
 def check_blocks(section: str) -> list[tuple[str, str]]:
@@ -51,11 +59,14 @@ class Intents(unittest.TestCase):
             automatic = text.split(HEADING_AUTOMATIC, 1)[1].split(HEADING_MANUAL, 1)[0]
             blocks = check_blocks(automatic)
             self.assertTrue(blocks, f"{intent.name}: no automatic checks")
+            done = status_of(text) == STATUS_DONE
             for number, block in blocks:
                 refs = TEST_REF.findall(block)
                 commands = COMMAND_REF.findall(block)
                 with self.subTest(intent=intent.name, check=number):
                     self.assertTrue(refs or commands, f"{intent.name}: check {number} names no test and no command")
+                if not done:
+                    continue
                 for file, cls, method in refs:
                     with self.subTest(intent=intent.name, check=number, test=f"{cls}.{method}"):
                         module = load_module(ROOT / file)
@@ -65,6 +76,14 @@ class Intents(unittest.TestCase):
                     if words and words[0] == PYTHON and len(words) > 1 and words[1].endswith(".py"):
                         with self.subTest(intent=intent.name, check=number, command=command):
                             self.assertTrue((ROOT / words[1]).is_file(), f"missing script {words[1]}")
+
+
+class PlannedIntents(unittest.TestCase):
+    def test_planned_intents_need_no_existing_test(self):
+        """planned-intents, check 1."""
+        self.assertEqual(status_of("# Intent: x\n\nWork item: #9. Status: planned. Approval: later.\n"), "planned")
+        self.assertEqual(status_of("# Intent: x\n\nWork item: #9. Status: done. Approval: later.\n"), "done")
+        self.assertEqual(status_of("# Intent: x\n\nWork item: #9. Approved by a person.\n"), "done")
 
 
 if __name__ == "__main__":
