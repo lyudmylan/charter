@@ -39,12 +39,17 @@ Other code hosts. A setup through a skill in a session; that comes when the plug
    test: `tests/test_setup.py::Setup.test_writes_a_valid_repo`
 2. In a folder where a file exists, the setup refuses to overwrite it and names it.
    test: `tests/test_setup.py::Setup.test_refuses_to_overwrite`
-3. The output names the three manual steps.
+3. The output names the manual steps of the scope: the secrets, the ruleset with the check "verdict", the
+   cache command, the quality command when none was given, the `@AGENTS.md` line when `CLAUDE.md` exists,
+   and the first intent.
    test: `tests/test_setup.py::Setup.test_prints_the_manual_steps`
 4. A repo that carries one of the project names of the organization passes the text check on its own name.
    test: `tests/test_charter_check.py::OwnName.test_the_name_of_the_repo_is_not_a_foreign_project_name`
+5. Each of the four commands exists in `charter/bin/` and is executable, and both manifests carry the same
+   version.
+   test: `tests/test_setup.py::Commands.test_the_four_commands_exist_and_the_manifests_agree`
 
 ## Manual checks
 
-5. The setup runs in the second repo, and its first change request gets the three checks. who: the leader.
+6. The setup runs in the second repo, and its first change request gets the three checks. who: the leader.
    Not automatic: the second repo is outside this repo.

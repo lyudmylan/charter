@@ -84,8 +84,9 @@ class Setup(Temp):
         code, out = run("--repo", "sample", "--source", "https://example.com/org/rules", "--source-version", "v1",
                         "--leader", "alice", "--target", str(self.dir))
         self.assertEqual(code, cc.PASS, out)
-        for step in ("CHARTER_ORG_TOKEN", 'the check "verdict" is required', "git clone https://example.com/org/rules",
-                     "checks.quality", f"Add the line `@{cs.INSTRUCTIONS_FILE}` to {cs.CLAUDE_FILE}"):
+        for step in ("CHARTER_ORG_TOKEN", "CLAUDE_CODE_OAUTH_TOKEN", 'the check "verdict" is required',
+                     "git clone https://example.com/org/rules", "checks.quality",
+                     f"Add the line `@{cs.INSTRUCTIONS_FILE}` to {cs.CLAUDE_FILE}", f"first intent from {cs.INTENT_TEMPLATE}"):
             self.assertIn(step, out)
 
     def test_a_quote_in_a_value_cannot_break_the_contract(self):
@@ -118,21 +119,37 @@ class Templates(Temp):
         self.assertIn("ref: ${{ github.event.repository.default_branch }}", verdict)
 
     def test_lifecycle_map_has_the_six_phases(self):
-        """default-lifecycle-map, check 1."""
+        """default-lifecycle-map, check 1: six phases, the tracker skill in Plan, the document points to the template."""
         self.assertEqual(self.setup()[0], cc.PASS)
         data = tomllib.loads((self.dir / cs.CONTRACT_FILE).read_text())
         self.assertEqual(tuple(data["lifecycle"]), PHASES)
         for phase in PHASES:
             self.assertIn("work", data["lifecycle"][phase])
             self.assertIn("builtin", data["lifecycle"][phase])
+        self.assertIn("skill tracker", data["lifecycle"]["plan"]["work"])
         own = tomllib.loads((ROOT / "charter.toml").read_text())
         self.assertEqual(tuple(own["lifecycle"]), PHASES, "this repo follows its own map")
+        self.assertIn("charter/templates/charter.toml", (ROOT / "docs" / "contract.md").read_text())
 
     def test_no_placeholder_survives(self):
         """setup-step, check 1: every written file is complete."""
         self.assertEqual(self.setup()[0], cc.PASS)
         for written in list(cs.WRITTEN.values()) + list(cs.WRITTEN_IF_MISSING.values()):
             self.assertNotIn("%{", (self.dir / written).read_text(), written)
+
+
+class Commands(unittest.TestCase):
+    def test_the_four_commands_exist_and_the_manifests_agree(self):
+        """setup-step, check 5."""
+        for name in ("charter-setup", "charter-check", "charter-gate", "charter-facts-github"):
+            path = ROOT / "charter" / "bin" / name
+            with self.subTest(command=name):
+                self.assertTrue(path.is_file(), name)
+                self.assertTrue(path.stat().st_mode & 0o111, f"{name} is not executable")
+                self.assertIn(f"scripts/{name.replace('-', '_')}.py", path.read_text())
+        core = json.loads(cs.MANIFEST.read_text())["version"]
+        practices = json.loads((ROOT / "charter-practices" / ".claude-plugin" / "plugin.json").read_text())["version"]
+        self.assertEqual(core, practices)
 
 
 if __name__ == "__main__":
