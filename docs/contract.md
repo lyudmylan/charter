@@ -17,12 +17,12 @@ missing. The environment variable `CHARTER_CACHE_DIR` moves the cache.
 ## Kinds and directions
 
 A lower owner can make a rule stricter. It cannot weaken a locked rule. The kind of a field says what
-"stricter" means.
+"stricter" means. Two kinds have no direction: a locked limit and a locked text stay equal.
 
 | Kind | Type | Stricter |
 |---|---|---|
 | `flag` | true or false | true |
-| `limit` | whole number | smaller |
+| `limit` | whole number | no direction; a locked limit stays equal: the number is a policy of its owner |
 | `count` | whole number | larger |
 | `set` | list of text | a superset |
 | `choice` | one value of an ordered list | a later value |
@@ -44,6 +44,7 @@ any of its patterns. The `instructions` and `text` commands read this from the s
 | `limits.acceptance_loop` | limit | Runs of the acceptance checks before the agent stops |
 | `limits.review_loop` | limit | Rounds between author and reviewer before a person decides |
 | `limits.refusals` | limit | Refusals in sequence before the agent stops |
+| `review.threshold` | choice | `blocker`, `high`, `medium`, or `low`: the lowest severity of a finding that keeps the review loop open. Without a value: `medium` |
 | `tiers.<tier>.paths` | set | Path patterns of the files in the tier |
 | `tiers.<tier>.review` | choice | `light` or `deep` |
 | `tiers.<tier>.approver` | choice | `agent`, `engineer`, `team_lead`, or `leader` |
@@ -77,7 +78,7 @@ any of its patterns. The `instructions` and `text` commands read this from the s
 | Acceptance check | The issue in the tracker. Not a field: it belongs to one work item. |
 | Risk tier | `tiers.<tier>.*` |
 | Evidence record | The output of the checker, and later the record on the change request |
-| Stop rules | `limits.*` |
+| Stop rules | `limits.*`, and `review.threshold` for the review loop |
 | Owner of a rule | The file that holds it, and `[locks]` |
 | Lifecycle map | `lifecycle.<phase>.*` |
 
@@ -110,12 +111,15 @@ The facts file:
   "reason_for_no_document_change": null,
   "unresolved_review_threads": 0,
   "approvals": ["login"],
-  "checks": {"tests": "pass"}
+  "checks": {"tests": "pass"},
+  "review_rounds": 2,
+  "review_highest_severity": "low"
 }
 ```
 
 A change request records a reason for a missing document change with one line in its text:
-`No document change: <reason>`. The collecting step copies it into the facts file.
+`No document change: <reason>`. The collecting step copies it into the facts file. The two review
+fields are optional: the collecting step writes them when it is given the reviewer workflow.
 
 Three rules of the gates:
 
@@ -138,8 +142,9 @@ Two workflows run on each change request of this repo. They and the collecting s
 | `tests` | Runs the code of the change request. It gets no secret. | Runs the quality checks of the contract with `--repo-only`. |
 | `verdict` | Runs from the main branch, with the scripts of the main branch. It never runs the code of the change request. | Reads the files of the change request as data, fetches the organization source from the address in main, runs the contract checks on those files, collects the facts, runs the verdict, and publishes the check "verdict" on the change request. |
 
-The ruleset on `main` demands the check "verdict". The workflow `verdict` starts when `tests`
-completes, and it can also start by hand for one change request. When a reviewer resolves the last
+The ruleset on `main` demands the check "verdict". The workflow `verdict` starts when `tests` or
+`review-intents` completes, so that the record carries the last round of the review, and it can also
+start by hand for one change request. When a reviewer resolves the last
 review thread, run it by hand, or push a commit: a resolved thread starts no run.
 
 The secret `CHARTER_ORG_TOKEN` is a fine-grained token with read access to the organization source
@@ -155,6 +160,20 @@ posts one comment: a table with one row per intent, and the findings. Shadow mod
 blocks nothing; a person merges. It runs with a token of the owner's subscription, the secret
 `CLAUDE_CODE_OAUTH_TOKEN`, and with read-only tools plus the comment commands. A change request from a
 fork gets no secret and no review.
+
+### The review loop
+
+Each finding carries a severity: `blocker`, `high`, `medium`, or `low`; the report ends with the line
+`Highest open severity: <level>`. The author answers each finding at `review.threshold` or above: a
+correction, or a line `Dropped finding: <reason>` in the change request, which closes the finding for the
+next round. The skill `charter-practices/skills/review-loop/SKILL.md` is the author side of the loop, for
+the agent in the session of the author.
+
+The loop ends when the highest open severity is below the threshold, or when the rounds reach
+`limits.review_loop`; then a person decides, with the merge. A round is one completed run of the reviewer
+on the change request; the collecting step counts them and reads the severity line, and the verdict
+prints `review loop: round <n> of <limit>, highest open severity <level>: ...`. In shadow mode, this line
+changes no verdict.
 
 ## The evidence record
 
@@ -177,6 +196,7 @@ else does not count. The check "verdict" keeps the short text.
 | `false_failures` | What a person recorded with a line `False failure: <gate>: <reason>` in the change request |
 | `dropped_findings` | The findings of the intent reviewer that the author dropped, from lines `Dropped finding: <reason>` |
 | `false_findings` | The findings of the intent reviewer that the leader marked as false, from lines `False finding: <reason>` |
+| `review_rounds`, `review_highest_severity` | The rounds of the review loop (0 before the first), and the severity line of the newest report (`null` before the first, or when the report has no such line) |
 
 `charter_facts_github.py records --repo owner/name --last N` prints the records of the last merged
 change requests, one line each, for a sample review.

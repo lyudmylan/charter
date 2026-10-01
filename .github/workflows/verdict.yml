@@ -5,7 +5,7 @@ name: verdict
 
 on:
   workflow_run:
-    workflows: [tests]
+    workflows: [tests, review-intents]
     types: [completed]
   workflow_dispatch:
     inputs:
@@ -18,6 +18,12 @@ permissions:
   pull-requests: write
   issues: write
   checks: write
+
+# A push that touches the intents starts two runs, after `tests` and after `review-intents`. They run
+# one after the other, so that the record and the check of one commit are not written at the same time.
+concurrency:
+  group: verdict-${{ github.event.workflow_run.head_sha || inputs.pr }}
+  cancel-in-progress: false
 
 jobs:
   verdict:
@@ -82,6 +88,7 @@ jobs:
           --pr "$PR_NUMBER" --sha "$PR_SHA"
           --check "contract=$CONTRACT_RESULT"
           --check-run tests
+          --review-workflow review-intents.yml
           --out facts.json
 
       - name: Verdict

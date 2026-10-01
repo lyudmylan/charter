@@ -31,6 +31,27 @@ class IntentReviewSkill(unittest.TestCase):
         """intent-reviewer, check 2."""
         check_skill(self, "intent-review")
 
+    def test_severity_and_the_closing_line(self):
+        """review-loop, check 1: each severity is defined, and the report ends with the fixed line."""
+        text = (SKILLS / "intent-review" / "SKILL.md").read_text()
+        for level in ("blocker", "high", "medium", "low"):
+            self.assertIn(f"`{level}`", text)
+        self.assertIn("`Highest open severity: blocker|high|medium|low|none`", text)
+        self.assertIn("Dropped finding:", text)
+
+
+class ReviewLoopSkill(unittest.TestCase):
+    def test_size_and_description(self):
+        """review-loop, check 2."""
+        check_skill(self, "review-loop")
+
+    def test_the_stop_rule_names_the_two_fields(self):
+        """review-loop, check 2: the skill reads the threshold and the limit from the contract."""
+        text = (SKILLS / "review-loop" / "SKILL.md").read_text()
+        self.assertIn("`review.threshold`", text)
+        self.assertIn("`limits.review_loop`", text)
+        self.assertIn("Do not push a round beyond the limit", text)
+
 
 if __name__ == "__main__":
     unittest.main()

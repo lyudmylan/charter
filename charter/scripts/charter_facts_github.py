@@ -12,6 +12,8 @@ Commands:
           [--sha SHA]                                   The commit that the facts describe.
           [--check name=result]...                      A check result given by the caller.
           [--check-run name]...                         A check read from the check runs of the head commit.
+          [--review-workflow FILE]                      Count the completed runs of this reviewer workflow on the
+                                                        change request, and read the severity of its report.
 
 The token comes from the environment variable GITHUB_TOKEN. The workflow of GitHub sets it.
 
@@ -66,6 +68,12 @@ REASON_LINE = re.compile(r"^No document change:\s*(.+?)\s*$", re.IGNORECASE | re
 FALSE_FAILURE_LINE = re.compile(r"^False failure:\s*([a-z0-9_-]+)\s*:\s*(.+?)\s*$", re.IGNORECASE | re.MULTILINE)
 DROPPED_FINDING_LINE = re.compile(r"^Dropped finding:\s*(.+?)\s*$", re.IGNORECASE | re.MULTILINE)
 FALSE_FINDING_LINE = re.compile(r"^False finding:\s*(.+?)\s*$", re.IGNORECASE | re.MULTILINE)
+
+# The report of the intent reviewer: one comment by the workflow account, with the marker of the skill.
+REVIEW_MARKER = "<!-- charter-intent-review -->"
+SEVERITY_LINE = re.compile(r"^Highest open severity:\s*(" + "|".join(cg.SEVERITIES) + r")\b", re.IGNORECASE | re.MULTILINE)
+WORKFLOW_RUNS, RUN_CREATED, RUN_EVENT, EVENT_PULL_REQUEST = "workflow_runs", "created_at", "event", "pull_request"
+PR_CREATED, PR_HEAD_REF = "created_at", "ref"
 
 # The record comment on a change request.
 RECORD_MARKER = "<!-- charter-record -->"
@@ -134,6 +142,25 @@ def finding_lines(text: str) -> tuple[list[str], list[str]]:
     return DROPPED_FINDING_LINE.findall(text or ""), FALSE_FINDING_LINE.findall(text or "")
 
 
+def highest_severity(comments: list[dict], author: str) -> str | None:
+    """The severity line of the newest report of the reviewer; None before the first report or when the
+    newest report has no such line. The API lists the comments oldest first; a reviewer that posts a new
+    comment instead of an update must not leave an old severity in force."""
+    for comment in reversed(comments):
+        body = comment.get(COMMENT_BODY) or ""
+        if (comment.get(COMMENT_USER) or {}).get(USER_LOGIN) == author and REVIEW_MARKER in body:
+            match = SEVERITY_LINE.search(body)
+            return match.group(1).lower() if match else None
+    return None
+
+
+def review_rounds(runs: list[dict], pr: dict) -> int:
+    """The completed, successful runs of the reviewer since the change request was opened: one per round."""
+    opened = pr.get(PR_CREATED) or ""
+    return sum(1 for run in runs
+               if run.get(RUN_CONCLUSION) == CONCLUSION_SUCCESS and (run.get(RUN_CREATED) or "") >= opened)
+
+
 def comment_body(record: dict) -> str:
     """The comment that carries the record: a marker, a short table, and the JSON."""
     checks = ", ".join(f"{name} {state}" for name, state in record.get(cg.FACT_CHECKS, {}).items())
@@ -188,14 +215,16 @@ def conclusions(runs: list[dict], names: list[str]) -> dict[str, str | None]:
 
 
 def build_facts(pr: dict, files: list[dict], issues: dict[int, dict | None], unresolved: int,
-                checks: dict[str, str | None]) -> dict:
-    """The facts file, from the API data. Numbers that are not issues are left out."""
+                checks: dict[str, str | None], review: tuple[int, str | None] | None = None) -> dict:
+    """The facts file, from the API data. Numbers that are not issues are left out. The review loop
+    facts are written only when the caller named a reviewer workflow."""
     linked = [
         {cg.ISSUE_NUMBER: number, cg.ISSUE_STATE: issue[ISSUE_STATE]}
         for number, issue in issues.items()
         if issue is not None and ISSUE_IS_PR not in issue
     ]
     text = f"{pr.get(PR_TITLE) or ''}\n{pr.get(PR_BODY) or ''}"
+    loop = {} if review is None else {cg.FACT_REVIEW_ROUNDS: review[0], cg.FACT_REVIEW_SEVERITY: review[1]}
     return {
         cg.FACT_CHANGE_REQUEST: pr[PR_NUMBER],
         cg.FACT_LINKED_ISSUES: linked,
@@ -206,6 +235,7 @@ def build_facts(pr: dict, files: list[dict], issues: dict[int, dict | None], unr
         cg.FACT_FALSE_FAILURES: false_failures(text),
         cg.FACT_DROPPED_FINDINGS: finding_lines(text)[0],
         cg.FACT_FALSE_FINDINGS: finding_lines(text)[1],
+        **loop,
     }
 
 
@@ -285,7 +315,7 @@ def find(repo: str, github: GitHub, number: int | None, sha: str | None) -> tupl
 
 
 def collect(repo: str, number: int, given: dict[str, str], run_names: list[str], github: GitHub,
-            sha: str | None = None) -> dict:
+            sha: str | None = None, review_workflow: str | None = None, author: str = RECORD_AUTHOR) -> dict:
     """The facts of a change request. With a commit, the files and the check runs are those of that commit,
     so that they agree with the check that is published on it."""
     owner, name = repo.split("/", 1)
@@ -302,7 +332,14 @@ def collect(repo: str, number: int, given: dict[str, str], run_names: list[str],
     if run_names:
         runs = github.get(f"/repos/{repo}/commits/{commit}/check-runs?per_page={PAGE_SIZE}")
         checks.update(conclusions(runs.get(RUNS, []), run_names))
-    return build_facts(pr, files, issues, unresolved, checks)
+    review = None
+    if review_workflow:
+        branch = pr[PR_HEAD][PR_HEAD_REF]
+        runs = github.get(f"/repos/{repo}/actions/workflows/{review_workflow}/runs"
+                          f"?event={EVENT_PULL_REQUEST}&branch={branch}&per_page={PAGE_SIZE}")
+        comments = github.pages(f"/repos/{repo}/issues/{number}/comments")
+        review = (review_rounds(runs.get(WORKFLOW_RUNS, []), pr), highest_severity(comments, author))
+    return build_facts(pr, files, issues, unresolved, checks, review)
 
 
 def put_record(repo: str, number: int, record: dict, github: GitHub, author: str) -> str:
@@ -374,6 +411,8 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--check", action="append", default=[], help="name=result, given by the caller")
     p.add_argument("--check-run", action="append", default=[], help="name of a check run to read")
     p.add_argument("--sha", help="the commit that the facts describe; default: the current head")
+    p.add_argument("--review-workflow", help="the file name of the reviewer workflow, for the round count")
+    p.add_argument("--author", default=RECORD_AUTHOR, help="the account whose comment carries the review")
     p.add_argument("--out", type=Path, required=True)
     args = parser.parse_args(argv)
     try:
@@ -400,7 +439,8 @@ def main(argv: list[str] | None = None) -> int:
                           scripts=(record.get(cg.RECORD_KEYS[3]) or "unknown")[:12],
                           false=len(record.get(cg.RECORD_KEYS[4]) or [])))
             return cc.PASS
-        facts = collect(args.repo, args.pr, parse_checks(args.check), args.check_run, github, args.sha)
+        facts = collect(args.repo, args.pr, parse_checks(args.check), args.check_run, github, args.sha,
+                        args.review_workflow, args.author)
         args.out.write_text(json.dumps(facts, indent=2))
         print(msg("written", path=args.out, files=len(facts[cg.FACT_CHANGED_FILES]),
                   issues=len(facts[cg.FACT_LINKED_ISSUES]), threads=facts[cg.FACT_UNRESOLVED_THREADS],

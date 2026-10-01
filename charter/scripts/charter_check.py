@@ -115,7 +115,7 @@ MSG = {
     "lock_no_value": "{name}: locked field without value: {field}",
     "not_repo": "{name}: not a repo contract",
     "not_org": "{name}: not an organization file",
-    "weakens": "weakens locked rule {field}: organization {org!r}, repo {repo!r}",
+    "changes_lock": "changes locked rule {field}: organization {org!r}, repo {repo!r}",
     "source_not_found": "source not found: {address}. Populate the cache: {git} clone {address} {dir}",
     "bad_address": "the source address cannot be a cache path: {address}",
     "git_not_found": "{git} not found on this computer",
@@ -163,7 +163,7 @@ KINDS: dict[str, Kind] = {
              lambda org, repo, s: repo is True or org is False),
         Kind("limit", "expected a whole number of 0 or more",
              lambda v, s: _is_whole_number(v),
-             lambda org, repo, s: repo <= org),
+             lambda org, repo, s: repo == org),      # a locked limit is a policy: exact, not a bound
         Kind("count", "expected a whole number of 0 or more",
              lambda v, s: _is_whole_number(v),
              lambda org, repo, s: repo >= org),
@@ -414,7 +414,7 @@ def effective_contract(contract: Path, schema: Path, source: Path | None, cache_
     if org.errors:
         return Effective({}, fields, org.errors, origin, {})
     failures = [
-        msg("weakens", field=path, org=org.values[path], repo=value)
+        msg("changes_lock", field=path, org=org.values[path], repo=value)
         for path, value in repo.values.items()
         if path in org.locks and not KINDS[spec_of(path, fields)[ATTR_KIND]].stricter(org.values[path], value, spec_of(path, fields))
     ]

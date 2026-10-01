@@ -6,7 +6,7 @@
 # Each field has a kind. The kind gives its type and its direction:
 #
 #   flag    true or false. true is stricter.
-#   limit   a whole number. smaller is stricter.
+#   limit   a whole number. no direction: a locked limit must stay equal, it is a policy.
 #   count   a whole number. larger is stricter.
 #   set     a list of text. a superset is stricter.
 #   choice  one value from the ordered list "order". a later value is stricter.
@@ -63,6 +63,13 @@ note = "Rounds between the author and the reviewer before a person decides."
 [fields."limits.refusals"]
 kind = "limit"
 note = "Refusals in sequence before the agent stops."
+
+# --- The review loop ---
+
+[fields."review.threshold"]
+kind = "choice"
+order = ["blocker", "high", "medium", "low"]
+note = "The lowest severity of a finding that keeps the review loop open. Below it, the loop ends."
 
 # --- Risk tiers. The segment "*" is the name of the tier. ---
 

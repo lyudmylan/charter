@@ -42,6 +42,9 @@ acceptance_loop = 3
 review_loop = 3
 refusals = 3
 
+[review]
+threshold = "medium"
+
 [documents]
 necessary = ["docs/product.md"]
 code_paths = ["charter/**"]

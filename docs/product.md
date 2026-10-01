@@ -37,7 +37,8 @@ three questions:
   and one switch that stops all agents.
 
 A rule belongs to the organization, a team, a repository, or a person. A lower owner can
-make a rule stricter, but cannot weaken a locked rule. Only a person changes the
+make a rule stricter, but cannot weaken a locked rule; a locked limit is exact, because
+the number of rounds before a person steps in is a policy. Only a person changes the
 contract. A repository declares its issue tracker, code host, CI, and release stages, so
 Charter fits any set of tools.
 

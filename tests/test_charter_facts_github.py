@@ -83,6 +83,39 @@ class Text(unittest.TestCase):
         self.assertEqual(cf.conclusions(runs, ["tests", "missing"]), {"tests": "failure", "missing": None})
 
 
+class ReviewLoop(unittest.TestCase):
+    bot = {cf.COMMENT_USER: {cf.USER_LOGIN: cf.RECORD_AUTHOR}}
+
+    def test_highest_severity_from_the_report_of_the_workflow_account(self):
+        """review-loop, check 4."""
+        report = f"{cf.REVIEW_MARKER}\n**Intent review**\n...\nHighest open severity: Medium\n"
+        person = {**self.bot, cf.COMMENT_USER: {cf.USER_LOGIN: "alice"}, cf.COMMENT_BODY: report.replace("Medium", "blocker")}
+        self.assertEqual(cf.highest_severity([person, {**self.bot, cf.COMMENT_BODY: report}], cf.RECORD_AUTHOR), "medium")
+        older = {**self.bot, cf.COMMENT_BODY: report.replace("Medium", "high")}     # the API lists the oldest first
+        self.assertEqual(cf.highest_severity([older, {**self.bot, cf.COMMENT_BODY: report}], cf.RECORD_AUTHOR), "medium")
+        self.assertIsNone(cf.highest_severity([person], cf.RECORD_AUTHOR))
+        self.assertIsNone(cf.highest_severity([{**self.bot, cf.COMMENT_BODY: f"{cf.REVIEW_MARKER}\nno line"}], cf.RECORD_AUTHOR))
+
+    def test_rounds_are_the_successful_runs_since_the_change_request_opened(self):
+        """review-loop, check 4."""
+        pr = {cf.PR_CREATED: "2026-10-01T10:00:00Z"}
+        runs = [
+            {cf.RUN_CONCLUSION: cf.CONCLUSION_SUCCESS, cf.RUN_CREATED: "2026-10-01T12:00:00Z"},
+            {cf.RUN_CONCLUSION: "failure", cf.RUN_CREATED: "2026-10-01T11:00:00Z"},
+            {cf.RUN_CONCLUSION: cf.CONCLUSION_SUCCESS, cf.RUN_CREATED: "2026-10-01T10:30:00Z"},
+            {cf.RUN_CONCLUSION: cf.CONCLUSION_SUCCESS, cf.RUN_CREATED: "2026-09-30T10:00:00Z"},   # an older change request
+        ]
+        self.assertEqual(cf.review_rounds(runs, pr), 2)
+
+    def test_facts_carry_the_loop_only_when_a_reviewer_is_named(self):
+        """review-loop, check 4."""
+        pr = {cf.PR_NUMBER: 7, cf.PR_TITLE: "t", cf.PR_BODY: ""}
+        without = cf.build_facts(pr, [], {}, 0, {})
+        self.assertNotIn(cg.FACT_REVIEW_ROUNDS, without)
+        with_loop = cf.build_facts(pr, [], {}, 0, {}, review=(2, "low"))
+        self.assertEqual((with_loop[cg.FACT_REVIEW_ROUNDS], with_loop[cg.FACT_REVIEW_SEVERITY]), (2, "low"))
+
+
 class Facts(unittest.TestCase):
     def test_facts_from_api_data(self):
         """code-host, check 1: change requests and numbers that are no issue are left out."""
