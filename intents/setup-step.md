@@ -12,7 +12,10 @@ One command sets a repo up for Charter.
   name of the repo, the address and the version of the organization source, the issue tracker, the code
   host, the CI, and who holds the roles.
 - It writes: `charter.toml` from the template, `AGENTS.md`, the folder `intents/` with a template of an
-  intent, the two workflows for GitHub, `docs/architecture.md` and the design spec template.
+  intent, the two workflows for GitHub, and `docs/architecture.md` as an empty map. No design spec
+  template: the Design phase is on the roadmap.
+- The adopter runs it from the folder of the installed plugin, which `claude plugin list` shows, or from
+  a clone of the Charter repo at the version. The setup step says this in its help text.
 - It refuses to overwrite a file that exists, and says which.
 - It prints the manual steps: the secret for the organization source, the ruleset of the main branch
   with the required check "verdict", and the cache command for the computer.

@@ -11,10 +11,12 @@ that the gates run in CI from one source and an organization can lock the versio
 
 - A field `charter.version` in the repo contract: the version of the core plugin that the repo uses. The
   schema declares it; the checker validates it.
-- The workflow templates fetch the Charter repo at the tag of that version into a folder of the runner,
-  and run `charter/scripts/...` from there. The tag follows the convention of Claude Code for plugins in
-  one repo: `charter--v<version>`.
+- The workflow templates, which the setup step writes (#38), read `charter.version` with one line of
+  Python and `tomllib`, because the scripts are not on the runner yet; then they fetch the Charter repo at
+  the tag `charter--v<version>` into a folder of the runner, and run `charter/scripts/...` from there. The
+  tag convention is the one of the Claude Code documentation on plugin dependencies.
 - The two workflows of this repo keep their current form: this repo is the source itself.
+- This intent depends on #38 for the templates, and on the first tag, which the leader pushes by hand.
 
 ## Out of scope
 

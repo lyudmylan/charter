@@ -12,9 +12,13 @@ Anthropic describes for the Build phase.
 - The place: `intents/<part>.plan.md`, next to the intent of the work item.
 - The content: the steps, the files to change, the tests to add, in the words of the author. Written in
   plan mode, accepted by the person who holds the work item, committed before the code.
-- The gate: the collector finds the intent of a change request through its issue, and the verdict checks
-  that the plan of that intent exists in the repo at the head of the change request. It checks the
-  result, not the sequence of commits.
+- The link: the issue names its intent with one line, `Intent: intents/<part>.md`. The tracker skill
+  writes it.
+- The gate: the collector reads the intent path from the issue of the change request, and whether
+  `intents/<part>.plan.md` exists at the head commit, into the facts file. The verdict checks that the plan
+  exists. It checks the result, not the sequence of commits. With the flag on, a change request whose issue
+  names no intent is not ready. A change request that changes only files under `intents/` needs no plan:
+  that is the Plan phase itself.
 - The contract: a flag `build.plan_before_code`, which an organization can lock.
 
 ## Out of scope
@@ -33,4 +37,5 @@ A check of the content of the plan by a model.
 
 ## Manual checks
 
-3. The real change of the second repo carries its plan before its code. who: the leader.
+3. The real change of the second repo carries its plan before its code. who: the leader. Not automatic: the
+   second repo is outside this repo.
