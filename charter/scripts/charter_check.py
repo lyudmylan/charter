@@ -88,6 +88,7 @@ FIELD_TEXT_CHECKED = "documents.text_checked"
 # Identifiers in an instruction file: [a.b] or [a.b.c]. Only a mark whose first segment is a
 # field group of the schema counts; other bracketed text, such as a file name, is ignored.
 ID_PATTERN = re.compile(r"\[([a-z][a-z0-9_]*(?:\.[a-z0-9_]+)+)\]")
+FILE_SUFFIXES = (".toml", ".md", ".yml", ".yaml", ".json", ".py", ".txt")   # [charter.toml] is a file, not a rule
 
 # Output prefixes.
 OUT_PASS, OUT_FAIL, OUT_CANNOT_RUN, OUT_VALID, OUT_SOURCE = "pass", "fail", "cannot run", "valid", "source"
@@ -511,8 +512,7 @@ def cmd_instructions(args) -> int:
     if report_failures(e.failures) == FAIL:
         return FAIL
     text = read_text(args.file)
-    groups = {pattern.split(PATH_SEPARATOR)[0] for pattern in e.fields}
-    ids = {i for i in ID_PATTERN.findall(text) if i.split(PATH_SEPARATOR)[0] in groups}
+    ids = identifiers(text, e)
     if report_failures(instructions_problems(e, args.file)) == FAIL:
         return FAIL
     emit(OUT_PASS, msg("instructions_pass", path=args.file, count=len(ids), origin=e.origin))
@@ -529,12 +529,19 @@ def cmd_text(args) -> int:
     return PASS
 
 
+def identifiers(text: str, e: Effective) -> set[str]:
+    """The rule identifiers of a text: a bracketed path whose first segment is a group of the schema.
+    A bracketed file name is not an identifier."""
+    groups = {pattern.split(PATH_SEPARATOR)[0] for pattern in e.fields}
+    return {i for i in ID_PATTERN.findall(text)
+            if i.split(PATH_SEPARATOR)[0] in groups and not i.endswith(FILE_SUFFIXES)}
+
+
 def instructions_problems(e: Effective, path: Path) -> list[str]:
     """The faults of an instruction file: unknown identifiers, no identifiers, pattern hits."""
     text = read_text(path)
     problems: list[str] = []
-    groups = {pattern.split(PATH_SEPARATOR)[0] for pattern in e.fields}
-    ids = {i for i in ID_PATTERN.findall(text) if i.split(PATH_SEPARATOR)[0] in groups}
+    ids = identifiers(text, e)
     if not ids:
         problems.append(msg("no_ids", path=path))
     problems += [msg("unknown_id", path=path, id=i) for i in sorted(ids) if i not in e.values]

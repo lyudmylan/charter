@@ -115,6 +115,12 @@ note = "Path patterns. When a file under one of them changes, a necessary docume
 kind = "set"
 note = "Commands that must pass before a push."
 
+# --- The version of Charter that the repo uses ---
+
+[fields."charter.version"]
+kind = "text"
+note = "The version of the core plugin of Charter. The workflows of the repo fetch Charter at the tag charter--v<version>."
+
 # --- Tools that the repo uses ---
 
 [fields."tools.issue_tracker"]

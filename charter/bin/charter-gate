@@ -1,0 +1,3 @@
+#!/bin/sh
+# charter-gate: the script of the Charter plugin, run from the folder of the installed plugin.
+exec python3 "$(dirname "$0")/../scripts/charter_gate.py" "$@"

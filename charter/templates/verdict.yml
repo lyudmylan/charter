@@ -1,0 +1,138 @@
+# The verdict on a change request. This workflow always runs from the main branch, with the contract of
+# the main branch, and with the scripts of Charter at the version that this contract names. It never runs
+# the code of the change request: it reads the files of the change request as data. It is the only
+# workflow that holds a secret.
+name: verdict
+
+on:
+  workflow_run:
+    workflows: [tests, review-intents]
+    types: [completed]
+  workflow_dispatch:
+    inputs:
+      pr:
+        description: "Number of the change request"
+        required: true
+
+permissions:
+  contents: read
+  pull-requests: write
+  issues: write
+  checks: write
+
+# A push that touches the intents starts two runs, after `tests` and after `review-intents`. They run
+# one after the other, so that the record and the check of one commit are not written at the same time.
+concurrency:
+  group: verdict-${{ github.event.workflow_run.head_sha || inputs.pr }}
+  cancel-in-progress: false
+
+jobs:
+  verdict:
+    name: verdict
+    runs-on: ubuntu-latest
+    env:
+      CHARTER_SCRIPTS: ${{ runner.temp }}/charter/charter/scripts
+    steps:
+      - name: Take the main branch
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.repository.default_branch }}
+          persist-credentials: false
+
+      - name: Fetch Charter at the version of the contract in main
+        id: scripts
+        run: |
+          VERSION=$(python3 -c 'import tomllib; print(tomllib.load(open("charter.toml", "rb"))["charter"]["version"])')
+          git clone --quiet --depth 1 --branch "charter--v$VERSION" %{charter_address} "$RUNNER_TEMP/charter"
+          echo "version=charter--v$VERSION" >> "$GITHUB_OUTPUT"
+
+      - name: Find the change request
+        id: pr
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          INPUT_PR: ${{ inputs.pr }}
+          RUN_SHA: ${{ github.event.workflow_run.head_sha }}
+        run: |
+          if [ -n "$INPUT_PR" ]; then
+            python3 "$CHARTER_SCRIPTS/charter_facts_github.py" find --repo "$GITHUB_REPOSITORY" --pr "$INPUT_PR" >> "$GITHUB_OUTPUT"
+          else
+            python3 "$CHARTER_SCRIPTS/charter_facts_github.py" find --repo "$GITHUB_REPOSITORY" --sha "$RUN_SHA" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Take the files of the change request, as data
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ steps.pr.outputs.sha }}
+          path: change
+          persist-credentials: false
+
+      - name: Fetch the organization source into the cache, from the address in main
+        env:
+          CHARTER_ORG_TOKEN: ${{ secrets.CHARTER_ORG_TOKEN }}
+        run: |
+          set -e
+          SOURCE=$(python3 "$CHARTER_SCRIPTS/charter_check.py" source charter.toml) || { echo "$SOURCE"; exit 2; }
+          readarray -t S <<< "$SOURCE"
+          git clone --quiet "${S[0]/https:\/\//https://x-access-token:${CHARTER_ORG_TOKEN}@}" "${S[3]}"
+
+      - name: Check the contract files of the change request
+        id: contract
+        run: |
+          set +e
+          python3 "$CHARTER_SCRIPTS/charter_check.py" all change/charter.toml
+          CODE=$?
+          echo "result=$([ $CODE -eq 0 ] && echo success || echo failure)" >> "$GITHUB_OUTPUT"
+
+      - name: Collect the facts of the change request, for the commit that the check describes
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR_NUMBER: ${{ steps.pr.outputs.number }}
+          PR_SHA: ${{ steps.pr.outputs.sha }}
+          CONTRACT_RESULT: ${{ steps.contract.outputs.result }}
+        run: >
+          python3 "$CHARTER_SCRIPTS/charter_facts_github.py" collect --repo "$GITHUB_REPOSITORY"
+          --pr "$PR_NUMBER" --sha "$PR_SHA"
+          --check "contract=$CONTRACT_RESULT"
+          --check-run tests
+          --review-workflow review-intents.yml
+          --out facts.json
+
+      - name: Verdict
+        id: verdict
+        env:
+          SCRIPTS_VERSION: ${{ steps.scripts.outputs.version }}
+        run: |
+          set +e
+          python3 "$CHARTER_SCRIPTS/charter_gate.py" verdict --facts facts.json --contract charter.toml \
+            --record record.json --scripts-version "$SCRIPTS_VERSION" | tee verdict.txt
+          echo "code=${PIPESTATUS[0]}" >> "$GITHUB_OUTPUT"
+
+      - name: Put the evidence record on the change request
+        if: always()
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR_NUMBER: ${{ steps.pr.outputs.number }}
+        run: |
+          if [ -s record.json ]; then
+            python3 "$CHARTER_SCRIPTS/charter_facts_github.py" record --repo "$GITHUB_REPOSITORY" --pr "$PR_NUMBER" --file record.json
+          else
+            echo "no record: the verdict could not run"
+          fi
+
+      - name: Publish the check "verdict" on the change request
+        if: always()
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          VERDICT_CODE: ${{ steps.verdict.outputs.code }}
+          PR_SHA: ${{ steps.pr.outputs.sha }}
+        run: |
+          CONCLUSION=$([ "$VERDICT_CODE" = "0" ] && echo success || echo failure)
+          TITLE=$(head -n 1 verdict.txt 2>/dev/null)
+          [ -n "$TITLE" ] || TITLE="the verdict could not run"
+          SUMMARY=$(cat verdict.txt 2>/dev/null)
+          [ -n "$SUMMARY" ] || SUMMARY="the verdict could not run; see the log of the job"
+          gh api -X POST "repos/$GITHUB_REPOSITORY/check-runs" \
+            -f name=verdict -f head_sha="$PR_SHA" -f status=completed -f conclusion="$CONCLUSION" \
+            -f "output[title]=$TITLE" -f "output[summary]=$SUMMARY" >/dev/null
+          echo "$SUMMARY"
+          [ "$CONCLUSION" = "success" ]

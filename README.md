@@ -27,8 +27,16 @@ the team owns the skills, and a person stays in control without approving every 
 | `charter/scripts/charter_check.py` | The checker. Python 3.11 or later, standard library only. |
 | `charter/scripts/charter_gate.py` | The gates of a change: link, documents, quality, verdict |
 | `charter/scripts/charter_facts_github.py`, `.github/workflows/` | The gates on GitHub: the only parts that know the code host |
+| `charter/scripts/charter_setup.py`, `charter/templates/` | The setup step: one command sets a repo up, from the templates |
+| `charter/bin/` | The commands of the plugin: `charter-setup`, `charter-check`, `charter-gate`, `charter-facts-github` |
 | `tests/` | The tests and the sample files |
 | `charter-practices/` | The practices plugin: light skills with their eval cases. To use it in a session: `claude --plugin-dir charter-practices` |
+
+## Use Charter in a repo
+
+Install the two plugins, then run `charter-setup --repo NAME --source ADDRESS --source-version TAG --leader LOGIN`
+in the root of the repo. It writes the contract, the rules, the intents folder, and the workflows, and
+prints the steps that a person does by hand. `docs/contract.md` has the details.
 
 ## Checks
 

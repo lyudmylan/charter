@@ -1,6 +1,6 @@
 # Intent: the version of Charter in the contract, and the scripts fetched at that version in CI
 
-Work item: #37. Status: planned. Approval: a person merges the change request that adds this file.
+Work item: #37. Status: done. Approval: a person merges the change request that adds this file.
 
 ## Goal
 
