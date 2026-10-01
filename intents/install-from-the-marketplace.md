@@ -4,7 +4,8 @@ Work item: #36. Status: done. Approval: a person merges the change request that 
 
 ## Goal
 
-The two plugins of Charter install from the Charter repo with `claude plugin install`.
+The two plugins of Charter install with `claude plugin install`, from a marketplace that lists the plugin
+folders of the Charter repo.
 
 ## In scope
 
@@ -32,12 +33,13 @@ Publication in a marketplace of Anthropic. The setup step. The move of the marke
 1. The two plugins and the marketplace validate. command: `claude plugin validate charter`
    command: `claude plugin validate charter-practices`
 2. The tests and the quality checks pass from the new place. command: `python3 -m unittest discover -s tests`
-3. The plugins install on this computer from the private marketplace. command: `claude plugin install charter@charter`
+   command: `python3 charter/scripts/charter_gate.py quality --contract charter.toml`
 
 ## Manual checks
 
-The run of 2026-10-01: the two plugins validate; 70 tests pass; the tags `charter--v0.1.0` and
-`charter-practices--v0.1.0` are pushed; both plugins install from the private marketplace at 0.1.0.
-
+3. The plugins install on this computer from the private marketplace: `claude plugin install charter@charter`.
+   who: the leader. Not automatic: the marketplace is private during the beta.
+   The run of 2026-10-01, by the leader's agent: both plugins validate; the tags `charter--v0.1.0` and
+   `charter-practices--v0.1.0` are pushed; both plugins install at 0.1.0.
 4. The gates of this repo ran from the new place on the change request of this work item: the check "verdict" is green.
    who: the leader. Not automatic: the proof is the check on GitHub.

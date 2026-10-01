@@ -23,11 +23,10 @@ person still merges.
   comment on the change request, marked, and updated on each run. The tools are read-only, plus the
   commands that read issues and post the comment. A limit on the turns.
 - The author answers each finding in the change request: a correction, or a line
-  `Dropped finding: <reason>`. The collector copies the dropped findings into the record, in the field that
-  exists for them.
-- The leader records a wrong finding with a line `False finding: <reason>`. The collector copies it into the
-  record. The shadow period ends when the leader decides, from these lines, that the reviewer agrees with
-  them; that is epic #13.
+  `Dropped finding: <reason>`. The leader records a wrong finding with a line `False finding: <reason>`.
+  The collector copies the dropped findings and the false findings into the record, each in its own field.
+  The shadow period ends when the leader decides, from these lines, that the reviewer agrees with them;
+  that is epic #13.
 - Security: the workflow runs on `pull_request`, so a change request from a fork gets no secret and no
   review. The text of an intent can carry an instruction to the agent; the agent can only read and comment.
 
@@ -50,5 +49,7 @@ Approval or blocking by the reviewer. A review of code; the built-in review does
 
 4. On one change request that changes an intent, the reviewer posts one table, and updates it on the next
    push. who: the leader. Not automatic: the run needs the token of the plan on GitHub.
-5. The cost of one review is known after the first run: the tokens that the run reports. who: the leader.
-   Not automatic: the number comes from the run on GitHub.
+   The run of 2026-10-01 on change request #48: one table with five findings, three of them on the
+   correctness of the plan; all five applied.
+5. The cost of one review is known after the first run. who: the leader. Not automatic: the number comes
+   from the run on GitHub. The run of 2026-10-01: 9 turns, 59 seconds, 0.18 USD at list price, on the plan.
