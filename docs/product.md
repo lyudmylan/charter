@@ -52,20 +52,20 @@ its reviewer. A larger organization changes who holds a role, not the rules.
 
 ## The lifecycle map
 
-| Phase | Verification | Record in the issue tracker | Included in Charter |
-|---|---|---|---|
-| Direction | A person approves | Milestone and epics | Yes |
-| Plan | A person approves the acceptance checks | Issue with the acceptance checks | Yes |
-| Design | To decide | Design decision, linked to the issue | Roadmap |
-| Build | The acceptance checks pass | Change, linked to the issue | Yes |
-| Review | A reviewer that is not the author | Findings that were not corrected | Yes |
-| Merge | One verdict; approval by risk tier | The issue closes | Yes |
-| Release | A check for each stage; a person decides production | The release lists its issues | Roadmap |
-| Operate | Monitoring | An incident becomes an issue | Roadmap |
-| Improve | Tests of the skills; audit of stale rules | A failure becomes an issue, then a check | Partly |
+The phases are the six of the AI-native SDLC playbook of Anthropic (2026-08-21). The map says what
+Charter adds in each phase.
 
-Every phase has its own verification. The issue tracker connects all phases, from
-direction to production and back.
+| Phase | Artifacts of Charter | Verification | Included in Charter |
+|---|---|---|---|
+| Plan | The product document: the direction. The file of a work item: goal, in scope, out of scope, acceptance checks. The issue tracker: milestone, epic, issue. | A person approves the file of the work item. | Yes |
+| Design | The architecture map. The decision records. | To decide | Roadmap |
+| Build | The change on a branch. The repository instructions. The gates, as scripts. | The acceptance checks pass. The quality checks pass before the push. | Yes |
+| Test | The tests and the acceptance checks, which the agent cannot change alone. The evals of the skills. | A reviewer that is not the author. The check "verdict". | Yes |
+| Deploy | The evidence record. The merge by the approver of the risk tier. The release stages. | A person decides production. | Partly |
+| Maintain | Incidents as issues. Each failure becomes a check. Each model upgrade is tested. | Monitoring | Partly |
+
+Every phase has its own verification. The issue tracker connects all phases, from the plan to
+production and back.
 
 ## Principles
 
