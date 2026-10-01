@@ -54,7 +54,7 @@ Other code hosts. A setup through a skill in a session; that comes when the plug
    test: `tests/test_setup.py::Commands.test_the_four_commands_exist_and_the_manifests_agree`
 6. The written `tests.yml` and `verdict.yml` set no `runner` context in a job-level `env`, and write the
    variable of the scripts folder to `$GITHUB_ENV` in a step.
-   test: `tests/test_setup.py::Setup.test_no_runner_context_in_a_job_env`
+   test: `tests/test_setup.py::Templates.test_no_runner_context_in_a_job_env`
 
 ## Manual checks
 
