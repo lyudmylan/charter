@@ -398,6 +398,7 @@ class Effective:
     failures: list[str]
     origin: str
     repo_values: dict[str, object] = None   # the repo values alone, in declaration order
+    repo_name: str = ""                     # the name of the repo: its own name is never a foreign pattern
 
 
 def effective_contract(contract: Path, schema: Path, source: Path | None, cache_dir: Path) -> Effective:
@@ -419,7 +420,8 @@ def effective_contract(contract: Path, schema: Path, source: Path | None, cache_
         for path, value in repo.values.items()
         if path in org.locks and not KINDS[spec_of(path, fields)[ATTR_KIND]].stricter(org.values[path], value, spec_of(path, fields))
     ]
-    return Effective({**org.values, **repo.values}, fields, failures, origin, dict(repo.values))
+    return Effective({**org.values, **repo.values}, fields, failures, origin, dict(repo.values),
+                     repo_data[TABLE_REPO][KEY_NAME])
 
 
 # ---------------------------------------------------------------------------
@@ -499,6 +501,8 @@ def pattern_hits(e: Effective, path: Path, text: str) -> list[str]:
     lines = text.splitlines()
     for field, patterns, ignore_case in text_patterns(e):
         for pattern in patterns:
+            if pattern.lower() == e.repo_name.lower():
+                continue        # the organization lists the names of all its projects; a repo may name itself
             needle = pattern.lower() if ignore_case else pattern
             for number, line in enumerate(lines, start=1):
                 haystack = line.lower() if ignore_case else line

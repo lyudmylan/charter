@@ -23,6 +23,9 @@ One command sets a repo up for Charter.
 - It prints the manual steps: the secrets, the ruleset of the main branch with the required check
   "verdict", the cache command for the computer, the quality command when none was given, the line
   `@AGENTS.md` for a repo that has a `CLAUDE.md`, and the first intent.
+- Two findings of the first setup of the second repo (#55, #56): the checker skips the repo's own name
+  in the project name patterns, because the organization lists every project and a repo names itself;
+  and both manifests say 0.2.0, because the adopter workflows fetch Charter at the tag of the version.
 
 ## Out of scope
 
@@ -38,8 +41,10 @@ Other code hosts. A setup through a skill in a session; that comes when the plug
    test: `tests/test_setup.py::Setup.test_refuses_to_overwrite`
 3. The output names the three manual steps.
    test: `tests/test_setup.py::Setup.test_prints_the_manual_steps`
+4. A repo that carries one of the project names of the organization passes the text check on its own name.
+   test: `tests/test_charter_check.py::OwnName.test_the_name_of_the_repo_is_not_a_foreign_project_name`
 
 ## Manual checks
 
-4. The setup runs in the second repo, and its first change request gets the three checks. who: the leader.
+5. The setup runs in the second repo, and its first change request gets the three checks. who: the leader.
    Not automatic: the second repo is outside this repo.

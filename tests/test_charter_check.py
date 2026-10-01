@@ -266,6 +266,15 @@ class Instructions(Temp):
         self.assertIn(":3: matches a pattern of text.session_link_patterns", out)
 
 
+class OwnName(Temp):
+    def test_the_name_of_the_repo_is_not_a_foreign_project_name(self):
+        """repository-instructions, check 1: the organization lists every project; a repo may name itself."""
+        repo = self.write("r.toml", repo_with(**{'name = "sample-repo"': 'name = "Secret-Project"'}))
+        path = self.write("README.md", "The secret-project investigates incidents.\n")
+        code, out = run(cc.CMD_TEXT, str(path), f"--{cc.ARG_CONTRACT}", str(repo), f"--{cc.ARG_SOURCE}", str(ORG))
+        self.assertEqual(code, cc.PASS, out)
+
+
 class Source(Temp):
     def test_source_prints_address_file_version_and_cache_path(self):
         """code-host, check 1: the workflow populates the cache from these lines."""
