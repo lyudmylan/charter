@@ -64,6 +64,8 @@ query($owner: String!, $name: String!, $number: Int!, $after: String) {
 ISSUE_REFERENCE = re.compile(r"(?<![\w/])#(\d+)\b")
 REASON_LINE = re.compile(r"^No document change:\s*(.+?)\s*$", re.IGNORECASE | re.MULTILINE)
 FALSE_FAILURE_LINE = re.compile(r"^False failure:\s*([a-z0-9_-]+)\s*:\s*(.+?)\s*$", re.IGNORECASE | re.MULTILINE)
+DROPPED_FINDING_LINE = re.compile(r"^Dropped finding:\s*(.+?)\s*$", re.IGNORECASE | re.MULTILINE)
+FALSE_FINDING_LINE = re.compile(r"^False finding:\s*(.+?)\s*$", re.IGNORECASE | re.MULTILINE)
 
 # The record comment on a change request.
 RECORD_MARKER = "<!-- charter-record -->"
@@ -125,6 +127,11 @@ def recorded_reason(text: str) -> str | None:
 def false_failures(text: str) -> list[dict]:
     """The false failures that a person recorded in the text: one line each."""
     return [{cg.JSON_KEY_GATE: gate.lower(), "reason": reason} for gate, reason in FALSE_FAILURE_LINE.findall(text or "")]
+
+
+def finding_lines(text: str) -> tuple[list[str], list[str]]:
+    """The findings that the author dropped, and the findings that the leader marked as false."""
+    return DROPPED_FINDING_LINE.findall(text or ""), FALSE_FINDING_LINE.findall(text or "")
 
 
 def comment_body(record: dict) -> str:
@@ -197,6 +204,8 @@ def build_facts(pr: dict, files: list[dict], issues: dict[int, dict | None], unr
         cg.FACT_UNRESOLVED_THREADS: unresolved,
         cg.FACT_CHECKS: {name: check_state(result) for name, result in checks.items()},
         cg.FACT_FALSE_FAILURES: false_failures(text),
+        cg.FACT_DROPPED_FINDINGS: finding_lines(text)[0],
+        cg.FACT_FALSE_FINDINGS: finding_lines(text)[1],
     }
 
 

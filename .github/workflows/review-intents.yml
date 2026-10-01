@@ -1,0 +1,38 @@
+# The intent reviewer. An agent that is not the author reviews the intents of a change request and posts
+# one comment. Shadow mode: it approves nothing and blocks nothing; a person merges. It runs the code of
+# nobody: it reads files and posts a comment. A change request from a fork gets no secret and no review.
+name: review-intents
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
+    paths: ["intents/**"]
+
+permissions:
+  contents: read
+  pull-requests: write
+  issues: read
+
+jobs:
+  review:
+    name: review-intents
+    if: github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: anthropics/claude-code-action@v1
+        with:
+          claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          prompt: |
+            Review the intents that change request #${{ github.event.pull_request.number }} changes.
+            Follow charter-practices/skills/intent-review/SKILL.md exactly: it is the checklist and the form of the report.
+            The changed intents: run `git diff --name-only origin/${{ github.base_ref }}...HEAD -- intents/`.
+            Post the report as a comment on change request #${{ github.event.pull_request.number }} with
+            `gh pr comment`, or update the existing comment that begins with `<!-- charter-intent-review -->`.
+            Change no file. Approve nothing. Block nothing.
+          claude_args: >-
+            --max-turns 30
+            --allowedTools "Read,Glob,Grep,Bash(git diff:*),Bash(git log:*),Bash(gh issue view:*),Bash(gh issue list:*),Bash(gh pr view:*),Bash(gh pr comment:*),Bash(gh api repos/${{ github.repository }}/issues/*/comments*),Bash(gh api -X PATCH repos/${{ github.repository }}/issues/comments/*)"

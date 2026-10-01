@@ -147,6 +147,15 @@ only. Only the workflow `verdict` holds it. The address of the source comes from
 so a change request cannot send the token elsewhere. A change request that changes the source is a
 contract change: a person reviews it, and the new source applies after the merge.
 
+## The intent reviewer
+
+The workflow `.github/workflows/review-intents.yml` runs on each change request that changes `intents/**`.
+An agent that is not the author follows the skill `charter-practices/skills/intent-review/SKILL.md` and
+posts one comment: a table with one row per intent, and the findings. Shadow mode: it approves nothing and
+blocks nothing; a person merges. It runs with a token of the owner's subscription, the secret
+`CLAUDE_CODE_OAUTH_TOKEN`, and with read-only tools plus the comment commands. A change request from a
+fork gets no secret and no review.
+
 ## The evidence record
 
 Each run of the verdict writes the evidence record of the change: the JSON form of the verdict, with
@@ -166,7 +175,8 @@ else does not count. The check "verdict" keeps the short text.
 | `gates` | Each gate with its result and its reasons |
 | `checks` | The state of each check |
 | `false_failures` | What a person recorded with a line `False failure: <gate>: <reason>` in the change request |
-| `dropped_findings` | Empty until the agent reviewer comes |
+| `dropped_findings` | The findings of the intent reviewer that the author dropped, from lines `Dropped finding: <reason>` |
+| `false_findings` | The findings of the intent reviewer that the leader marked as false, from lines `False finding: <reason>` |
 
 `charter_facts_github.py records --repo owner/name --last N` prints the records of the last merged
 change requests, one line each, for a sample review.
