@@ -80,6 +80,15 @@ class Validate(Temp):
         self.assertEqual(code, cc.FAIL)
         self.assertIn(cc.msg("unknown_field", name=path, field="limits.retries"), out)
 
+    def test_charter_version_field(self):
+        """charter-version-in-ci, check 1."""
+        path = self.write("r.toml", repo_with(**{"refusals = 3": 'refusals = 3\n[charter]\nversion = "0.1.0"'}))
+        self.assertEqual(run(cc.CMD_VALIDATE, str(path))[0], cc.PASS)
+        path = self.write("r.toml", repo_with(**{"refusals = 3": "refusals = 3\n[charter]\nversion = 1"}))
+        code, out = run(cc.CMD_VALIDATE, str(path))
+        self.assertEqual(code, cc.FAIL)
+        self.assertIn("charter.version", out)
+
     def test_locked_field_without_value_fails(self):
         """contract-checker, check 2."""
         path = self.write("o.toml", ORG.read_text().replace('code_host = "github"\n', ""))
@@ -250,11 +259,20 @@ class Instructions(Temp):
 
     def test_private_material_and_project_names_fail(self):
         """repository-instructions, checks 2 and 3."""
-        code, out = self.instructions("Mail a@example.com [limits.refusals]\nThe Secret-Project [limits.refusals]\nsession_1 [limits.refusals]\n")
+        code, out = self.instructions("Mail a@example.com [limits.refusals]\nThe Secret-Project [limits.refusals]\ncode/session_1 [limits.refusals]\n")
         self.assertEqual(code, cc.FAIL)
         self.assertIn(":1: matches a pattern of text.private_material_patterns", out)
         self.assertIn(":2: matches a pattern of text.project_name_patterns", out)
         self.assertIn(":3: matches a pattern of text.session_link_patterns", out)
+
+
+class OwnName(Temp):
+    def test_the_name_of_the_repo_is_not_a_foreign_project_name(self):
+        """repository-instructions, check 1: the organization lists every project; a repo may name itself."""
+        repo = self.write("r.toml", repo_with(**{'name = "sample-repo"': 'name = "Secret-Project"'}))
+        path = self.write("README.md", "The secret-project investigates incidents.\n")
+        code, out = run(cc.CMD_TEXT, str(path), f"--{cc.ARG_CONTRACT}", str(repo), f"--{cc.ARG_SOURCE}", str(ORG))
+        self.assertEqual(code, cc.PASS, out)
 
 
 class Source(Temp):

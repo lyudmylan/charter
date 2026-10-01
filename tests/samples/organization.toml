@@ -18,7 +18,7 @@ fields = [
 
 [text]
 private_material_patterns = ["@example.com", "token-"]
-session_link_patterns = ["session_"]
+session_link_patterns = ["code/session_"]
 project_name_patterns = ["secret-project"]
 
 [change]

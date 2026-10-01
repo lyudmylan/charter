@@ -1,6 +1,6 @@
 {
   "name": "charter-practices",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "The light practice skills of Charter. They need the core: they read the contract.",
   "license": "Apache-2.0",
   "dependencies": [

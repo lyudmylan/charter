@@ -1,31 +1,35 @@
 # Contract of this repo. The organization rules come from the source below.
-# The checker: python3 charter/scripts/charter_check.py check charter.toml
+# The checks: charter-check all charter.toml, and charter-gate quality --contract charter.toml
 schema = 1
 
 [repo]
-name = "charter"
+name = %{repo}
 
 # The organization source. This repo holds no copy of it.
 [source]
-address = "https://github.com/lyudmylan/charter-org"
-file = "organization.toml"
-version = "v1"
+address = %{source_address}
+file = %{source_file}
+version = %{source_version}
+
+# The version of Charter that this repo uses. The workflows fetch Charter at the tag charter--v<version>.
+[charter]
+version = %{charter_version}
 
 [tools]
-issue_tracker = "github-issues"
-code_host = "github"
-ci = "github-actions"
+issue_tracker = %{tracker}
+code_host = %{host}
+ci = %{ci}
 
-# Who holds a role in this repo. One person holds all human roles today.
+# Who holds a role in this repo.
 [roles]
-leader = ["lyudmylan"]
-team_lead = ["lyudmylan"]
-engineer = ["lyudmylan"]
-agent = ["claude-code"]
+leader = [%{leader}]
+team_lead = [%{team_lead}]
+engineer = [%{engineer}]
+agent = [%{agent}]
 
 # Risk tiers. The first tier whose paths match a file applies.
 [tiers.high]
-paths = ["charter.toml", "charter/**", "tests/**", "intents/**", "AGENTS.md", ".github/**"]  # intents hold the approved acceptance checks
+paths = [%{high_paths}]  # the contract, the rules, the approved intents, and the workflows
 review = "deep"
 approver = "leader"
 approvals = 1
@@ -36,38 +40,30 @@ review = "light"
 approver = "engineer"
 approvals = 1
 
-# Limits that return control to a person.
-[limits]
-acceptance_loop = 3
-review_loop = 3
-refusals = 3
-
-# The review loop: a finding at this severity or above keeps the loop open.
+# The review loop: a finding at this severity or above keeps the loop open. The limits come from the source.
 [review]
 threshold = "medium"
 
 [documents]
 necessary = ["docs/product.md"]
-code_paths = ["charter/**"]
-text_checked = ["README.md", "docs/product.md"]   # they must contain none of the text-checked patterns
+code_paths = [%{code_paths}]
+text_checked = [%{text_checked}]   # they must contain none of the text-checked patterns
 
 [instructions]
 file = "AGENTS.md"
 
 # Commands that must pass before a push. They run on the code of the change.
-# The contract checks (charter_check.py all charter.toml) run separately, with trusted scripts.
 [checks]
-quality = ["python3 -m unittest discover -s tests"]
+quality = [%{quality}]
 
 # The lifecycle map: the six phases of the AI-native SDLC playbook. In each: what does the work, which
-# skill of Charter helps, and which built-in abilities of Claude Code the phase uses. The template of
-# the setup step (charter/templates/charter.toml) is the one list of the built-in abilities.
+# skill of Charter helps, and which built-in abilities of Claude Code the phase uses.
 [lifecycle.plan]
 work = "the leader with an agent: docs/product.md for the direction; the skill tracker for the issues and the intents"
 builtin = ["plan mode"]
 
 [lifecycle.design]
-work = "the leader with an agent: the design spec of a work item; docs/contract.md as the map of this repo"
+work = "the leader with an agent: the design spec of a work item, and docs/architecture.md kept current"
 builtin = ["plan mode"]
 
 [lifecycle.build]
@@ -79,7 +75,7 @@ work = "the tests of the intent; the intent reviewer with the skill review-loop;
 builtin = ["/code-review", "/security-review", "claude plugin eval"]
 
 [lifecycle.deploy]
-work = "the verdict and the evidence record; the approver of the tier merges; the release is a tag of the plugins"
+work = "the verdict and the evidence record; the approver of the tier merges; a person decides production"
 builtin = []
 
 [lifecycle.maintain]

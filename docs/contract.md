@@ -54,10 +54,11 @@ any of its patterns. The `instructions` and `text` commands read this from the s
 | `documents.text_checked` | set | Files that must contain none of the text-checked patterns |
 | `instructions.file` | text | The instruction file of the repo |
 | `checks.quality` | set | Commands that must pass before a push. They run on the code of the change. |
+| `charter.version` | text | The version of the core plugin of Charter that the repo uses; the workflows fetch Charter at the tag `charter--v<version>` |
 | `tools.issue_tracker`, `tools.code_host`, `tools.ci` | text | The tools of the repo |
 | `roles.leader`, `roles.team_lead`, `roles.engineer`, `roles.agent` | text | Who holds a role |
 | `lifecycle.<phase>.work` | text | What does the work in a phase |
-| `lifecycle.<phase>.builtin` | text | Built-in abilities of the runtime that the phase uses |
+| `lifecycle.<phase>.builtin` | text | Built-in abilities of the runtime that the phase uses. The template `charter/templates/charter.toml` is the one list of them, for the six phases |
 
 ## Reserved tables
 
@@ -200,6 +201,28 @@ else does not count. The check "verdict" keeps the short text.
 
 `charter_facts_github.py records --repo owner/name --last N` prints the records of the last merged
 change requests, one line each, for a sample review.
+
+## The setup step
+
+`charter-setup` sets a repo up in one command. The plugin `charter` ships it in `bin/`, with
+`charter-check`, `charter-gate`, and `charter-facts-github`; Claude Code puts that folder on the path of
+the shell while the plugin is enabled (the plugin documentation, "Executables"; claude.ai and Cowork do
+not install a plugin with a `bin/` folder, so that way of distribution is not open to Charter). From a
+clone of the Charter repo, the same scripts are `charter/scripts/charter_*.py`.
+
+```
+charter-setup --repo NAME --source ADDRESS --source-version TAG --leader LOGIN \
+              [--quality CMD]... [--code-path PATTERN]... [--high-path PATTERN]...
+```
+
+It writes `charter.toml`, `AGENTS.md`, `intents/_template.md`, and the three workflows from
+`charter/templates/`; `docs/product.md` and `docs/architecture.md` only when they are missing. It writes
+nothing when one of its files exists, and names the file. At the end it prints the steps that a person
+does by hand: the secrets, the ruleset, the cache command, and the first intent.
+
+The written workflows fetch Charter at the tag `charter--v<charter.version>` outside the checkout, and
+run the scripts from there: `tests` with the version of the change request, `verdict` with the version in
+the main branch, so that a change request cannot pick the scripts that judge it.
 
 ## The checker
 

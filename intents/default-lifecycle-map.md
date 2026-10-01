@@ -1,6 +1,6 @@
 # Intent: the default lifecycle map in the contract template
 
-Work item: #39. Status: planned. Approval: a person merges the change request that adds this file.
+Work item: #39. Status: done. Approval: a person merges the change request that adds this file.
 
 ## Goal
 
@@ -22,7 +22,7 @@ A gate on the map.
 
 ## Automatic checks
 
-1. The template names the six phases, and the checker accepts it.
+1. The template names the six phases, each with `work` and `builtin`; the Plan phase names the skill tracker; `docs/contract.md` points to the template; this repo's contract has the same six phases; and the checker accepts the written contract.
    test: `tests/test_setup.py::Templates.test_lifecycle_map_has_the_six_phases`
 
 ## Manual checks

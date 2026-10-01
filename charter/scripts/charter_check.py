@@ -88,6 +88,7 @@ FIELD_TEXT_CHECKED = "documents.text_checked"
 # Identifiers in an instruction file: [a.b] or [a.b.c]. Only a mark whose first segment is a
 # field group of the schema counts; other bracketed text, such as a file name, is ignored.
 ID_PATTERN = re.compile(r"\[([a-z][a-z0-9_]*(?:\.[a-z0-9_]+)+)\]")
+FILE_SUFFIXES = (".toml", ".md", ".yml", ".yaml", ".json", ".py", ".txt")   # [charter.toml] is a file, not a rule
 
 # Output prefixes.
 OUT_PASS, OUT_FAIL, OUT_CANNOT_RUN, OUT_VALID, OUT_SOURCE = "pass", "fail", "cannot run", "valid", "source"
@@ -397,6 +398,7 @@ class Effective:
     failures: list[str]
     origin: str
     repo_values: dict[str, object] = None   # the repo values alone, in declaration order
+    repo_name: str = ""                     # the name of the repo: its own name is never a foreign pattern
 
 
 def effective_contract(contract: Path, schema: Path, source: Path | None, cache_dir: Path) -> Effective:
@@ -418,7 +420,8 @@ def effective_contract(contract: Path, schema: Path, source: Path | None, cache_
         for path, value in repo.values.items()
         if path in org.locks and not KINDS[spec_of(path, fields)[ATTR_KIND]].stricter(org.values[path], value, spec_of(path, fields))
     ]
-    return Effective({**org.values, **repo.values}, fields, failures, origin, dict(repo.values))
+    return Effective({**org.values, **repo.values}, fields, failures, origin, dict(repo.values),
+                     repo_data[TABLE_REPO][KEY_NAME])
 
 
 # ---------------------------------------------------------------------------
@@ -498,6 +501,8 @@ def pattern_hits(e: Effective, path: Path, text: str) -> list[str]:
     lines = text.splitlines()
     for field, patterns, ignore_case in text_patterns(e):
         for pattern in patterns:
+            if pattern.lower() == e.repo_name.lower():
+                continue        # the organization lists the names of all its projects; a repo may name itself
             needle = pattern.lower() if ignore_case else pattern
             for number, line in enumerate(lines, start=1):
                 haystack = line.lower() if ignore_case else line
@@ -511,8 +516,7 @@ def cmd_instructions(args) -> int:
     if report_failures(e.failures) == FAIL:
         return FAIL
     text = read_text(args.file)
-    groups = {pattern.split(PATH_SEPARATOR)[0] for pattern in e.fields}
-    ids = {i for i in ID_PATTERN.findall(text) if i.split(PATH_SEPARATOR)[0] in groups}
+    ids = identifiers(text, e)
     if report_failures(instructions_problems(e, args.file)) == FAIL:
         return FAIL
     emit(OUT_PASS, msg("instructions_pass", path=args.file, count=len(ids), origin=e.origin))
@@ -529,12 +533,19 @@ def cmd_text(args) -> int:
     return PASS
 
 
+def identifiers(text: str, e: Effective) -> set[str]:
+    """The rule identifiers of a text: a bracketed path whose first segment is a group of the schema.
+    A bracketed file name is not an identifier."""
+    groups = {pattern.split(PATH_SEPARATOR)[0] for pattern in e.fields}
+    return {i for i in ID_PATTERN.findall(text)
+            if i.split(PATH_SEPARATOR)[0] in groups and not i.endswith(FILE_SUFFIXES)}
+
+
 def instructions_problems(e: Effective, path: Path) -> list[str]:
     """The faults of an instruction file: unknown identifiers, no identifiers, pattern hits."""
     text = read_text(path)
     problems: list[str] = []
-    groups = {pattern.split(PATH_SEPARATOR)[0] for pattern in e.fields}
-    ids = {i for i in ID_PATTERN.findall(text) if i.split(PATH_SEPARATOR)[0] in groups}
+    ids = identifiers(text, e)
     if not ids:
         problems.append(msg("no_ids", path=path))
     problems += [msg("unknown_id", path=path, id=i) for i in sorted(ids) if i not in e.values]
