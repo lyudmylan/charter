@@ -108,8 +108,13 @@ def msg(message_id: str, **values: object) -> str:
 # ---------------------------------------------------------------------------
 
 
+def toml_text(value: str) -> str:
+    """A TOML basic string: quoted and escaped, so that a quote or a backslash in a value cannot break the file."""
+    return json.dumps(value)
+
+
 def toml_list(items: list[str]) -> str:
-    return ", ".join(json.dumps(item) for item in items)
+    return ", ".join(toml_text(item) for item in items)
 
 
 def charter_version(manifest: Path = MANIFEST) -> str:
@@ -123,15 +128,15 @@ def values_of(args: argparse.Namespace, target: Path, version: str) -> dict[str,
     """The placeholders of the templates, from the arguments."""
     text_checked = [PRODUCT_FILE] + ([README_FILE] if (target / README_FILE).exists() else [])
     return {
-        "repo": args.repo,
-        "source_address": args.source,
-        "source_file": args.source_file,
-        "source_version": args.source_version,
-        "charter_version": version,
+        "repo": toml_text(args.repo),
+        "source_address": toml_text(args.source),
+        "source_file": toml_text(args.source_file),
+        "source_version": toml_text(args.source_version),
+        "charter_version": toml_text(version),
         "charter_address": CHARTER_ADDRESS,
-        "tracker": args.tracker,
-        "host": args.host,
-        "ci": args.ci,
+        "tracker": toml_text(args.tracker),
+        "host": toml_text(args.host),
+        "ci": toml_text(args.ci),
         "leader": toml_list([args.leader]),
         "team_lead": toml_list([args.team_lead or args.leader]),
         "engineer": toml_list(args.engineer or [args.leader]),
@@ -203,7 +208,10 @@ def ask_missing(args: argparse.Namespace, interactive: bool) -> str | None:
         if getattr(args, flag):
             continue
         if interactive:
-            setattr(args, flag, input(f"{question}: ").strip())
+            try:
+                setattr(args, flag, input(f"{question}: ").strip())
+            except EOFError:        # the end of the input is an empty answer, not a crash
+                pass
         if not getattr(args, flag):
             return flag
     return None

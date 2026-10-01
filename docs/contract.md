@@ -206,8 +206,9 @@ change requests, one line each, for a sample review.
 
 `charter-setup` sets a repo up in one command. The plugin `charter` ships it in `bin/`, with
 `charter-check`, `charter-gate`, and `charter-facts-github`; Claude Code puts that folder on the path of
-the shell while the plugin is enabled. From a clone of the Charter repo, the same scripts are
-`charter/scripts/charter_*.py`.
+the shell while the plugin is enabled (the plugin documentation, "Executables"; claude.ai and Cowork do
+not install a plugin with a `bin/` folder, so that way of distribution is not open to Charter). From a
+clone of the Charter repo, the same scripts are `charter/scripts/charter_*.py`.
 
 ```
 charter-setup --repo NAME --source ADDRESS --source-version TAG --leader LOGIN \

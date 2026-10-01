@@ -88,6 +88,13 @@ class Setup(Temp):
                      "checks.quality", f"Add the line `@{cs.INSTRUCTIONS_FILE}` to {cs.CLAUDE_FILE}"):
             self.assertIn(step, out)
 
+    def test_a_quote_in_a_value_cannot_break_the_contract(self):
+        """setup-step, check 1: every text value is a TOML string."""
+        code, out = run("--repo", 'a"b', "--source", "https://example.com/org/rules", "--source-version", "v1",
+                        "--leader", "alice", "--target", str(self.dir))
+        self.assertEqual(code, cc.PASS, out)
+        self.assertEqual(tomllib.loads((self.dir / cs.CONTRACT_FILE).read_text())["repo"]["name"], 'a"b')
+
     def test_a_missing_value_is_named(self):
         """setup-step, check 2: without a terminal, a missing flag is refused by name."""
         code, out = run("--repo", "sample", "--target", str(self.dir))

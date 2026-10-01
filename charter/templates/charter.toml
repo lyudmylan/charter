@@ -3,22 +3,22 @@
 schema = 1
 
 [repo]
-name = "%{repo}"
+name = %{repo}
 
 # The organization source. This repo holds no copy of it.
 [source]
-address = "%{source_address}"
-file = "%{source_file}"
-version = "%{source_version}"
+address = %{source_address}
+file = %{source_file}
+version = %{source_version}
 
 # The version of Charter that this repo uses. The workflows fetch Charter at the tag charter--v<version>.
 [charter]
-version = "%{charter_version}"
+version = %{charter_version}
 
 [tools]
-issue_tracker = "%{tracker}"
-code_host = "%{host}"
-ci = "%{ci}"
+issue_tracker = %{tracker}
+code_host = %{host}
+ci = %{ci}
 
 # Who holds a role in this repo.
 [roles]
