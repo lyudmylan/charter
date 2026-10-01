@@ -120,7 +120,7 @@ class Templates(Temp):
         self.assertIn("ref: ${{ github.event.repository.default_branch }}", verdict)
 
     def test_no_runner_context_in_a_job_env(self):
-        """setup-step, check 1 (#58): GitHub refuses the `runner` context in a job-level env; the file then
+        """setup-step, check 6 (#58): GitHub refuses the `runner` context in a job-level env; the file then
         does not parse, and the run has no job and no log."""
         self.assertEqual(self.setup()[0], cc.PASS)
         for name in ("tests.yml", "verdict.yml", "review-intents.yml"):

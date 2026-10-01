@@ -29,7 +29,7 @@ One command sets a repo up for Charter.
   the old form. The lesson stands: a test of a template must look at what the host accepts.
 - Two findings of the first setup of the second repo (#55, #56): the checker skips the repo's own name
   in the project name patterns, because the organization lists every project and a repo names itself;
-  and both manifests say 0.2.0, because the adopter workflows fetch Charter at the tag of the version.
+  and both manifests carry the same version, because the adopter workflows fetch Charter at the tag of the version.
 
 ## Out of scope
 
@@ -52,8 +52,11 @@ Other code hosts. A setup through a skill in a session; that comes when the plug
 5. Each of the four commands exists in `charter/bin/` and is executable, and both manifests carry the same
    version.
    test: `tests/test_setup.py::Commands.test_the_four_commands_exist_and_the_manifests_agree`
+6. The written `tests.yml` and `verdict.yml` set no `runner` context in a job-level `env`, and write the
+   variable of the scripts folder to `$GITHUB_ENV` in a step.
+   test: `tests/test_setup.py::Setup.test_no_runner_context_in_a_job_env`
 
 ## Manual checks
 
-6. The setup runs in the second repo, and its first change request gets the three checks. who: the leader.
+7. The setup runs in the second repo, and its first change request gets the three checks. who: the leader.
    Not automatic: the second repo is outside this repo.
