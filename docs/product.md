@@ -27,8 +27,8 @@ three questions:
 - A **gate** is a check that must pass before the next step. It is a deterministic
   script that checks the result, not the method.
 - An **acceptance check** states what "it works" means for one work item, in a form that
-  a script can run. It lives in the repo as a [scenario file](../tests/scenarios/), and a
-  person approves it before the work starts.
+  a script can run. It is part of the [intent](../intents/) of the work item, and a person
+  approves it before the work starts.
 - A **risk tier** says how dangerous a change is, for example low or high. It sets the
   depth of the review and who approves.
 - The **evidence record** keeps what each gate found for every change, and the cost.
@@ -52,20 +52,20 @@ its reviewer. A larger organization changes who holds a role, not the rules.
 
 ## The lifecycle map
 
-| Phase | Verification | Record in the issue tracker | Included in Charter |
-|---|---|---|---|
-| Direction | A person approves | Milestone and epics | Yes |
-| Plan | A person approves the acceptance checks | Issue with the acceptance checks | Yes |
-| Design | To decide | Design decision, linked to the issue | Roadmap |
-| Build | The acceptance checks pass | Change, linked to the issue | Yes |
-| Review | A reviewer that is not the author | Findings that were not corrected | Yes |
-| Merge | One verdict; approval by risk tier | The issue closes | Yes |
-| Release | A check for each stage; a person decides production | The release lists its issues | Roadmap |
-| Operate | Monitoring | An incident becomes an issue | Roadmap |
-| Improve | Tests of the skills; audit of stale rules | A failure becomes an issue, then a check | Partly |
+The phases are the six of the AI-native SDLC playbook of Anthropic (2026-08-21). The map says what
+Charter adds in each phase.
 
-Every phase has its own verification. The issue tracker connects all phases, from
-direction to production and back.
+| Phase | Artifacts of Charter | Verification | Included in Charter |
+|---|---|---|---|
+| Plan | `product.md`: the direction. The [intent](../intents/) of a work item: goal, in scope, out of scope, acceptance checks. The issue tracker: milestone, epic, issue. | A person approves the intent through a change request. | Yes |
+| Design | The design spec of the work item. The architecture map, kept current. | A person approves the design spec. | Roadmap |
+| Build | `plan.md`, accepted before the code. The change on a branch. The repository instructions. The gates, as code. | The plan exists before the code. The quality checks pass before the push. | Partly |
+| Test | The acceptance checks, which the agent cannot change alone. The tests. The evals of the skills. | A reviewer that is not the author. The check "verdict". | Yes |
+| Deploy | The evidence record. The merge by the approver of the risk tier. The release stages to production. | A person decides production. | Partly |
+| Maintain | A failure re-enters the cycle as an intent and ends as a check. Each model upgrade is tested. | Monitoring. | Partly |
+
+Every phase has its own verification. The issue tracker connects all phases, from the plan to
+production and back.
 
 ## Principles
 
