@@ -10,12 +10,8 @@ person still merges.
 
 ## In scope
 
-- The checklist as a skill, `charter-practices/skills/intent-review/SKILL.md`, under 40 lines: what to
-  check (a goal that is a result; a bounded scope; acceptance checks that are automatic by default and
-  prove the goal; nothing beyond the minimum; consistency with `docs/product.md` and the decisions of the
-  epics; one place for each fact), and how to report (one table with one row per intent, then at most
-  five findings, each with the exact sentence and the proposed text). A finding that affects the
-  correctness of the plan is marked; a preference is marked as a preference.
+- The checklist as a skill, `charter-practices/skills/intent-review/SKILL.md`, under 40 lines. The skill
+  holds the checklist and the form of the report; this intent does not repeat them.
 - The workflow `.github/workflows/review-intents.yml`: on a change request that changes `intents/**`,
   it runs the official Claude Code action of Anthropic with the token of the owner's subscription, made
   with `claude setup-token` and stored as the secret `CLAUDE_CODE_OAUTH_TOKEN`. The prompt tells the

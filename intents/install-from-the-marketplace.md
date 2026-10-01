@@ -15,7 +15,8 @@ folders of the Charter repo.
   lists the two plugins from the public Charter repo by their folders (a GitHub source with a path). The
   name of the marketplace is `charter`, so the plugins are `charter@charter` and `charter-practices@charter`.
   At the release, the file moves into the Charter repo. Nobody finds the plugins in a listing before that.
-- The first version of each plugin in its manifest: 0.1.0. The version lives there only. The release tag
+- The first version of each plugin in its manifest: 0.1.0. The entry of the marketplace repeats it, and
+  `claude plugin tag` checks that the two agree. The release tag
   follows the convention of the Claude Code documentation on plugin dependencies: `charter--v0.1.0`. The
   leader pushes it with `claude plugin tag --push` after the plugin folder merges.
 - The workflows, the quality checks, `AGENTS.md`, the README, and the commands in the done intents name
@@ -30,7 +31,7 @@ Publication in a marketplace of Anthropic. The setup step. The move of the marke
 
 ## Automatic checks
 
-1. The two plugins and the marketplace validate. command: `claude plugin validate charter`
+1. Each of the two plugins validates. command: `claude plugin validate charter`
    command: `claude plugin validate charter-practices`
 2. The tests and the quality checks pass from the new place. command: `python3 -m unittest discover -s tests`
    command: `python3 charter/scripts/charter_gate.py quality --contract charter.toml`
@@ -41,5 +42,6 @@ Publication in a marketplace of Anthropic. The setup step. The move of the marke
    who: the leader. Not automatic: the marketplace is private during the beta.
    The run of 2026-10-01, by the leader's agent: both plugins validate; the tags `charter--v0.1.0` and
    `charter-practices--v0.1.0` are pushed; both plugins install at 0.1.0.
-4. The gates of this repo ran from the new place on the change request of this work item: the check "verdict" is green.
+4. The gates of this repo ran from the new place on the change request that closes this work item, #48: the check
+   "verdict" is green.
    who: the leader. Not automatic: the proof is the check on GitHub.
