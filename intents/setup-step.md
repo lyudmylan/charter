@@ -30,6 +30,11 @@ One command sets a repo up for Charter.
 - Two findings of the first setup of the second repo (#55, #56): the checker skips the repo's own name
   in the project name patterns, because the organization lists every project and a repo names itself;
   and both manifests carry the same version, because the adopter workflows fetch Charter at the tag of the version.
+- A finding of the first adopter on a private repo (#63): the written `verdict.yml` declared no
+  `actions: read`, and the facts step got 403 when it listed the runs of the review workflow to count the
+  rounds. A public repo serves that listing without the scope, which is why the verdict of this repo passed
+  with the same block. The template and the `verdict.yml` of this repo declare the scope, and a test refuses
+  a written verdict workflow without it. Version 0.3.1 carries the fix.
 
 ## Out of scope
 
@@ -55,6 +60,9 @@ Other code hosts. A setup through a skill in a session; that comes when the plug
 6. The written `tests.yml` and `verdict.yml` set no `runner` context in a job-level `env`, and write the
    variable of the scripts folder to `$GITHUB_ENV` in a step.
    test: `tests/test_setup.py::Templates.test_no_runner_context_in_a_job_env`
+
+8. The written `verdict.yml` declares `actions: read` in its permissions block.
+   test: `tests/test_setup.py::Templates.test_verdict_template_declares_actions_read`
 
 ## Manual checks
 

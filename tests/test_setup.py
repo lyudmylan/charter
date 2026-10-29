@@ -130,6 +130,15 @@ class Templates(Temp):
                                   "a job-level env uses the runner context")
                 self.assertIn('>> "$GITHUB_ENV"', text) if name != "review-intents.yml" else None
 
+    def test_verdict_template_declares_actions_read(self):
+        """setup-step, check 8 (#63): the facts step lists the runs of the review workflow to count the
+        rounds; a private repo serves that listing only with `actions: read`, a public repo without it."""
+        self.assertEqual(self.setup()[0], cc.PASS)
+        text = (self.dir / cs.WORKFLOWS / "verdict.yml").read_text()
+        block = re.search(r"^permissions:\n((?:  [\w-]+: \w+.*\n)+)", text, re.M)
+        self.assertIsNotNone(block, "the written verdict.yml has no permissions block")
+        self.assertRegex(block.group(1), r"(?m)^  actions: read\b", "the permissions block lacks actions: read")
+
     def test_lifecycle_map_has_the_six_phases(self):
         """default-lifecycle-map, check 1: six phases, the tracker skill in Plan, the document points to the template."""
         self.assertEqual(self.setup()[0], cc.PASS)
