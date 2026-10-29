@@ -43,7 +43,7 @@ the next one.
 2. The collector reads the intent path from the issue of the change request.
    test: `tests/test_charter_facts_github.py::Text.test_intent_path_from_issue`
 4. A plan file next to its intent is not read as an intent by the tests of the intents.
-   test: `tests/test_intents.py::Intents.test_a_plan_file_is_not_an_intent`
+   test: `tests/test_intents.py::PlannedIntents.test_a_plan_file_is_not_an_intent`
 
 ## Manual checks
 
