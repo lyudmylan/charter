@@ -127,7 +127,7 @@ None.
 
 class PlannedIntents(unittest.TestCase):
     def test_a_plan_file_is_not_an_intent(self):
-        """plan-before-the-code, check 4: `intents/<part>.plan.md` lives next to its intent and is not read
+        """plan-before-the-code, check 3: `intents/<part>.plan.md` lives next to its intent and is not read
         as one."""
         names = [p.name for p in intent_files()]
         self.assertNotIn("setup-step.plan.md", names)

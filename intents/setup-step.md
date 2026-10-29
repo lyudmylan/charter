@@ -61,10 +61,11 @@ Other code hosts. A setup through a skill in a session; that comes when the plug
    variable of the scripts folder to `$GITHUB_ENV` in a step.
    test: `tests/test_setup.py::Templates.test_no_runner_context_in_a_job_env`
 
-8. The written `verdict.yml` declares `actions: read` in its permissions block.
+7. The written `verdict.yml` and the `verdict.yml` of this repo both declare `actions: read` in their
+   permissions block.
    test: `tests/test_setup.py::Templates.test_verdict_template_declares_actions_read`
 
 ## Manual checks
 
-7. The setup runs in the second repo, and its first change request gets the three checks. who: the leader.
+8. The setup runs in the second repo, and its first change request gets the three checks. who: the leader.
    Not automatic: the second repo is outside this repo.

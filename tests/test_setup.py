@@ -131,13 +131,16 @@ class Templates(Temp):
                 self.assertIn('>> "$GITHUB_ENV"', text) if name != "review-intents.yml" else None
 
     def test_verdict_template_declares_actions_read(self):
-        """setup-step, check 8 (#63): the facts step lists the runs of the review workflow to count the
-        rounds; a private repo serves that listing only with `actions: read`, a public repo without it."""
+        """setup-step, check 7 (#63): the facts step lists the runs of the review workflow to count the
+        rounds; a private repo serves that listing only with `actions: read`, a public repo without it. The
+        template and the workflow of this repo stay identical, so both are read."""
         self.assertEqual(self.setup()[0], cc.PASS)
-        text = (self.dir / cs.WORKFLOWS / "verdict.yml").read_text()
-        block = re.search(r"^permissions:\n((?:  [\w-]+: \w+.*\n)+)", text, re.M)
-        self.assertIsNotNone(block, "the written verdict.yml has no permissions block")
-        self.assertRegex(block.group(1), r"(?m)^  actions: read\b", "the permissions block lacks actions: read")
+        for name, path in (("the written verdict.yml", self.dir / cs.WORKFLOWS / "verdict.yml"),
+                           ("the verdict.yml of this repo", ROOT / ".github" / "workflows" / "verdict.yml")):
+            with self.subTest(file=name):
+                block = re.search(r"^permissions:\n((?:  [\w-]+: \w+.*\n)+)", path.read_text(), re.M)
+                self.assertIsNotNone(block, f"{name} has no permissions block")
+                self.assertRegex(block.group(1), r"(?m)^  actions: read\b", f"{name} lacks actions: read")
 
     def test_lifecycle_map_has_the_six_phases(self):
         """default-lifecycle-map, check 1: six phases, the tracker skill in Plan, the document points to the template."""

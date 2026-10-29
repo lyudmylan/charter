@@ -1,6 +1,6 @@
 # Plan: the verdict template declares `actions: read` (#63)
 
-Intent: `intents/setup-step.md`, check 8. Accepted by the leader in the conversation on 2026-10-29, before
+Intent: `intents/setup-step.md`, check 7. Accepted by the leader in the conversation on 2026-10-29, before
 the code.
 
 ## Steps
@@ -12,10 +12,10 @@ the code.
    block of a workflow has no conditions, and a read scope widens nothing.
 2. `tests/test_setup.py`, class `Templates`: `test_verdict_template_declares_actions_read`. The written
    `verdict.yml` has a permissions block, and the block contains `actions: read`.
-3. `intents/setup-step.md`: one bullet in the scope records the finding and its cause; check 8 names the
-   test. Found while running the checks: the tests of the intents read this plan file as an intent, because
+3. `intents/setup-step.md`: one bullet in the scope records the finding and its cause; check 7 names the
+   test, which reads both verdict files. Found while running the checks: the tests of the intents read this plan file as an intent, because
    no plan file had existed next to an intent before. `tests/test_intents.py` skips `*.plan.md`, and
-   `intents/plan-before-the-code.md` records it as check 4.
+   `intents/plan-before-the-code.md` records it as check 3.
 4. `charter/.claude-plugin/plugin.json` and `charter-practices/.claude-plugin/plugin.json`: version 0.3.1,
    so that an adopter can name the version that carries the fix.
 5. One change request, `Closes #63`, with the line `No document change`: the product does not change. After
