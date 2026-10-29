@@ -17,6 +17,11 @@ PYTHON = "python3"
 HEADING_AUTOMATIC = "## Automatic checks"
 HEADING_MANUAL = "## Manual checks"
 STATUS_LINE = re.compile(r"^Work item: #\d+\. Status: (planned|done)\.", re.M)
+PLAN_SUFFIX = ".plan.md"   # plan-before-the-code: the plan lives next to its intent and is not an intent
+
+
+def intent_files() -> list:
+    return [p for p in sorted(INTENTS.glob("*.md")) if not p.name.endswith(PLAN_SUFFIX)]
 STATUS_DONE = "done"
 
 
@@ -84,10 +89,10 @@ def problems_of(name: str, text: str) -> list[str]:
 
 class Intents(unittest.TestCase):
     def test_intent_files_exist(self):
-        self.assertTrue(list(INTENTS.glob("*.md")), "no intent files")
+        self.assertTrue(intent_files(), "no intent files")
 
     def test_each_automatic_check_names_a_test_or_a_command_that_exists(self):
-        for intent in sorted(INTENTS.glob("*.md")):
+        for intent in intent_files():
             with self.subTest(intent=intent.name):
                 self.assertEqual(problems_of(intent.name, intent.read_text()), [])
 
@@ -121,6 +126,13 @@ None.
 
 
 class PlannedIntents(unittest.TestCase):
+    def test_a_plan_file_is_not_an_intent(self):
+        """plan-before-the-code, check 3: `intents/<part>.plan.md` lives next to its intent and is not read
+        as one."""
+        names = [p.name for p in intent_files()]
+        self.assertNotIn("setup-step.plan.md", names)
+        self.assertIn("setup-step.md", names)
+
     def test_planned_intents_need_no_existing_test(self):
         """planned-intents, check 1: a planned intent with a test that does not exist yet passes; a done one fails."""
         self.assertEqual(problems_of("x", INTENT_WITH_A_FUTURE_TEST.format(status="planned")), [])

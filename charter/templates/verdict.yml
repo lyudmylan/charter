@@ -16,6 +16,7 @@ on:
 
 permissions:
   contents: read
+  actions: read         # the facts step lists the runs of the review workflow; a private repo needs the scope
   pull-requests: write
   issues: write
   checks: write

@@ -9,7 +9,8 @@ Anthropic describes for the Build phase.
 
 ## In scope
 
-- The place: `intents/<part>.plan.md`, next to the intent of the work item.
+- The place: `intents/<part>.plan.md`, next to the intent of the work item. The tests of the intents skip a
+  plan file: a plan is not an intent.
 - The content: the steps, the files to change, the tests to add, in the words of the author. Written in
   plan mode, accepted by the person who holds the work item, committed before the code.
 - The link: the issue names its intent with one line, `Intent: intents/<part>.md`. The tracker skill
@@ -41,9 +42,12 @@ the next one.
    test: `tests/test_charter_gate.py::Verdict.test_plan_before_code`
 2. The collector reads the intent path from the issue of the change request.
    test: `tests/test_charter_facts_github.py::Text.test_intent_path_from_issue`
+3. A plan file next to its intent is not read as an intent by the tests of the intents (found when the
+   first plan landed, #63).
+   test: `tests/test_intents.py::PlannedIntents.test_a_plan_file_is_not_an_intent`
 
 ## Manual checks
 
-3. The next real change of this repo carries its plan before its code, accepted by the leader before the
+4. The next real change of this repo carries its plan before its code, accepted by the leader before the
    code. who: the leader. Not automatic: the order of the acceptance and the code is a fact of the
    conversation, not of the repo.
