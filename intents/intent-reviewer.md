@@ -1,6 +1,6 @@
 # Intent: the intent reviewer, an agent that reviews the intents of a change request, in shadow mode
 
-Work item: #45. Status: done. Approval: a person merges the change request that adds this file.
+Work items: #45, and #70 for the run that ends with a report. Status: done. Approval: a person merges the change request that adds this file.
 
 ## Goal
 
@@ -31,8 +31,9 @@ person still merges.
   cause. A failed run is no round: the collector counts only the successful runs; the author side reruns
   a failed run once (the skill `review-loop`). The prompt names the reading tools, says that a denied
   command is no reason to stop, and names the one command that posts the report and the one that updates
-  it. Found in runs of 2026-11-04 and 2026-11-08 in an adopter and of 2026-11-09 in this repo (#70): the
-  run ended with success, with permission denials and no report, and the verdict counted it as a round.
+  it. The reason: a run that ended with success and no report counted as a round. The cause: the permission
+  rules refuse `gh pr comment --body "<report>"` when the report carries escaped backticks, so the report
+  goes in through standard input, between two marker lines.
 
 ## Out of scope
 

@@ -8,8 +8,10 @@ Intent: `intents/intent-reviewer.md`, checks 4 and 5. Accepted by the leader in 
 The issue lists three options. This plan takes the first two: the run fails when no report was posted
 or updated, and the prompt names the exact commands. The third, a change of the round count in the
 collector, is not needed: the collector counts only the successful runs, so a failed run is no round.
-The verdict stays in shadow mode: "no report" changes no verdict. The cause of the denials is unknown;
-the run prints them from now on, so the next case names it. The decisions go on the issue.
+The verdict stays in shadow mode: "no report" changes no verdict. The cause of the denials, found on the
+first run of this change request with the new step and reproduced in a local run: the permission rules
+refuse `gh pr comment --body "<report>"` when the report carries escaped backticks; a report on standard
+input between two marker lines passes. The decisions go on the issue.
 
 ## Steps
 
@@ -21,10 +23,12 @@ the run prints them from now on, so the next case names it. The decisions go on 
       the action outputs (`execution_file`), so that the cause is in the log; then it reads the report
       comment again and fails the run with the line "the reviewer posted no report" when there is no
       report comment or its time did not change.
-   d. The prompt names the one command that posts the report, `gh pr comment <n> --body "<report>"`,
-      and the two that update it: the id from `gh api repos/<repo>/issues/<n>/comments --jq ...`, then
-      `gh api -X PATCH repos/<repo>/issues/comments/<id> -f body="<report>"`. No other command, no file:
-      the report goes into the command as text. The allowed tools do not change.
+   d. The prompt names the reading tools, says that a denied command is no reason to stop, and names the
+      one command that posts the report, `gh pr comment <n> --body-file - <<'REPORT'`, and the two that
+      update it: the id from `gh api repos/<repo>/issues/<n>/comments`, then
+      `gh api -X PATCH repos/<repo>/issues/comments/<id> -F body=@- <<'REPORT'`. The report goes in through
+      standard input, between two marker lines, with no escaping. No other command, no file. The allowed
+      tools do not change.
 2. `charter-practices/skills/review-loop/SKILL.md`, step 1: when the check `review-intents` fails with
    "the reviewer posted no report", rerun it once with `gh run rerun <run-id>`; a failed run is no
    round. The skill stays under 40 lines.
@@ -32,7 +36,8 @@ the run prints them from now on, so the next case names it. The decisions go on 
    of the guard step with `bash -e` and a `gh` on the path that answers with a given time: no report
    gives exit 1 and the line; the same time gives exit 1; a new time gives exit 0. It also asserts that
    the guard step has the same text in the template and in the workflow of this repo.
-   `test_the_prompt_names_the_post_and_update_commands` reads the prompt.
+   `test_the_prompt_names_the_tools_and_the_posting_command` reads the prompt;
+   `test_the_denied_commands_are_printed` runs the print of the denied commands on a sample execution file.
 4. `intents/intent-reviewer.md`: one bullet in the scope (the runs of 2026-11-04 and 2026-11-08, the
    decisions); checks 4 and 5 name the two tests; the manual checks become 6 and 7.
 5. `docs/contract.md`, the review loop: a round is one successful run of the reviewer; a run that ends
@@ -53,5 +58,5 @@ the run prints them from now on, so the next case names it. The decisions go on 
 
 ## Tests
 
-Two new tests, step 3. The existing `Commands.test_the_four_commands_exist_and_the_manifests_agree`
+Three new tests, step 3. The existing `Commands.test_the_four_commands_exist_and_the_manifests_agree`
 covers step 6.

@@ -118,8 +118,8 @@ class ReviewIntents(unittest.TestCase):
                 self.assertIsNotNone(prompt, "no prompt")
                 for part in ("Read files with the Read tool", "A denied command is no reason to stop",
                              "ends only after it is posted or updated",
-                             'gh pr comment ${{ github.event.pull_request.number }} --body "<the report>"',
-                             "gh api -X PATCH repos/${{ github.repository }}/issues/comments/<id>"):
+                             "gh pr comment ${{ github.event.pull_request.number }} --body-file - <<'REPORT'",
+                             "gh api -X PATCH repos/${{ github.repository }}/issues/comments/<id> -F body=@- <<'REPORT'"):
                     self.assertIn(part, prompt.group(1))
 
 

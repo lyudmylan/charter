@@ -45,11 +45,14 @@ jobs:
             `git log`, `gh issue view`, `gh issue list`, `gh pr view`, `gh pr comment`, and `gh api` on the comments
             of the change request. A denied command is no reason to stop: use one of these.
             The report is the comment on change request #${{ github.event.pull_request.number }}, and the run
-            ends only after it is posted or updated. Post it with one command,
-            `gh pr comment ${{ github.event.pull_request.number }} --body "<the report>"`, when no comment begins
-            with `<!-- charter-intent-review -->`; else update that comment with
-            `gh api -X PATCH repos/${{ github.repository }}/issues/comments/<id> -f body="<the report>"`, its id
-            from `gh api repos/${{ github.repository }}/issues/${{ github.event.pull_request.number }}/comments`.
+            ends only after it is posted or updated. The report goes in through standard input, between two
+            marker lines, with no escaping: a body in double quotes with escaped backticks is refused.
+            Post it with `gh pr comment ${{ github.event.pull_request.number }} --body-file - <<'REPORT'`, the
+            report, and a line `REPORT`, when no comment begins with `<!-- charter-intent-review -->`; else
+            update that comment with
+            `gh api -X PATCH repos/${{ github.repository }}/issues/comments/<id> -F body=@- <<'REPORT'`, the
+            report, and a line `REPORT`, its id from
+            `gh api repos/${{ github.repository }}/issues/${{ github.event.pull_request.number }}/comments`.
             No file, no other command. Change no file. Approve nothing. Block nothing.
           claude_args: >-
             --max-turns 30
