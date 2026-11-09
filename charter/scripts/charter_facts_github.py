@@ -62,8 +62,10 @@ query($owner: String!, $name: String!, $number: Int!, $after: String) {
 }
 """
 
-# The text of a change request.
-ISSUE_REFERENCE = re.compile(r"(?<![\w/])#(\d+)\b")
+# The text of a change request. A link to an issue is a closing keyword of the code host followed by `#N`
+# (`Closes #N`, `Fixes #N`, `Resolves #N`; the case does not matter; a colon may follow the keyword). A
+# bare `#N` in the text is a mention, not a link.
+LINKED_ISSUE = re.compile(r"\b(?:clos(?:e|es|ed)|fix(?:es|ed)?|resolv(?:e|es|ed))\s*:?\s+#(\d+)\b", re.IGNORECASE)
 REASON_LINE = re.compile(r"^No document change:\s*(.+?)\s*$", re.IGNORECASE | re.MULTILINE)
 FALSE_FAILURE_LINE = re.compile(r"^False failure:\s*([a-z0-9_-]+)\s*:\s*(.+?)\s*$", re.IGNORECASE | re.MULTILINE)
 DROPPED_FINDING_LINE = re.compile(r"^Dropped finding:\s*(.+?)\s*$", re.IGNORECASE | re.MULTILINE)
@@ -126,9 +128,10 @@ def msg(message_id: str, **values: object) -> str:
 
 
 def issue_numbers(text: str) -> list[int]:
-    """The issue numbers named in a text, in order, each once."""
+    """The issues that a text links with a closing keyword, in order, each once. A bare `#N` is a mention
+    and links nothing: a sentence that names a later issue must not make the verdict demand its plan."""
     seen: list[int] = []
-    for match in ISSUE_REFERENCE.finditer(text or ""):
+    for match in LINKED_ISSUE.finditer(text or ""):
         number = int(match.group(1))
         if number not in seen:
             seen.append(number)

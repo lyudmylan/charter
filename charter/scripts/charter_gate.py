@@ -5,7 +5,7 @@ A gate checks one change of a repo. The facts of the change request come from on
 that a collecting step writes on the code host. The gates know no code host.
 
 Commands:
-  link      --facts F --contract C     The change request references an open issue.
+  link      --facts F --contract C     The change request links an open issue (`Closes #N`).
   documents --facts F --contract C     A change under a code path changes a necessary document,
                                        or the change request records a reason.
   quality   --contract C [--repo-only]  The quality checks of the contract run and pass. With --repo-only
@@ -105,9 +105,9 @@ MSG = {
     "facts_not_object": "the facts file is not a JSON object: {path}",
     "facts_bad_value": "the facts file has a wrong value for {key}: {path}",
     "facts_missing_key": "the facts file has no key {key}: {path}",
-    "no_linked_issue": "the change request references no issue",
-    "no_open_issue": "the change request references no open issue: {issues}",
-    "link_ok": "the change request references the open issue {issues}",
+    "no_linked_issue": "the change request links no issue (a closing keyword and the number: `Closes #N`)",
+    "no_open_issue": "the change request links no open issue: {issues}",
+    "link_ok": "the change request links the open issue {issues}",
     "no_code_paths": "the contract declares no code paths, so this gate checks nothing",
     "no_code_change": "no file under a code path changed",
     "document_changed": "a necessary document changed: {documents}",

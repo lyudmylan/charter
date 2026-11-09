@@ -12,20 +12,28 @@ The gates run on each change request of this repo, and no change reaches the mai
 - The workflow definition comes from the main branch, so that a change cannot edit its own gate. Verify what GitHub offers for this (rulesets, required workflows).
 - Protection of the main branch: no direct push, and the verdict is a required check. Verify what the plan of this repo permits for a private repo.
 - The instruction file says what a contributor sees when a gate fails.
+- A finding of 2026-10-29, in an adopter (#67): the collecting script read every `#N` in the text of a
+  change request as a linked issue, and one sentence that named a later issue made the verdict demand
+  the plan of that issue; a complete change request was "not ready". A link is a closing keyword of the
+  code host followed by the number (`Closes #N`, `Fixes #N`, `Resolves #N`); a bare `#N` is a mention.
+  The instruction file names the form.
 
 ## Out of scope
 
 - Other code hosts. The gate scripts stay host-neutral; only the workflow is specific to GitHub.
+- A link form without a closing keyword, such as "Part of #N": a decision for a later work item, if
+  it is wanted.
 
 ## Acceptance checks
 
 ## Automatic checks
 
-1. The collecting script builds the facts file from the API responses: the issues named in the text with
-   their state, the changed files, the recorded reason, the unresolved review threads, and the result of the
-   quality job. No network in the tests.
+1. The collecting script builds the facts file from the API responses: the issues that the text links with
+   a closing keyword, with their state, and no issue that the text only mentions; the changed files, the
+   recorded reason, the unresolved review threads, and the result of the quality job. No network in the tests.
    test: `tests/test_charter_facts_github.py::Facts.test_facts_from_api_data`
    test: `tests/test_charter_facts_github.py::Text.test_issue_numbers_in_order_each_once`
+   test: `tests/test_charter_facts_github.py::Text.test_a_mention_is_not_a_link`
    test: `tests/test_charter_check.py::Source.test_source_prints_address_file_version_and_cache_path`
    test: `tests/test_charter_facts_github.py::Text.test_newest_completed_check_run_of_each_name`
    test: `tests/test_charter_gate.py::Quality.test_repo_only_needs_no_source`
