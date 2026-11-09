@@ -38,8 +38,7 @@ input between two marker lines passes. The decisions go on the issue.
    the guard step has the same text in the template and in the workflow of this repo.
    `test_the_prompt_names_the_tools_and_the_posting_command` reads the prompt;
    `test_the_denied_commands_are_printed` runs the print of the denied commands on a sample execution file.
-4. `intents/intent-reviewer.md`: one bullet in the scope (the runs of 2026-11-04 and 2026-11-08, the
-   decisions); checks 4 and 5 name the two tests; the manual checks become 6 and 7.
+4. `intents/intent-reviewer.md`: one bullet in the scope (the decisions, the reason, the cause); checks 4 and 5 name the two tests; the manual checks become 6 and 7.
 5. `docs/contract.md`, the review loop: a round is one successful run of the reviewer; a run that ends
    without a report fails, is no round, and prints the denied commands.
 6. `charter/.claude-plugin/plugin.json` and `charter-practices/.claude-plugin/plugin.json`: 0.3.2. This
