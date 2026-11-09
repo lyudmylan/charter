@@ -30,10 +30,15 @@ class Text(unittest.TestCase):
         of the code host link, in any case, with or without a colon."""
         text = "Closes #4. The re-run of #81 replaces this table. Fixes: #5. resolved #6. See #7 and issue#8. CLOSED #9"
         self.assertEqual(cf.issue_numbers(text), [4, 5, 6, 9])
-        self.assertEqual(cf.issue_numbers("See #7. Part of #8."), [])
+        self.assertEqual(cf.issue_numbers("See #7. Part of #8."), [8])
         for keyword in ("close", "closes", "closed", "fix", "fixes", "fixed", "resolve", "resolves", "resolved"):
             with self.subTest(keyword=keyword):
                 self.assertEqual(cf.issue_numbers(f"{keyword} #3"), [3])
+
+    def test_part_of_links_the_issue(self):
+        """code-host, check 2 (#76): `Part of #N` links the issue without closing it, so that a change request
+        of the Plan phase, the intent alone, has a link form; the case and a colon do not matter."""
+        self.assertEqual(cf.issue_numbers("Part of #8. part of: #9. See #7. Closes #8."), [8, 9])
 
     def test_recorded_reason(self):
         """code-host, check 1."""
