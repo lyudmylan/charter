@@ -33,6 +33,7 @@ one word.
   each disagreement and confirms the rest in one word.
 - `docs/product.md`, the Test phase: the reviewer that is not the author also reviews a reading that an
   agent drafts for a person. `docs/contract.md` names the skill.
+- Both manifests: 0.3.3, so that an adopter can name the version that carries the skill.
 
 ## Out of scope
 
@@ -45,8 +46,8 @@ a gate.
 ## Automatic checks
 
 1. The skill `evidence-review` is under 40 lines, says when to use it and when not, and names the two
-   passes, the severity, the list of disagreements with the evidence on each side, and the one-word
-   confirmation.
+   passes, the severity, the list of disagreements with the evidence on each side and its place (the
+   heading `## Disagreements` in the text of the change request), and the one-word confirmation.
    test: `tests/test_skills.py::EvidenceReviewSkill.test_size_and_description`
    test: `tests/test_skills.py::EvidenceReviewSkill.test_the_two_passes_and_the_list`
 2. The skill `tracker` and the intent template carry the clause of a drafted reading, and the skill
