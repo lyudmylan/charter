@@ -6,7 +6,8 @@ source. Each rule below ends with the identifier of its rule in the contract.
 ## How a change moves
 
 - Each change to a source file (code, config, doc) has an issue in the tracker. [change.ticket_per_change]
-- Work on a branch. Open a change request that references the issue. A person merges. [tiers.high.approver]
+- Work on a branch. Open a change request that closes the issue: `Closes #N`. A bare `#N` in the text is a
+  mention, not a link. A person merges. [tiers.high.approver]
 - The author of a change is not its reviewer. [change.author_not_reviewer]
 - The contract, the schema, the scripts, the tests, the workflows, and this file are in the high risk
   tier: a deep review, and the leader approves. [tiers.high.paths]

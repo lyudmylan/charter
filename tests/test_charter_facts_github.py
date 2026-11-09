@@ -22,8 +22,18 @@ ISSUES = {4: {cf.ISSUE_STATE: "open"}, 22: {cf.ISSUE_STATE: "closed"}, 23: {cf.I
 
 class Text(unittest.TestCase):
     def test_issue_numbers_in_order_each_once(self):
-        """code-host, check 1."""
-        self.assertEqual(cf.issue_numbers("Closes #4. See #22 and #4. Not #a. path/#9 no. issue#7 no."), [4, 22])
+        """code-host, check 2."""
+        self.assertEqual(cf.issue_numbers("Closes #4. Fixes #22, closes #4 again. Resolved: #4. Not closes #a. closes path/#9 no."), [4, 22])
+
+    def test_a_mention_is_not_a_link(self):
+        """code-host, check 2 (#67): a sentence that names an issue links nothing; the nine closing keywords
+        of the code host link, in any case, with or without a colon."""
+        text = "Closes #4. The re-run of #81 replaces this table. Fixes: #5. resolved #6. See #7 and issue#8. CLOSED #9"
+        self.assertEqual(cf.issue_numbers(text), [4, 5, 6, 9])
+        self.assertEqual(cf.issue_numbers("See #7. Part of #8."), [])
+        for keyword in ("close", "closes", "closed", "fix", "fixes", "fixed", "resolve", "resolves", "resolved"):
+            with self.subTest(keyword=keyword):
+                self.assertEqual(cf.issue_numbers(f"{keyword} #3"), [3])
 
     def test_recorded_reason(self):
         """code-host, check 1."""

@@ -8,7 +8,7 @@ Four scripts check a change of this repo: the link to its issue, the documents, 
 
 ## In scope
 
-- Link gate: the change request references an open issue of this repo.
+- Link gate: the change request links an open issue of this repo with a closing keyword (`Closes #N`).
 - Documents gate: when a file under a declared code path changes, the declared document changes too, or the change request carries a recorded reason.
 - Quality-check gate: the commands declared in the contract run and pass. For this repo: the tests of the scripts, and the checker on the contract.
 - Merge-readiness verdict: one script reads the results of the other gates and the state of the change request, and answers "ready" or "not ready" with the reasons. Its five checks: the required checks passed; no unresolved review comment; the approval that the risk tier demands is there; the issue is linked; the documents gate passed.

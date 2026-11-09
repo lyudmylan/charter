@@ -60,7 +60,7 @@ class Link(Temp):
         """gates, check 1."""
         code, out = run(cg.CMD_LINK, f"--{cg.ARG_FACTS}", str(self.facts()))
         self.assertEqual(code, cc.PASS, out)
-        self.assertIn("references the open issue [22]", out)
+        self.assertIn("links the open issue [22]", out)
 
     def test_no_linked_issue_fails(self):
         """gates, check 1."""
@@ -226,7 +226,7 @@ class Verdict(Temp):
         })
         self.assertEqual(code, cc.FAIL)
         self.assertTrue(out.startswith(cg.VERDICT_NOT_READY + "\n"))
-        for expected in ("references no issue", "no reason is recorded", "checks not passed: ['quality']",
+        for expected in ("links no issue", "no reason is recorded", "checks not passed: ['quality']",
                          "2 unresolved review threads"):
             self.assertIn(expected, out)
 
