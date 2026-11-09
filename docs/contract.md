@@ -98,7 +98,7 @@ python3 charter/scripts/charter_gate.py verdict   --facts facts.json --contract 
 
 | Gate | Passes when |
 |---|---|
-| `link` | The change request links an open issue with a closing keyword of the code host followed by the number: `close`, `closes`, `closed`, `fix`, `fixes`, `fixed`, `resolve`, `resolves` or `resolved`, in any case, with or without a colon, then `#N` (`Closes #N`). A bare `#N` in the text is a mention, not a link. |
+| `link` | The change request links an open issue with a closing keyword of the code host followed by the number: `close`, `closes`, `closed`, `fix`, `fixes`, `fixed`, `resolve`, `resolves` or `resolved`, in any case, with or without a colon, then `#N` (`Closes #N`); or `Part of #N`, which links the issue without closing it, the form of a change request of the Plan phase, the intent alone. A bare `#N` in the text is a mention, not a link. |
 | `documents` | No file under `documents.code_paths` changed; or a document in `documents.necessary` changed; or the change request records a reason. |
 | `quality` | Each command in `checks.quality` exits with 0. |
 | `verdict` | `link` and `documents` pass, all reported checks passed, no review thread is unresolved, a tier matches the changed files, and, when the contract sets `build.plan_before_code`, the plan of each intent that a linked issue names exists at the head commit (a change of intents alone needs no plan; an intent that the change request removes or renames away needs no plan). The first line of the output is `ready` or `not ready`; the reasons follow. The verdict names the tier and who merges. |
@@ -125,8 +125,8 @@ A change request records a reason for a missing document change with one line in
 fields are optional: the collecting step writes them when it is given the reviewer workflow. The field
 `intents` lists the intents that the linked issues name with a line `Intent: intents/<part>.md`, and
 whether the plan `intents/<part>.plan.md` of each exists at the head commit. The linked issues are those
-that the text of the change request closes with a keyword; an issue that the text only mentions is not
-linked, so the verdict does not ask for its plan.
+that the text of the change request closes with a keyword or names with `Part of #N`; an issue that the
+text only mentions is not linked, so the verdict does not ask for its plan.
 
 Three rules of the gates:
 

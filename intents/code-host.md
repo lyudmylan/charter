@@ -18,12 +18,14 @@ The gates run on each change request of this repo, and no change reaches the mai
   code host (`close`, `fix`, `resolve`, and their forms in -s and -d, in any case, with an optional colon)
   followed by the number; a bare `#N` is a mention. `docs/contract.md` holds the full list; the instruction
   file gives the form `Closes #N`.
+- A gap found on 2026-11-09 (#76): a change request of the Plan phase, the intent alone, must not close
+  its issue, and a mention links nothing, so it had no link form and the link gate refused it. A second
+  form, `Part of #N`, links the issue without closing it. The instruction file and the tracker skill name
+  both forms.
 
 ## Out of scope
 
 - Other code hosts. The gate scripts stay host-neutral; only the workflow is specific to GitHub.
-- A link form without a closing keyword, such as "Part of #N": a decision for a later work item, if
-  it is wanted.
 
 ## Acceptance checks
 
@@ -39,10 +41,11 @@ The gates run on each change request of this repo, and no change reaches the mai
    test: `tests/test_charter_facts_github.py::Facts.test_open_change_request_is_preferred_and_closed_never_counts`
    test: `tests/test_charter_check.py::Source.test_source_refuses_an_organization_file`
    test: `tests/test_charter_gate.py::Quality.test_repo_only_refuses_an_organization_file`
-2. The text of a change request links an issue only with a closing keyword of the code host, each number
-   once, in order; a mention links nothing.
+2. The text of a change request links an issue only with a closing keyword of the code host or with
+   `Part of #N`, each number once, in order; a mention links nothing.
    test: `tests/test_charter_facts_github.py::Text.test_issue_numbers_in_order_each_once`
    test: `tests/test_charter_facts_github.py::Text.test_a_mention_is_not_a_link`
+   test: `tests/test_charter_facts_github.py::Text.test_part_of_links_the_issue`
 
 ## Manual checks
 

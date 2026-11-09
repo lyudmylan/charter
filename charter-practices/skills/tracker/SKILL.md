@@ -33,7 +33,7 @@ person who holds the work item to accept it, in the conversation; the code start
 
 ## Changes and closing
 
-A change request names its issue: `Closes #N`. When a file under a code path changes and no necessary
-document, the change request carries one line: `No document change: <reason>`. A false failure of a
-gate: `False failure: <gate>: <reason>`. An epic closes when its last issue closes, with a comment that
-names what it delivered.
+A change request names its issue: `Closes #N`; the change request of the Plan phase, the intent alone,
+says `Part of #N`, which links without closing. When a file under a code path changes and no necessary
+document, the change request carries one line: `No document change: <reason>`. A false failure of a gate:
+`False failure: <gate>: <reason>`. An epic closes when its last issue closes, with a comment on what it delivered.
