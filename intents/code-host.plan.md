@@ -5,9 +5,9 @@ the code.
 
 ## Decision
 
-The issue names a new intent, `intents/linked-issues.md`. The fix is one rule of the collecting script,
-which `intents/code-host.md` owns (its check 1 names the test of the issue numbers). The issue line
-changes to `Intent: intents/code-host.md`; no new intent, no Plan-phase change request. The link form
+The issue first named a new intent, `intents/linked-issues.md`. The rule belongs to the collecting script,
+which `intents/code-host.md` owns (its check 1 names the test of the issue numbers), so the issue line
+changed to `Intent: intents/code-host.md`: no new intent, no Plan-phase change request. The link form
 without a closing keyword ("Part of #N") stays out, as the issue says.
 
 ## Steps
@@ -21,10 +21,12 @@ without a closing keyword ("Part of #N") stays out, as the issue says.
    "references", so that the reason names the rule.
 3. `tests/test_charter_facts_github.py`, class `Text`: `test_issue_numbers_in_order_each_once` takes a
    text with closing keywords; new `test_a_mention_is_not_a_link`: "Closes #4. The re-run of #81 replaces
-   this table. Fixes: #5. resolved #6. See #7." gives `[4, 5, 6]`.
+   this table. Fixes: #5. resolved #6. See #7." gives `[4, 5, 6]`, and each of the nine keywords links, in
+   any case, with or without a colon. `tests/test_charter_gate.py`: two assertions say "links".
 4. `intents/code-host.md`: check 1 says "the issues that the text links with a closing keyword" and
    names the new test; one bullet in the scope records the finding (2026-10-29, an adopter: a complete
-   change request was "not ready" because one sentence named a later issue).
+   change request was "not ready" because one sentence named a later issue). `intents/gates.md`: its one
+   line on the link gate names the form.
 5. `AGENTS.md` and `charter/templates/AGENTS.md`: "Open a change request that closes the issue:
    `Closes #N`" where they say "that references the issue".
 6. `docs/contract.md`: the row of the gate `link` and the paragraph on the facts file say what links an
@@ -35,9 +37,9 @@ without a closing keyword ("Part of #N") stays out, as the issue says.
 ## Files
 
 `charter/scripts/charter_facts_github.py`, `charter/scripts/charter_gate.py`,
-`tests/test_charter_facts_github.py`, `intents/code-host.md`, `AGENTS.md`, `charter/templates/AGENTS.md`,
-`docs/contract.md`, and this file.
+`tests/test_charter_facts_github.py`, `tests/test_charter_gate.py`, `intents/code-host.md`, `intents/gates.md`,
+`AGENTS.md`, `charter/templates/AGENTS.md`, `docs/contract.md`, and this file.
 
 ## Tests
 
-One new test and one changed test, step 3.
+One new test and one changed test, step 3; two assertions of `tests/test_charter_gate.py` change their wording.

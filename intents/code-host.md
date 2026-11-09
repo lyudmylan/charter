@@ -15,8 +15,9 @@ The gates run on each change request of this repo, and no change reaches the mai
 - A finding of 2026-10-29, in an adopter (#67): the collecting script read every `#N` in the text of a
   change request as a linked issue, and one sentence that named a later issue made the verdict demand
   the plan of that issue; a complete change request was "not ready". A link is a closing keyword of the
-  code host followed by the number (`Closes #N`, `Fixes #N`, `Resolves #N`); a bare `#N` is a mention.
-  The instruction file names the form.
+  code host (`close`, `fix`, `resolve`, and their forms in -s and -d, in any case, with an optional colon)
+  followed by the number; a bare `#N` is a mention. `docs/contract.md` holds the full list; the instruction
+  file gives the form `Closes #N`.
 
 ## Out of scope
 
