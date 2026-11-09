@@ -6,8 +6,10 @@ Each test names the intent and the check that it implements, in its docstring.
 import contextlib
 import io
 import json
+import os
 import re
 import shutil
+import subprocess
 import sys
 import tempfile
 import tomllib
@@ -23,6 +25,7 @@ ORG = ROOT / "tests" / "samples" / "organization.toml"
 FLAGS = ["--repo", "sample", "--source", "https://example.com/org/rules", "--source-version", "v1",
          "--leader", "alice", "--quality", "python3 -m unittest discover -s tests"]
 PHASES = ("plan", "design", "build", "test", "deploy", "maintain")
+PUBLISH_STEP = 'Publish the check "verdict" on the change request'
 
 
 def run(*argv: str) -> tuple[int, str]:
@@ -30,6 +33,35 @@ def run(*argv: str) -> tuple[int, str]:
     with contextlib.redirect_stdout(out):
         code = cs.main(list(argv))
     return code, out.getvalue()
+
+
+def run_block(workflow: str, step: str) -> str:
+    """The `run:` script of the named step of a workflow. The file is read as text: the standard library
+    has no YAML parser."""
+    lines = workflow.splitlines()
+    start = lines.index(f"      - name: {step}")
+    first = next(i for i in range(start + 1, len(lines)) if lines[i] == "        run: |")
+    script = []
+    for line in lines[first + 1:]:
+        if line and not line.startswith("          "):
+            break
+        script.append(line[10:])
+    return "\n".join(script) + "\n"
+
+
+def run_step(script: str, folder: Path, env: dict[str, str], files: dict[str, str]) -> tuple[int, str]:
+    """Runs the script of a step with `bash -e`, as the host does, in `folder` with `files` in it and a `gh`
+    on the path that records its arguments. Returns the exit code and the recorded arguments, one per line."""
+    (folder / "bin").mkdir(parents=True)
+    gh = folder / "bin" / "gh"
+    gh.write_text('#!/bin/sh\nprintf "%s\\n" "$@" > "$GH_CALL"\n')
+    gh.chmod(0o755)
+    for name, text in files.items():
+        (folder / name).write_text(text)
+    call = folder / "gh-call.txt"
+    result = subprocess.run(["bash", "-e", "-c", script], cwd=folder, capture_output=True, text=True,
+                            env={**env, "PATH": f"{folder / 'bin'}:{os.environ['PATH']}", "GH_CALL": str(call)})
+    return result.returncode, call.read_text() if call.exists() else ""
 
 
 class Temp(unittest.TestCase):
@@ -141,6 +173,29 @@ class Templates(Temp):
                 block = re.search(r"^permissions:\n((?:  [\w-]+: \w+.*\n)+)", path.read_text(), re.M)
                 self.assertIsNotNone(block, f"{name} has no permissions block")
                 self.assertRegex(block.group(1), r"(?m)^  actions: read\b", f"{name} lacks actions: read")
+
+    def test_the_check_is_published_when_the_verdict_could_not_run(self):
+        """setup-step, check 8 (#68): the step runs under the `-e` shell of the host, and a read of the
+        missing `verdict.txt` ended it before the fallback title; the change request then showed no check.
+        The step runs here as the host runs it, with a `gh` that records its one call."""
+        self.assertEqual(self.setup()[0], cc.PASS)
+        written = (self.dir / cs.WORKFLOWS / "verdict.yml").read_text()
+        step = run_block(written, PUBLISH_STEP)
+        self.assertEqual(step, run_block((ROOT / ".github" / "workflows" / "verdict.yml").read_text(), PUBLISH_STEP),
+                         "the template and the verdict.yml of this repo differ in the step")
+        self.assertIn("PR_SHA: ${{ steps.pr.outputs.sha || github.event.workflow_run.head_sha }}", written)
+        cases = (
+            ("no-verdict", "", {}, False, ("conclusion=failure", "output[title]=the verdict could not run")),
+            ("ready", "0", {"verdict.txt": "ready\nlink: the change request links the open issue 1\n"}, True,
+             ("conclusion=success", "output[title]=ready")),
+        )
+        for name, code, files, passes, expected in cases:
+            with self.subTest(case=name):
+                env = {"VERDICT_CODE": code, "PR_SHA": "0123abc", "GITHUB_REPOSITORY": "owner/name"}
+                exit_code, call = run_step(step, self.dir / name, env, files)
+                self.assertEqual(exit_code == 0, passes, call)
+                for part in expected:
+                    self.assertIn(part, call.splitlines())
 
     def test_lifecycle_map_has_the_six_phases(self):
         """default-lifecycle-map, check 1: six phases, the tracker skill in Plan, the document points to the template."""

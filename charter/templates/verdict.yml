@@ -124,12 +124,13 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           VERDICT_CODE: ${{ steps.verdict.outputs.code }}
-          PR_SHA: ${{ steps.pr.outputs.sha }}
+          PR_SHA: ${{ steps.pr.outputs.sha || github.event.workflow_run.head_sha }}
         run: |
+          # The shell runs with -e: a read of a missing verdict.txt must not end the step before the fallback.
           CONCLUSION=$([ "$VERDICT_CODE" = "0" ] && echo success || echo failure)
-          TITLE=$(head -n 1 verdict.txt 2>/dev/null)
+          TITLE=$(head -n 1 verdict.txt 2>/dev/null || true)
           [ -n "$TITLE" ] || TITLE="the verdict could not run"
-          SUMMARY=$(cat verdict.txt 2>/dev/null)
+          SUMMARY=$(cat verdict.txt 2>/dev/null || true)
           [ -n "$SUMMARY" ] || SUMMARY="the verdict could not run; see the log of the job"
           gh api -X POST "repos/$GITHUB_REPOSITORY/check-runs" \
             -f name=verdict -f head_sha="$PR_SHA" -f status=completed -f conclusion="$CONCLUSION" \

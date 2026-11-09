@@ -35,6 +35,11 @@ One command sets a repo up for Charter.
   rounds. A public repo serves that listing without the scope, which is why the verdict of this repo passed
   with the same block. The template and the `verdict.yml` of this repo declare the scope, and a test refuses
   a written verdict workflow without it. Version 0.3.1 carries the fix.
+- A finding of 2026-11-02, in an adopter (#68): the fetch of the organization source failed on an expired
+  token, and the change request showed two green checks and no check "verdict". The step "Publish the
+  check" runs under the `-e` shell of the host, and its read of the missing `verdict.txt` ended the step
+  before the fallback title. The two reads now tolerate a missing file, the commit of the check falls
+  back to the head commit of the run, and a test runs the step without the file.
 
 ## Out of scope
 
@@ -64,8 +69,13 @@ Other code hosts. A setup through a skill in a session; that comes when the plug
 7. The written `verdict.yml` and the `verdict.yml` of this repo both declare `actions: read` in their
    permissions block.
    test: `tests/test_setup.py::Templates.test_verdict_template_declares_actions_read`
+8. The step "Publish the check" of the written `verdict.yml` publishes the check with the conclusion
+   failure and the title "the verdict could not run" when `verdict.txt` is missing, and then fails the
+   job; with a verdict, the conclusion is success. The step has the same text in the `verdict.yml` of
+   this repo.
+   test: `tests/test_setup.py::Templates.test_the_check_is_published_when_the_verdict_could_not_run`
 
 ## Manual checks
 
-8. The setup runs in the second repo, and its first change request gets the three checks. who: the leader.
+9. The setup runs in the second repo, and its first change request gets the three checks. who: the leader.
    Not automatic: the second repo is outside this repo.
