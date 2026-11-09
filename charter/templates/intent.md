@@ -26,3 +26,4 @@ Work item: #<number>. Status: planned. Approval: a person merges the change requ
 ## Manual checks
 
 3. <A result that only a person can verify.> who: <the role>. Not automatic: <the reason>.
+4. <A reading that the agent drafts for a person: a judgment on evidence.> drafted by the agent, reviewed by an agent that is not the author, confirmed by <the role>. Not automatic: <the reason>.

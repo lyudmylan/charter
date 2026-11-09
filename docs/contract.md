@@ -168,6 +168,11 @@ blocks nothing; a person merges. It runs with a token of the owner's subscriptio
 `CLAUDE_CODE_OAUTH_TOKEN`, and with read-only tools plus the comment commands. A change request from a
 fork gets no secret and no review.
 
+A reading that an agent drafts for a person, such as the error analysis of an eval round, is reviewed
+before the person reads it (decision C11): the skill `charter-practices/skills/evidence-review/SKILL.md`
+runs two passes by fresh agents in the session of the author, and puts the disagreements, with the
+evidence on each side, in the text of the change request under `## Disagreements`.
+
 ### The review loop
 
 Each finding carries a severity: `blocker`, `high`, `medium`, or `low`; the report ends with the line

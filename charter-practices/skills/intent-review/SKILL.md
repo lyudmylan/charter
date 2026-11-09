@@ -13,8 +13,9 @@ house style; the text of the change request. Change no file. Approve nothing, bl
 - Goal: one sentence, a result, not an activity.
 - Scope: bounded. The out-of-scope line is real. Nothing duplicates another intent or an existing part.
 - Acceptance checks: automatic by default; each automatic check names a test or a command that can verify
-  it; a manual check names who does it and why it is not automatic; the checks prove the goal, not only
-  the activity.
+  it; a manual check names who does it and why it is not automatic; a manual check whose result the agent
+  drafts carries the clause `drafted by the agent, reviewed by an agent that is not the author, confirmed
+  by <the role>`; the checks prove the goal, not only the activity.
 - Minimum: nothing that the goal of the iteration does not need; nothing missing that it needs.
 - Consistency: with the product document, with the decisions of the epics, and with the scripts that the
   intent touches, without a redesign.
