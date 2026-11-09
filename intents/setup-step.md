@@ -43,7 +43,9 @@ One command sets a repo up for Charter.
 
 ## Out of scope
 
-Other code hosts. A setup through a skill in a session; that comes when the plugin is installed.
+Other code hosts. A setup through a skill in a session; that comes when the plugin is installed. The
+expiry of the token of the organization source: an operation of the adopter. A message that names the
+expired token in the fetch step: later.
 
 ## Acceptance checks
 
@@ -72,7 +74,9 @@ Other code hosts. A setup through a skill in a session; that comes when the plug
 8. The step "Publish the check" of the written `verdict.yml` publishes the check with the conclusion
    failure and the title "the verdict could not run" when `verdict.txt` is missing, and then fails the
    job; with a verdict, the conclusion is success. The step has the same text in the `verdict.yml` of
-   this repo.
+   this repo. The commit of the check is `steps.pr.outputs.sha`, or `github.event.workflow_run.head_sha`
+   when the step "Find the change request" did not run: an expression that the host evaluates, which the
+   test reads as text.
    test: `tests/test_setup.py::Templates.test_the_check_is_published_when_the_verdict_could_not_run`
 
 ## Manual checks
