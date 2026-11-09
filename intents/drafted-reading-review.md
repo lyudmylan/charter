@@ -29,8 +29,9 @@ one word.
   and the evidence, and looks for items where the author is wrong, too kind, or too harsh, and for fixes
   that hide a problem. Each finding carries a severity of the scale of the intent review. The author
   corrects what it accepts, and merges the rest into one list of disagreements with the evidence on each
-  side, in the text of the change request, so that the evidence record holds it (C9). The person decides
-  each disagreement and confirms the rest in one word.
+  side, in the text of the change request, which stays with the change as its evidence; the evidence
+  record of the verdict does not copy the list. The person decides each disagreement and confirms the rest
+  in one word.
 - `docs/product.md`, the Test phase: the reviewer that is not the author also reviews a reading that an
   agent drafts for a person. `docs/contract.md` names the skill.
 - Both manifests: 0.3.3, so that an adopter can name the version that carries the skill.

@@ -23,7 +23,7 @@ Each finding carries a severity of the intent review: `blocker`, `high`, `medium
 Compare the three readings per item. Where you accept a finding, correct the draft and say so in one
 line. Where you keep your reading, the item is a disagreement: your reading, the other reading, the
 evidence on each side, the severity. Put the list in the text of the change request under the heading
-`## Disagreements`, by severity, so that the evidence record holds it. An empty list says so.
+`## Disagreements`, by severity, so that it stays with the change as evidence. An empty list says so.
 
 ## What the person does
 
