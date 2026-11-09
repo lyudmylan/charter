@@ -21,12 +21,12 @@ Anthropic describes for the Build phase.
   exists. It checks the result, not the sequence of commits. With the flag on, a change request whose issue
   names no intent is not ready. A change request that changes only files under `intents/` needs no plan:
   that is the Plan phase itself.
-- A finding of 2026-11-08, in an adopter (#71): a change request renamed an intent and its plan, and a
-  linked issue named the old path; the gate asked for `intents/<old>.plan.md` and said "not ready" for a
-  complete change. The collector marks an intent that the change request removes, or renames away, with
-  the fact `removed` (a file with the status removed, or the previous name of a renamed file); the gate
-  asks no plan for it and says so in its reasons. An intent that the change request does not touch still
-  needs its plan, so a wrong path in an issue still fails.
+- The collector marks an intent that the change request removes, or renames away, with the fact
+  `removed` (a file with the status removed, or the previous name of a renamed file); the gate asks no
+  plan for it and says so in its reasons. An intent that the change request does not touch still needs
+  its plan, so a wrong path in an issue still fails. Found in an adopter on 2026-11-08 (#71): a change
+  request renamed an intent and its plan, a linked issue named the old path, and the gate said "not
+  ready" for a complete change.
 - The contract: a flag `build.plan_before_code`, which an organization can lock. This repo and the
   template of the setup step set it. The schema changes, so both plugins take a new version, which the
   tag step after the merge carries; an adopter takes the gate when its contract names that version.
@@ -56,6 +56,7 @@ the next one.
    a path that the change request does not touch still needs its plan.
    test: `tests/test_charter_facts_github.py::Facts.test_a_renamed_or_removed_intent_is_marked`
    test: `tests/test_charter_gate.py::Verdict.test_a_removed_intent_needs_no_plan`
+   The third claim is the last case of the verdict test.
 
 ## Manual checks
 
