@@ -1,12 +1,12 @@
 # Plan: a mention of an issue in the text of a change request is not a link (#67)
 
-Intent: `intents/code-host.md`, check 1. Accepted by the leader in the conversation on 2026-11-09, before
+Intent: `intents/code-host.md`, checks 1 and 2. Accepted by the leader in the conversation on 2026-11-09, before
 the code.
 
 ## Decision
 
 The issue first named a new intent, `intents/linked-issues.md`. The rule belongs to the collecting script,
-which `intents/code-host.md` owns (its check 1 names the test of the issue numbers), so the issue line
+which `intents/code-host.md` owns (its check 1 names the tests of the collecting script), so the issue line
 changed to `Intent: intents/code-host.md`: no new intent, no Plan-phase change request. The link form
 without a closing keyword ("Part of #N") stays out, as the issue says.
 
@@ -23,8 +23,7 @@ without a closing keyword ("Part of #N") stays out, as the issue says.
    text with closing keywords; new `test_a_mention_is_not_a_link`: "Closes #4. The re-run of #81 replaces
    this table. Fixes: #5. resolved #6. See #7." gives `[4, 5, 6]`, and each of the nine keywords links, in
    any case, with or without a colon. `tests/test_charter_gate.py`: two assertions say "links".
-4. `intents/code-host.md`: check 1 says "the issues that the text links with a closing keyword" and
-   names the new test; one bullet in the scope records the finding (2026-10-29, an adopter: a complete
+4. `intents/code-host.md`: check 2, the link rule, names the test of the issue numbers and the new test; one bullet in the scope records the finding (2026-10-29, an adopter: a complete
    change request was "not ready" because one sentence named a later issue). `intents/gates.md`: its one
    line on the link gate names the form.
 5. `AGENTS.md` and `charter/templates/AGENTS.md`: "Open a change request that closes the issue:

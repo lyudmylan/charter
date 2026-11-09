@@ -98,7 +98,7 @@ python3 charter/scripts/charter_gate.py verdict   --facts facts.json --contract 
 
 | Gate | Passes when |
 |---|---|
-| `link` | The change request links an open issue with a closing keyword of the code host followed by the number: `Closes #N`, `Fixes #N`, `Resolves #N`, in any case, with or without a colon. A bare `#N` in the text is a mention, not a link. |
+| `link` | The change request links an open issue with a closing keyword of the code host followed by the number: `close`, `closes`, `closed`, `fix`, `fixes`, `fixed`, `resolve`, `resolves` or `resolved`, in any case, with or without a colon, then `#N` (`Closes #N`). A bare `#N` in the text is a mention, not a link. |
 | `documents` | No file under `documents.code_paths` changed; or a document in `documents.necessary` changed; or the change request records a reason. |
 | `quality` | Each command in `checks.quality` exits with 0. |
 | `verdict` | `link` and `documents` pass, all reported checks passed, no review thread is unresolved, a tier matches the changed files, and, when the contract sets `build.plan_before_code`, the plan of each intent that a linked issue names exists at the head commit (a change of intents alone needs no plan). The first line of the output is `ready` or `not ready`; the reasons follow. The verdict names the tier and who merges. |

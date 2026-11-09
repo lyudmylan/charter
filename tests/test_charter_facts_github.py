@@ -22,11 +22,11 @@ ISSUES = {4: {cf.ISSUE_STATE: "open"}, 22: {cf.ISSUE_STATE: "closed"}, 23: {cf.I
 
 class Text(unittest.TestCase):
     def test_issue_numbers_in_order_each_once(self):
-        """code-host, check 1."""
+        """code-host, check 2."""
         self.assertEqual(cf.issue_numbers("Closes #4. Fixes #22, closes #4 again. Resolved: #4. Not closes #a. closes path/#9 no."), [4, 22])
 
     def test_a_mention_is_not_a_link(self):
-        """code-host, check 1 (#67): a sentence that names an issue links nothing; the nine closing keywords
+        """code-host, check 2 (#67): a sentence that names an issue links nothing; the nine closing keywords
         of the code host link, in any case, with or without a colon."""
         text = "Closes #4. The re-run of #81 replaces this table. Fixes: #5. resolved #6. See #7 and issue#8. CLOSED #9"
         self.assertEqual(cf.issue_numbers(text), [4, 5, 6, 9])
