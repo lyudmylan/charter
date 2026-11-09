@@ -80,8 +80,8 @@ class Text(unittest.TestCase):
         self.assertEqual(cg.plan_of("intents/app.md"), "intents/app.plan.md")
         facts = cf.build_facts({cf.PR_NUMBER: 7, cf.PR_TITLE: "t", cf.PR_BODY: ""}, [], {}, 0, {},
                                plans={"intents/app.md": True, "intents/other.md": False})
-        self.assertEqual(facts[cg.FACT_INTENTS], [{cg.INTENT_PATH: "intents/app.md", cg.INTENT_PLAN: True},
-                                                  {cg.INTENT_PATH: "intents/other.md", cg.INTENT_PLAN: False}])
+        self.assertEqual(facts[cg.FACT_INTENTS], [{cg.INTENT_PATH: "intents/app.md", cg.INTENT_PLAN: True, cg.INTENT_REMOVED: False},
+                                                  {cg.INTENT_PATH: "intents/other.md", cg.INTENT_PLAN: False, cg.INTENT_REMOVED: False}])
 
     def test_job_result_maps_to_check_state(self):
         """code-host, check 1."""
