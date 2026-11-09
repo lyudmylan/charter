@@ -49,6 +49,7 @@ A decision changes only through a reviewed change to this file.
 | C8 | Each contract section names its owner as a role. The code owners file of the code host is written from the roles. | Use the enforcement that the code host has. | 2026-09-29 |
 | C9 | The evidence record holds, for each change: the gate verdicts, the dropped findings with reasons, false failures of a gate, eval results, and cost. | The leader audits by sample, not by approval of every step. | 2026-09-29 |
 | C10 | Additions to C2: a shadow period for a new agent reviewer; a log of each approval with reasons; a risk-weighted sample for a person; automatic return of a tier to human approval after an escaped defect. | The first three come from official guidance. The fourth withdraws a grant after a failure. | 2026-09-29 |
+| C11 | A reading that an agent drafts for a person (a manual check whose result is a judgment on evidence, such as the error analysis of an eval round) reaches the person after a review by an agent that is not the author, as a list of disagreements with the evidence on each side; the person decides the disagreements and confirms the rest in one word. | B5: agents praise their own work. C2: approval of every item by a person is the bottleneck. C10: the person decides on a sample, and the disagreements are that sample. | 2026-11-03 |
 
 ## D. Lifecycle
 

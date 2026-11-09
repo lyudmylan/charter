@@ -1,6 +1,6 @@
 # Intent: a reading that an agent drafts for a person is reviewed before the person reads it
 
-Work item: #69. Status: planned. Approval: a person merges the change request that adds this file.
+Work item: #69. Status: done. Approval: a person merges the change request that adds this file.
 
 ## Goal
 
