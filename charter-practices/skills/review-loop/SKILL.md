@@ -13,7 +13,8 @@ scripts when this repo has none.
 
 ## One round
 
-1. Wait for the reviewer: `gh pr checks <number> --watch`. Then read its comment:
+1. Wait for the reviewer: `gh pr checks <number> --watch`. When the check `review-intents` fails with "the
+   reviewer posted no report", rerun it once, `gh run rerun <run-id>`; a failed run is no round. Then read its comment:
    `gh api repos/<owner>/<repo>/issues/<number>/comments --jq '.[] | select(.body | startswith("<!-- charter-intent-review -->")) | .body'`.
 2. Decide each finding at the threshold or above, in the order of the report:
    - correct: change the intent, in the smallest way that answers the finding;

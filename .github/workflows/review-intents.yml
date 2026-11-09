@@ -1,6 +1,7 @@
 # The intent reviewer. An agent that is not the author reviews the intents of a change request and posts
 # one comment. Shadow mode: it approves nothing and blocks nothing; a person merges. It runs the code of
 # nobody: it reads files and posts a comment. A change request from a fork gets no secret and no review.
+# A run ends with a report on the change request, or it fails: a failed run is no round of the review loop.
 name: review-intents
 
 on:
@@ -22,7 +23,17 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
+      - name: Note the report before the review
+        id: before
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: |
+          UPDATED=$(gh api "repos/$GITHUB_REPOSITORY/issues/$PR_NUMBER/comments?per_page=100" \
+            --jq '[.[] | select(.body | startswith("<!-- charter-intent-review -->"))] | last | .updated_at // "none"')
+          echo "updated=$UPDATED" >> "$GITHUB_OUTPUT"
       - uses: anthropics/claude-code-action@v1
+        id: review
         with:
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
           github_token: ${{ secrets.GITHUB_TOKEN }}
@@ -30,9 +41,38 @@ jobs:
             Review the intents that change request #${{ github.event.pull_request.number }} changes.
             Follow charter-practices/skills/intent-review/SKILL.md exactly: it is the checklist and the form of the report.
             The changed intents: run `git diff --name-only origin/${{ github.base_ref }}...HEAD -- intents/`.
-            Post the report as a comment on change request #${{ github.event.pull_request.number }} with
-            `gh pr comment`, or update the existing comment that begins with `<!-- charter-intent-review -->`.
-            Change no file. Approve nothing. Block nothing.
+            Read files with the Read tool, list them with Glob, search with Grep. The shell allows only `git diff`,
+            `git log`, `gh issue view`, `gh issue list`, `gh pr view`, `gh pr comment`, and `gh api` on the comments
+            of the change request. A denied command is no reason to stop: use one of these.
+            The report is the comment on change request #${{ github.event.pull_request.number }}, and the run
+            ends only after it is posted or updated. The report goes in through standard input, between two
+            marker lines, with no escaping: a body in double quotes with escaped backticks is refused.
+            Post it with `gh pr comment ${{ github.event.pull_request.number }} --body-file - <<'REPORT'`, the
+            report, and a line `REPORT`, when no comment begins with `<!-- charter-intent-review -->`; else
+            update that comment with
+            `gh api -X PATCH repos/${{ github.repository }}/issues/comments/<id> -F body=@- <<'REPORT'`, the
+            report, and a line `REPORT`, its id from
+            `gh api repos/${{ github.repository }}/issues/${{ github.event.pull_request.number }}/comments`.
+            No file, no other command. Change no file. Approve nothing. Block nothing.
           claude_args: >-
             --max-turns 30
             --allowedTools "Read,Glob,Grep,Bash(git diff:*),Bash(git log:*),Bash(gh issue view:*),Bash(gh issue list:*),Bash(gh pr view:*),Bash(gh pr comment:*),Bash(gh api repos/${{ github.repository }}/issues/*/comments*),Bash(gh api -X PATCH repos/${{ github.repository }}/issues/comments/*)"
+      - name: The run fails when the reviewer posted no report
+        if: always()
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          BEFORE: ${{ steps.before.outputs.updated }}
+          EXECUTION_FILE: ${{ steps.review.outputs.execution_file }}
+        run: |
+          # The denied commands of the run, so that the log names the cause when the reviewer stopped short.
+          if [ -n "$EXECUTION_FILE" ] && [ -f "$EXECUTION_FILE" ]; then
+            jq -r '[.] | flatten | .[] | select(.type? == "result") | (.permission_denials // [])[] | "denied: \(.tool_name) \(.tool_input | tojson)"' "$EXECUTION_FILE" || true
+          fi
+          AFTER=$(gh api "repos/$GITHUB_REPOSITORY/issues/$PR_NUMBER/comments?per_page=100" \
+            --jq '[.[] | select(.body | startswith("<!-- charter-intent-review -->"))] | last | .updated_at // "none"')
+          if [ "$AFTER" = "none" ] || [ "$AFTER" = "$BEFORE" ]; then
+            echo "the reviewer posted no report on change request #$PR_NUMBER: the run fails and is no round; rerun it"
+            exit 1
+          fi
+          echo "the report was posted or updated at $AFTER"
