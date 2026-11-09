@@ -100,7 +100,8 @@ CHECK_FAIL, CHECK_PENDING = "fail", "pending"
 # Keys of the API responses that this script reads.
 PR_BODY, PR_TITLE, PR_NUMBER, PR_HEAD, HEAD_SHA = "body", "title", "number", "head", "sha"
 PR_STATE, PR_OPEN, PR_BASE, BASE_REF, COMPARE_FILES = "state", "open", "base", "ref", "files"
-FILE_NAME = "filename"
+FILE_NAME, FILE_STATUS, FILE_PREVIOUS = "filename", "status", "previous_filename"
+STATUS_REMOVED, STATUS_RENAMED = "removed", "renamed"
 ISSUE_STATE, ISSUE_IS_PR = "state", "pull_request"
 RUNS, RUN_NAME, RUN_CONCLUSION, RUN_STATUS, RUN_COMPLETED = "check_runs", "name", "conclusion", "status", "completed"
 
@@ -151,6 +152,14 @@ def false_failures(text: str) -> list[dict]:
 def finding_lines(text: str) -> tuple[list[str], list[str]]:
     """The findings that the author dropped, and the findings that the leader marked as false."""
     return DROPPED_FINDING_LINE.findall(text or ""), FALSE_FINDING_LINE.findall(text or "")
+
+
+def removed_paths(files: list[dict]) -> set[str]:
+    """The paths that the change request removes: the files with the status removed, and the previous name of
+    the files with the status renamed. An intent among them needs no plan (#71)."""
+    gone = {f[FILE_NAME] for f in files if f.get(FILE_STATUS) == STATUS_REMOVED}
+    gone |= {f[FILE_PREVIOUS] for f in files if f.get(FILE_STATUS) == STATUS_RENAMED and f.get(FILE_PREVIOUS)}
+    return gone
 
 
 def intent_paths(issues: dict[int, dict | None]) -> list[str]:
@@ -239,10 +248,11 @@ def conclusions(runs: list[dict], names: list[str]) -> dict[str, str | None]:
 
 def build_facts(pr: dict, files: list[dict], issues: dict[int, dict | None], unresolved: int,
                 checks: dict[str, str | None], review: tuple[int, str | None] | None = None,
-                plans: dict[str, bool] | None = None) -> dict:
+                plans: dict[str, bool] | None = None, removed: set[str] | None = None) -> dict:
     """The facts file, from the API data. Numbers that are not issues are left out. The review loop
     facts are written only when the caller named a reviewer workflow. `plans` says, for each intent that
-    a linked issue names, whether its plan exists at the commit."""
+    a linked issue names, whether its plan exists at the commit; `removed` holds the paths that the change
+    request removes or renames away, and an intent among them is marked, so that the gate asks no plan for it."""
     linked = [
         {cg.ISSUE_NUMBER: number, cg.ISSUE_STATE: issue[ISSUE_STATE]}
         for number, issue in issues.items()
@@ -260,7 +270,8 @@ def build_facts(pr: dict, files: list[dict], issues: dict[int, dict | None], unr
         cg.FACT_FALSE_FAILURES: false_failures(text),
         cg.FACT_DROPPED_FINDINGS: finding_lines(text)[0],
         cg.FACT_FALSE_FINDINGS: finding_lines(text)[1],
-        cg.FACT_INTENTS: [{cg.INTENT_PATH: path, cg.INTENT_PLAN: bool(exists)} for path, exists in (plans or {}).items()],
+        cg.FACT_INTENTS: [{cg.INTENT_PATH: path, cg.INTENT_PLAN: bool(exists), cg.INTENT_REMOVED: path in (removed or set())}
+                          for path, exists in (plans or {}).items()],
         **loop,
     }
 
@@ -367,7 +378,7 @@ def collect(repo: str, number: int, given: dict[str, str], run_names: list[str],
         review = (review_rounds(runs.get(WORKFLOW_RUNS, []), pr), highest_severity(comments, author))
     plans = {intent: github.get(f"/repos/{repo}/contents/{cg.plan_of(intent)}?ref={commit}", optional=True) is not None
              for intent in intent_paths(issues)}
-    return build_facts(pr, files, issues, unresolved, checks, review, plans)
+    return build_facts(pr, files, issues, unresolved, checks, review, plans, removed_paths(files))
 
 
 def put_record(repo: str, number: int, record: dict, github: GitHub, author: str) -> str:

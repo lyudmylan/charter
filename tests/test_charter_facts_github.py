@@ -90,8 +90,8 @@ class Text(unittest.TestCase):
         self.assertEqual(cg.plan_of("intents/app.md"), "intents/app.plan.md")
         facts = cf.build_facts({cf.PR_NUMBER: 7, cf.PR_TITLE: "t", cf.PR_BODY: ""}, [], {}, 0, {},
                                plans={"intents/app.md": True, "intents/other.md": False})
-        self.assertEqual(facts[cg.FACT_INTENTS], [{cg.INTENT_PATH: "intents/app.md", cg.INTENT_PLAN: True},
-                                                  {cg.INTENT_PATH: "intents/other.md", cg.INTENT_PLAN: False}])
+        self.assertEqual(facts[cg.FACT_INTENTS], [{cg.INTENT_PATH: "intents/app.md", cg.INTENT_PLAN: True, cg.INTENT_REMOVED: False},
+                                                  {cg.INTENT_PATH: "intents/other.md", cg.INTENT_PLAN: False, cg.INTENT_REMOVED: False}])
 
     def test_job_result_maps_to_check_state(self):
         """code-host, check 1."""
@@ -157,6 +157,21 @@ class Facts(unittest.TestCase):
         self.assertEqual(facts[cg.FACT_CHECKS], {"quality": cg.CHECK_PASS, "tests": cf.CHECK_PENDING})
         for key in cg.FACT_SHAPES:
             self.assertTrue(cg.FACT_SHAPES[key](facts[key]), key)
+
+    def test_a_renamed_or_removed_intent_is_marked(self):
+        """plan-before-the-code, check 4 (#71): the intent of a linked issue that the change request removes, or
+        renames away, carries `removed`; the gate then asks no plan for it."""
+        files = [{cf.FILE_NAME: "intents/b.md", cf.FILE_STATUS: cf.STATUS_RENAMED, cf.FILE_PREVIOUS: "intents/a.md"},
+                 {cf.FILE_NAME: "intents/c.md", cf.FILE_STATUS: cf.STATUS_REMOVED},
+                 {cf.FILE_NAME: "docs/product.md", cf.FILE_STATUS: "modified"}]
+        self.assertEqual(cf.removed_paths(files), {"intents/a.md", "intents/c.md"})
+        plans = {"intents/a.md": False, "intents/b.md": True, "intents/c.md": False}
+        facts = cf.build_facts(PR, files, ISSUES, 0, {}, None, plans, cf.removed_paths(files))
+        self.assertEqual(facts[cg.FACT_INTENTS], [
+            {cg.INTENT_PATH: "intents/a.md", cg.INTENT_PLAN: False, cg.INTENT_REMOVED: True},
+            {cg.INTENT_PATH: "intents/b.md", cg.INTENT_PLAN: True, cg.INTENT_REMOVED: False},
+            {cg.INTENT_PATH: "intents/c.md", cg.INTENT_PLAN: False, cg.INTENT_REMOVED: True}])
+        self.assertEqual(facts[cg.FACT_CHANGED_FILES], ["intents/b.md", "intents/c.md", "docs/product.md"])
 
     def test_open_change_request_is_preferred_and_closed_never_counts(self):
         """code-host, check 1: a closed change request of the same commit is not the one."""

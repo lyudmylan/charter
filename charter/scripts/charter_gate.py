@@ -57,10 +57,10 @@ FACT_DROPPED_FINDINGS = "dropped_findings"   # optional: ["reason"], the finding
 FACT_FALSE_FINDINGS = "false_findings"       # optional: ["reason"], the findings of the reviewer that the leader marked as false
 FACT_REVIEW_ROUNDS = "review_rounds"         # optional: whole number, the completed runs of the reviewer on the change request
 FACT_REVIEW_SEVERITY = "review_highest_severity"   # optional: the last reported severity, or null before the first report
-FACT_INTENTS = "intents"                     # optional: [{"path": "intents/x.md", "plan": true}], from the linked issues
+FACT_INTENTS = "intents"                     # optional: [{"path": "intents/x.md", "plan": true, "removed": false}], from the linked issues
 # FACT_APPROVALS is optional and not checked in this version: the merge by the approver is the approval.
 ISSUE_NUMBER, ISSUE_STATE = "number", "state"
-INTENT_PATH, INTENT_PLAN = "path", "plan"
+INTENT_PATH, INTENT_PLAN, INTENT_REMOVED = "path", "plan", "removed"   # removed: the change request removes or renames the intent away
 STATE_OPEN = "open"
 CHECK_PASS = "pass"
 
@@ -137,6 +137,7 @@ MSG = {
     "plan_no_intent": "no linked issue names an intent (a line `Intent: {dir}<part>{suffix}` in the issue)",
     "plan_missing": "{plan} is missing",
     "plan_ok": "{plan} exists",
+    "plan_removed": "{intent} is removed by the change request, no plan needed",
 }
 
 
@@ -216,7 +217,7 @@ def load_facts(path: Path) -> dict:
 
 def _is_intent(value: object) -> bool:
     return (isinstance(value, dict) and isinstance(value.get(INTENT_PATH), str)
-            and isinstance(value.get(INTENT_PLAN), bool))
+            and isinstance(value.get(INTENT_PLAN), bool) and isinstance(value.get(INTENT_REMOVED, False), bool))
 
 
 def plan_of(intent: str) -> str:
@@ -376,7 +377,9 @@ def review_loop_state(facts: dict, e: cc.Effective) -> str:
 
 def gate_plan(facts: dict, e: cc.Effective) -> GateResult | None:
     """The plan of the work item exists before the code. None when the contract does not set the flag. A
-    change of intents alone is the Plan phase and needs no plan. It checks the result, not the order of commits."""
+    change of intents alone is the Plan phase and needs no plan. An intent that the change request removes or
+    renames away needs no plan (#71); an intent that it does not touch still does, so a wrong path in an issue
+    still fails. It checks the result, not the order of commits."""
     if not e.values.get(FIELD_PLAN_BEFORE_CODE):
         return None
     changed = facts[FACT_CHANGED_FILES]
@@ -385,10 +388,13 @@ def gate_plan(facts: dict, e: cc.Effective) -> GateResult | None:
     intents = facts.get(FACT_INTENTS, [])
     if not intents:
         return GateResult(CMD_PLAN, False, [msg("plan_no_intent", dir=INTENTS_DIR, suffix=INTENT_SUFFIX)])
-    missing = [plan_of(i[INTENT_PATH]) for i in intents if not i[INTENT_PLAN]]
-    present = [plan_of(i[INTENT_PATH]) for i in intents if i[INTENT_PLAN]]
+    removed = [i[INTENT_PATH] for i in intents if i.get(INTENT_REMOVED)]
+    kept = [i for i in intents if not i.get(INTENT_REMOVED)]
+    missing = [plan_of(i[INTENT_PATH]) for i in kept if not i[INTENT_PLAN]]
+    present = [plan_of(i[INTENT_PATH]) for i in kept if i[INTENT_PLAN]]
     return GateResult(CMD_PLAN, not missing,
-                      [msg("plan_missing", plan=p) for p in missing] + [msg("plan_ok", plan=p) for p in present])
+                      [msg("plan_missing", plan=p) for p in missing] + [msg("plan_ok", plan=p) for p in present]
+                      + [msg("plan_removed", intent=i) for i in removed])
 
 
 def gate_verdict(facts: dict, e: cc.Effective) -> tuple[bool, list[str], dict]:
