@@ -274,6 +274,29 @@ class Verdict(Temp):
         self.assertEqual(code, cc.PASS, out)
         self.assertNotIn("plan:", out)
 
+    def test_a_removed_intent_needs_no_plan(self):
+        """plan-before-the-code, check 4 (#71): a change request that renames an intent and its plan is ready;
+        the old path needs no plan, and the reasons name both files. A deletion alone is ready too. A path
+        that the change request does not touch still needs its plan."""
+        with_flag = self.dir / "repo-with-plan-flag.toml"
+        with_flag.write_text(REPO.read_text() + f"\n[build]\n{cg.FIELD_PLAN_BEFORE_CODE.split('.')[1]} = true\n")
+        args = [f"--{cc.ARG_CONTRACT}", str(with_flag), f"--{cc.ARG_SOURCE}", str(ORG)]
+        old = {cg.INTENT_PATH: "intents/a.md", cg.INTENT_PLAN: False, cg.INTENT_REMOVED: True}
+        new = {cg.INTENT_PATH: "intents/b.md", cg.INTENT_PLAN: True, cg.INTENT_REMOVED: False}
+        wrong = {cg.INTENT_PATH: "intents/gatez.md", cg.INTENT_PLAN: False}
+
+        code, out = run(cg.CMD_VERDICT, f"--{cg.ARG_FACTS}", str(self.facts(**{cg.FACT_INTENTS: [old, new]})), *args)
+        self.assertEqual(code, cc.PASS, out)
+        self.assertIn("plan: intents/b.plan.md exists", out)
+        self.assertIn("plan: intents/a.md is removed by the change request, no plan needed", out)
+
+        code, out = run(cg.CMD_VERDICT, f"--{cg.ARG_FACTS}", str(self.facts(**{cg.FACT_INTENTS: [old]})), *args)
+        self.assertEqual(code, cc.PASS, out)
+
+        code, out = run(cg.CMD_VERDICT, f"--{cg.ARG_FACTS}", str(self.facts(**{cg.FACT_INTENTS: [old, wrong]})), *args)
+        self.assertEqual(code, cc.FAIL)
+        self.assertIn("plan: intents/gatez.plan.md is missing", out)
+
 
 class ReviewLoop(Temp):
     """The sample repo: review_loop 3, threshold medium."""

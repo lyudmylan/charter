@@ -21,6 +21,12 @@ Anthropic describes for the Build phase.
   exists. It checks the result, not the sequence of commits. With the flag on, a change request whose issue
   names no intent is not ready. A change request that changes only files under `intents/` needs no plan:
   that is the Plan phase itself.
+- A finding of 2026-11-08, in an adopter (#71): a change request renamed an intent and its plan, and a
+  linked issue named the old path; the gate asked for `intents/<old>.plan.md` and said "not ready" for a
+  complete change. The collector marks an intent that the change request removes, or renames away, with
+  the fact `removed` (a file with the status removed, or the previous name of a renamed file); the gate
+  asks no plan for it and says so in its reasons. An intent that the change request does not touch still
+  needs its plan, so a wrong path in an issue still fails.
 - The contract: a flag `build.plan_before_code`, which an organization can lock. This repo and the
   template of the setup step set it. The schema changes, so both plugins take a new version, which the
   tag step after the merge carries; an adopter takes the gate when its contract names that version.
@@ -45,9 +51,14 @@ the next one.
 3. A plan file next to its intent is not read as an intent by the tests of the intents (found when the
    first plan landed, #63).
    test: `tests/test_intents.py::PlannedIntents.test_a_plan_file_is_not_an_intent`
+4. The collector marks an intent that the change request removes or renames away; the verdict asks no
+   plan for it, names it in the reasons, and is "ready" for a rename whose plan moved with the intent;
+   a path that the change request does not touch still needs its plan.
+   test: `tests/test_charter_facts_github.py::Facts.test_a_renamed_or_removed_intent_is_marked`
+   test: `tests/test_charter_gate.py::Verdict.test_a_removed_intent_needs_no_plan`
 
 ## Manual checks
 
-4. The next real change of this repo carries its plan before its code, accepted by the leader before the
+5. The next real change of this repo carries its plan before its code, accepted by the leader before the
    code. who: the leader. Not automatic: the order of the acceptance and the code is a fact of the
    conversation, not of the repo.

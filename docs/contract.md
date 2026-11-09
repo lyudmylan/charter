@@ -101,7 +101,7 @@ python3 charter/scripts/charter_gate.py verdict   --facts facts.json --contract 
 | `link` | The change request references an open issue. |
 | `documents` | No file under `documents.code_paths` changed; or a document in `documents.necessary` changed; or the change request records a reason. |
 | `quality` | Each command in `checks.quality` exits with 0. |
-| `verdict` | `link` and `documents` pass, all reported checks passed, no review thread is unresolved, a tier matches the changed files, and, when the contract sets `build.plan_before_code`, the plan of each intent that a linked issue names exists at the head commit (a change of intents alone needs no plan). The first line of the output is `ready` or `not ready`; the reasons follow. The verdict names the tier and who merges. |
+| `verdict` | `link` and `documents` pass, all reported checks passed, no review thread is unresolved, a tier matches the changed files, and, when the contract sets `build.plan_before_code`, the plan of each intent that a linked issue names exists at the head commit (a change of intents alone needs no plan; an intent that the change request removes or renames away needs no plan). The first line of the output is `ready` or `not ready`; the reasons follow. The verdict names the tier and who merges. |
 
 The facts file:
 
@@ -116,7 +116,7 @@ The facts file:
   "checks": {"tests": "pass"},
   "review_rounds": 2,
   "review_highest_severity": "low",
-  "intents": [{"path": "intents/app.md", "plan": true}]
+  "intents": [{"path": "intents/app.md", "plan": true, "removed": false}]
 }
 ```
 
@@ -202,7 +202,7 @@ else does not count. The check "verdict" keeps the short text.
 | `dropped_findings` | The findings of the intent reviewer that the author dropped, from lines `Dropped finding: <reason>` |
 | `false_findings` | The findings of the intent reviewer that the leader marked as false, from lines `False finding: <reason>` |
 | `review_rounds`, `review_highest_severity` | The rounds of the review loop (0 before the first), and the severity line of the newest report (`null` before the first, or when the report has no such line) |
-| `intents` | The intents that the linked issues name, each with whether its plan exists |
+| `intents` | The intents that the linked issues name, each with whether its plan exists and whether the change request removes or renames it away |
 
 `charter_facts_github.py records --repo owner/name --last N` prints the records of the last merged
 change requests, one line each, for a sample review.
