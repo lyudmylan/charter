@@ -23,7 +23,8 @@ line changes to `Intent: intents/setup-step.md`; no new intent, no Plan-phase ch
    recorded call carries `conclusion=failure` and the title "the verdict could not run", and the step
    exits with a failure. With a `verdict.txt` that says `ready` and `VERDICT_CODE=0`: exit 0 and
    `conclusion=success`. The test also asserts that the step has the same text in the template and in
-   the workflow of this repo.
+   the workflow of this repo, and that the text of `PR_SHA` names `steps.pr.outputs.sha` and
+   `github.event.workflow_run.head_sha`: an expression that the host evaluates.
 3. `intents/setup-step.md`: one bullet in the scope records the finding (2026-11-02: the fetch of the
    organization source failed on an expired token; the author saw two green checks and no verdict);
    check 8 names the test; the manual check becomes 9.
