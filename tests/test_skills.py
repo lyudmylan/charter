@@ -32,6 +32,16 @@ class TrackerSkill(unittest.TestCase):
         """tracker-skill, check 1."""
         check_skill(self, "tracker")
 
+    def test_the_two_link_forms_are_named(self):
+        """code-host, check 3 (#76): the instruction file, its template, the tracker skill, and the contract
+        document name both link forms."""
+        for path in (ROOT / "AGENTS.md", ROOT / "charter" / "templates" / "AGENTS.md", SKILLS / "tracker" / "SKILL.md",
+                     ROOT / "docs" / "contract.md"):
+            with self.subTest(file=str(path.relative_to(ROOT))):
+                text = path.read_text()
+                self.assertIn("`Closes #N`", text)
+                self.assertIn("`Part of #N`", text)
+
     def test_the_clause_of_a_drafted_reading(self):
         """drafted-reading-review, check 2: the tracker skill and the intent template carry the clause, the
         intent reviewer asks for it, and the skills stay under the size limit."""

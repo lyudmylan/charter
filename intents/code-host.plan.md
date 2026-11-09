@@ -1,6 +1,6 @@
 # Plan: a change request of the Plan phase links its issue with `Part of #N` (#76)
 
-Intent: `intents/code-host.md`, check 2. Accepted by the leader in the conversation on 2026-11-09, before the
+Intent: `intents/code-host.md`, checks 2 and 3. Accepted by the leader in the conversation on 2026-11-09, before the
 code. This file replaces the plan of #67, which stays in the history and in change request #73.
 
 ## Steps
@@ -12,7 +12,8 @@ code. This file replaces the plan of #67, which stays in the history and in chan
 2. `tests/test_charter_facts_github.py`, class `Text`: `test_a_mention_is_not_a_link` keeps its cases, and
    `Part of #8` now links; new `test_part_of_links_the_issue`: "Part of #8. part of: #9. See #7." gives
    `[8, 9]`.
-3. `intents/code-host.md`: check 2 names the second form and the new test; the out-of-scope line on
+3. `intents/code-host.md`: check 2 names the second form and the new test, and says that the merge leaves
+   the issue open; check 3, new, names the test that the four prose files name both forms; the out-of-scope line on
    "Part of #N" goes, and one bullet in the scope records the gap (2026-11-09, #76: a change request of
    the Plan phase had no link form that does not close its issue).
 4. `AGENTS.md` and `charter/templates/AGENTS.md`: "Open a change request that closes the issue,
@@ -34,4 +35,4 @@ code. This file replaces the plan of #67, which stays in the history and in chan
 
 ## Tests
 
-One new test and one changed test, step 2.
+Two new tests and one changed test, steps 2 and 3.
