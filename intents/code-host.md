@@ -20,8 +20,8 @@ The gates run on each change request of this repo, and no change reaches the mai
   file gives the form `Closes #N`.
 - A gap found on 2026-11-09 (#76): a change request of the Plan phase, the intent alone, must not close
   its issue, and a mention links nothing, so it had no link form and the link gate refused it. A second
-  form, `Part of #N`, links the issue without closing it. The instruction file and the tracker skill name
-  both forms.
+  form, `Part of #N`, links the issue without closing it. The instruction file, its template, the tracker
+  skill, and the contract document name both forms.
 
 ## Out of scope
 
