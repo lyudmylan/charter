@@ -25,6 +25,14 @@ person still merges.
   that is epic #13.
 - Security: the workflow runs on `pull_request`, so a change request from a fork gets no secret and no
   review. The text of an intent can carry an instruction to the agent; the agent can only read and comment.
+- A run ends with a report, or it fails. A step before the reviewer notes when the report comment was
+  last updated; a step after it fails the run when the report comment was neither posted nor updated, and
+  prints the denied commands of the run from the execution file of the action, so that the log names the
+  cause. A failed run is no round: the collector counts only the successful runs; the author side reruns
+  a failed run once (the skill `review-loop`). The prompt names the reading tools, says that a denied
+  command is no reason to stop, and names the one command that posts the report and the one that updates
+  it. Found in runs of 2026-11-04 and 2026-11-08 in an adopter and of 2026-11-09 in this repo (#70): the
+  run ended with success, with permission denials and no report, and the verdict counted it as a round.
 
 ## Out of scope
 
@@ -40,12 +48,20 @@ Approval or blocking by the reviewer. A review of code; the built-in review does
    test: `tests/test_skills.py::IntentReviewSkill.test_size_and_description`
 3. The lines `Dropped finding:` and `False finding:` are read from the text of the change request into the record.
    test: `tests/test_charter_facts_github.py::Text.test_finding_lines`
+4. A run whose report comment was neither posted nor updated fails with the line "the reviewer posted no
+   report"; a run with a new or updated report passes; the denied commands of the run are in the log.
+   The two steps have the same text in the template and in the workflow of this repo.
+   test: `tests/test_workflows.py::ReviewIntents.test_a_run_without_a_report_fails`
+   test: `tests/test_workflows.py::ReviewIntents.test_the_denied_commands_are_printed`
+5. The prompt names the reading tools, the one command that posts the report and the one that updates it,
+   and says that a denied command is no reason to stop.
+   test: `tests/test_workflows.py::ReviewIntents.test_the_prompt_names_the_tools_and_the_posting_command`
 
 ## Manual checks
 
-4. On one change request that changes an intent, the reviewer posts one table, and updates it on the next
+6. On one change request that changes an intent, the reviewer posts one table, and updates it on the next
    push. who: the leader. Not automatic: the run needs the token of the plan on GitHub.
    The run of 2026-10-01 on change request #48: one table with five findings, three of them on the
    correctness of the plan; all five applied.
-5. The cost of one review is known after the first run. who: the leader. Not automatic: the number comes
+7. The cost of one review is known after the first run. who: the leader. Not automatic: the number comes
    from the run on GitHub. The run of 2026-10-01: 9 turns, 59 seconds, 0.18 USD at list price, on the plan.

@@ -175,8 +175,9 @@ next round. The skill `charter-practices/skills/review-loop/SKILL.md` is the aut
 the agent in the session of the author.
 
 The loop ends when the highest open severity is below the threshold, or when the rounds reach
-`limits.review_loop`; then a person decides, with the merge. A round is one completed run of the reviewer
-on the change request; the collecting step counts them and reads the severity line, and the verdict
+`limits.review_loop`; then a person decides, with the merge. A round is one successful run of the reviewer
+on the change request; a run that ends without a report fails, is no round, and prints the denied commands
+of the agent in its log. The collecting step counts the rounds and reads the severity line, and the verdict
 prints `review loop: round <n> of <limit>, highest open severity <level>: ...`. In shadow mode, this line
 changes no verdict.
 
