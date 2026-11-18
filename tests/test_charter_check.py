@@ -7,6 +7,7 @@ import contextlib
 import io
 import json
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -307,6 +308,81 @@ class TextFiles(Temp):
         code, out = self.text("Write to a@example.com\n")
         self.assertEqual(code, cc.FAIL)
         self.assertIn(":1: matches a pattern of text.private_material_patterns", out)
+
+
+class AbsentPaths(Temp):
+    """A repo in a temporary folder: the sample contract with a set of absent paths, and the files of a case."""
+
+    PATTERNS = '["docs/adr/**", "doc/arch/adr-*.md"]'
+
+    def repo(self, absent: str | None, *files: str) -> tuple[int, str]:
+        line = "" if absent is None else f"\nabsent = {absent}"
+        self.write("charter.toml", repo_with(**{'code_paths = ["src/**"]': f'code_paths = ["src/**"]{line}'}))
+        for name in files:
+            path = self.dir / name
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text("# A file of the case\n")
+        return run(cc.CMD_ALL, str(self.dir / "charter.toml"), f"--{cc.ARG_SOURCE}", str(ORG))
+
+    def test_the_field_is_in_the_schema_and_in_the_contract_document(self):
+        """reason-next-to-the-part, check 1."""
+        field = cc.load_schema(cc.DEFAULT_SCHEMA)[cc.FIELD_ABSENT]
+        self.assertEqual(field[cc.ATTR_KIND], "set")
+        self.assertIn(f"| `{cc.FIELD_ABSENT}` | set |", (ROOT / "docs" / "contract.md").read_text())
+
+    def test_a_file_under_an_absent_path_fails(self):
+        """reason-next-to-the-part, check 2."""
+        for name in ("docs/adr/adr-001-store.md", "docs/adr/2026/notes.txt", "doc/arch/adr-001.md"):
+            with self.subTest(file=name):
+                code, out = self.repo(self.PATTERNS, name)
+                self.assertEqual(code, cc.FAIL, out)
+                (self.dir / name).unlink()
+
+    def test_the_failure_names_the_file_the_field_and_the_remedy(self):
+        """reason-next-to-the-part, check 2: one failure for each file, with where the content goes."""
+        code, out = self.repo(self.PATTERNS, "docs/adr/adr-001-store.md", "docs/adr/adr-002-model.md")
+        self.assertEqual(code, cc.FAIL)
+        for name in ("docs/adr/adr-001-store.md", "docs/adr/adr-002-model.md"):
+            self.assertIn(f"fail: {name}: the contract forbids this path, a pattern of {cc.FIELD_ABSENT}.", out)
+        self.assertIn("Move its content into a necessary document, at the part it concerns, and remove the file.", out)
+        self.assertNotIn("all contract checks", out)
+
+    def test_a_file_that_is_not_committed_fails(self):
+        """reason-next-to-the-part, check 2: the check reads the folder, not the index of git."""
+        self.assertEqual(self.repo(self.PATTERNS)[0], cc.PASS)
+        git = ["git", "-C", str(self.dir), "-c", "user.name=test", "-c", "user.email=test@example.com"]
+        for command in (["init", "-q"], ["add", "-A"], ["commit", "-q", "-m", "the contract"]):
+            subprocess.run(git + command, check=True, capture_output=True)
+        code, out = self.repo(self.PATTERNS, "docs/adr/adr-001-store.md")
+        tracked = subprocess.run(git + ["ls-files", "docs"], check=True, capture_output=True, text=True).stdout
+        self.assertEqual(tracked, "", "git does not track the new file")
+        self.assertEqual(code, cc.FAIL, out)
+        self.assertIn("fail: docs/adr/adr-001-store.md: the contract forbids this path", out)
+
+    def test_no_file_under_a_pattern_passes(self):
+        """reason-next-to-the-part, check 3: one file of decisions, a folder next to a pattern, and a folder
+        with no file are not under a pattern."""
+        (self.dir / "docs" / "adr").mkdir(parents=True)
+        code, out = self.repo(self.PATTERNS, "docs/decisions.md", "docs/adrs/notes.md", "doc/arch/map.md",
+                              "src/docs/adr/x.md")
+        self.assertEqual(code, cc.PASS, out)
+
+    def test_an_absent_or_empty_field_checks_nothing(self):
+        """reason-next-to-the-part, check 3."""
+        for absent in (None, "[]"):
+            with self.subTest(absent=absent):
+                code, out = self.repo(absent, "docs/adr/adr-001-store.md")
+                self.assertEqual(code, cc.PASS, out)
+
+    def test_the_decision_is_recorded(self):
+        """reason-next-to-the-part, check 7: the rule is an accepted decision, G6, with its reason."""
+        text = (ROOT / "docs" / "decisions.md").read_text()
+        row = re.search(r"^\| G6 \| (.*) \| (.*) \| 2026-11-18 \|$", text, re.M)
+        self.assertIsNotNone(row, "no row G6 dated 2026-11-18")
+        self.assertIn("No separate file holds one decision", row.group(1))
+        self.assertIn("becomes a check", row.group(1))
+        self.assertIn("two homes", row.group(2))
+        self.assertNotIn("G6", text.split("## P. Proposed", 1)[1])
 
 
 if __name__ == "__main__":

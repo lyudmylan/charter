@@ -1,6 +1,6 @@
 # Intent: the architecture map holds each choice with its reason, and no file holds one decision
 
-Work item: #84. Status: planned. Approval: a person merges the change request that adds this file.
+Work item: #84. Status: done. Approval: a person merges the change request that adds this file.
 
 ## Goal
 
@@ -21,7 +21,8 @@ choice concerns, and a repo that keeps a file for each decision fails the contra
   a risk tier. `charter-check all` fails when the repo holds a file under one of them. The failure
   names the file and the field, and says where the content goes: into a necessary document, at the part
   it concerns. An absent or empty field checks nothing. The schema, `docs/contract.md`, and the checker
-  carry the field.
+  carry the field. The path matcher moves from `charter_gate.py` to `charter_check.py`, and the gate calls
+  it there; the tests of the gate still pass.
 - The default, in `charter/templates/charter.toml`, which the setup step writes: the folders of the
   common conventions for decision files, `docs/adr/**`, `doc/adr/**`, `doc/arch/adr-*.md`, and
   `docs/decisions/**`. A repo or its organization can change the set, as for each field.
@@ -54,9 +55,11 @@ its own version.
 1. The schema has the field `documents.absent` as a set, and `docs/contract.md` lists it.
    test: `tests/test_charter_check.py::AbsentPaths.test_the_field_is_in_the_schema_and_in_the_contract_document`
 2. `charter-check all` fails when the repo holds a file under a pattern of `documents.absent`; the
-   failure names the file and the field, and says where the content goes.
+   failure names the file and the field, and says where the content goes. The file need not be
+   committed: the check reads the folder.
    test: `tests/test_charter_check.py::AbsentPaths.test_a_file_under_an_absent_path_fails`
    test: `tests/test_charter_check.py::AbsentPaths.test_the_failure_names_the_file_the_field_and_the_remedy`
+   test: `tests/test_charter_check.py::AbsentPaths.test_a_file_that_is_not_committed_fails`
 3. `charter-check all` passes when no file is under a pattern, and when the field is absent or empty.
    test: `tests/test_charter_check.py::AbsentPaths.test_no_file_under_a_pattern_passes`
    test: `tests/test_charter_check.py::AbsentPaths.test_an_absent_or_empty_field_checks_nothing`
@@ -81,9 +84,11 @@ its own version.
 10. The Design row of the lifecycle map in `docs/product.md` says that the architecture map holds each
     choice with its reason.
     test: `tests/test_setup.py::DecisionFiles.test_the_design_row_of_the_product_document_names_the_choice`
+11. The gate matches paths as before the move of the matcher.
+    test: `tests/test_charter_gate.py::Patterns.test_star_stays_in_one_segment_and_double_star_crosses`
 
 ## Manual checks
 
-11. The first use, in an adopter repo: with the version 0.3.5 and the default patterns, the contract
+12. The first use, in an adopter repo: with the version 0.3.5 and the default patterns, the contract
     checks fail while the folder of decision files exists, and pass after its content is in the
     architecture map. who: the leader. Not automatic: the adopter repo is outside this repo.

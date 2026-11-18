@@ -53,6 +53,7 @@ any of its patterns. The `instructions` and `text` commands read this from the s
 | `documents.necessary` | set | Documents that the repo keeps current |
 | `documents.code_paths` | set | Paths whose change needs a document change or a recorded reason |
 | `documents.text_checked` | set | Files that must contain none of the text-checked patterns |
+| `documents.absent` | set | Path patterns that the repo must not hold: the contract checks fail when a file is under one of them. The setup step writes the folders of decision files. Needs the version 0.3.5 of the core |
 | `instructions.file` | text | The instruction file of the repo |
 | `checks.quality` | set | Commands that must pass before a push. They run on the code of the change. |
 | `charter.version` | text | The version of the core plugin of Charter that the repo uses; the workflows fetch Charter at the tag `charter--v<version>` |
@@ -249,7 +250,9 @@ python3 charter/scripts/charter_check.py all charter.toml
 ```
 
 `all` runs `check`, then `instructions` on `instructions.file`, then `text` on each file in
-`documents.text_checked`, relative to the contract. It is the one command for the contract checks.
+`documents.text_checked`, relative to the contract. Then it looks in the folder of the contract for a file
+under a pattern of `documents.absent`, and each one is a failure that says where its content goes. It is
+the one command for the contract checks.
 
 Exit codes: 0 pass, 1 fail, 2 the check could not run. With exit code 2 the message names the cause:
 no file, not a file, not UTF-8 text, not TOML, source not found, access denied, version not found.
