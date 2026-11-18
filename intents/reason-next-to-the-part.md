@@ -84,9 +84,11 @@ its own version.
 10. The Design row of the lifecycle map in `docs/product.md` says that the architecture map holds each
     choice with its reason.
     test: `tests/test_setup.py::DecisionFiles.test_the_design_row_of_the_product_document_names_the_choice`
+11. The gate matches paths as before the move of the matcher.
+    test: `tests/test_charter_gate.py::Patterns.test_star_stays_in_one_segment_and_double_star_crosses`
 
 ## Manual checks
 
-11. The first use, in an adopter repo: with the version 0.3.5 and the default patterns, the contract
+12. The first use, in an adopter repo: with the version 0.3.5 and the default patterns, the contract
     checks fail while the folder of decision files exists, and pass after its content is in the
     architecture map. who: the leader. Not automatic: the adopter repo is outside this repo.

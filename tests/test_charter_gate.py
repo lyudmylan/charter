@@ -374,7 +374,8 @@ class Record(Temp):
 
 class Patterns(unittest.TestCase):
     def test_star_stays_in_one_segment_and_double_star_crosses(self):
-        """gates, check 1: the pattern language of paths."""
+        """gates, check 1: the pattern language of paths. reason-next-to-the-part, check 11: the matcher
+        lives in the checker, and the gate calls it there."""
         cases = [
             ("src/*", "src/x.py", True), ("src/*", "src/a/b.py", False),
             ("*.py", "x.py", True), ("*.py", "a/x.py", False),

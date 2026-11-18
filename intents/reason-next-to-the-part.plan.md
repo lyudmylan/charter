@@ -1,6 +1,6 @@
 # Plan: the architecture map holds each choice with its reason, and no file holds one decision (#84)
 
-Intent: `intents/reason-next-to-the-part.md`, checks 1 to 10. The leader merged the intent on 2026-11-18.
+Intent: `intents/reason-next-to-the-part.md`, checks 1 to 11. The leader merged the intent on 2026-11-18.
 Accepted by the leader in the conversation on 2026-11-18, before the code.
 
 ## Steps
@@ -74,7 +74,7 @@ Accepted by the leader in the conversation on 2026-11-18, before the code.
 - The leader pushes the tags `charter--v0.3.5` and `charter-practices--v0.3.5`.
 - An adopter gets the check by one change of its contract that a person approves: the version 0.3.5 and
   the line of step 3. A contract at 0.3.4 that carries the field fails with "unknown field", so the two
-  go together. The manual check 11 of the intent is this first use.
+  go together. The manual check 12 of the intent is this first use.
 
 ## Files
 
@@ -86,7 +86,8 @@ Accepted by the leader in the conversation on 2026-11-18, before the code.
 
 ## Tests
 
-Thirteen new tests, step 10. The existing tests of the gate cover the matcher after its move.
+Thirteen new tests, step 10. The existing test `Patterns.test_star_stays_in_one_segment_and_double_star_crosses`
+of the gate covers the matcher after its move, and it now calls the matcher of the checker (check 11).
 
 ## What this plan does not do
 
