@@ -217,6 +217,71 @@ class Templates(Temp):
             self.assertNotIn("%{", (self.dir / written).read_text(), written)
 
 
+class DecisionFiles(Temp):
+    DEFAULT = ["docs/adr/**", "doc/adr/**", "doc/arch/adr-*.md", "docs/decisions/**"]
+    COLUMN = "| Part | What it does, and why it is built this way | Where | Since |"
+    RULE = "No separate file holds one decision; a choice that must always hold becomes a check. [documents.absent]"
+
+    def check_all(self) -> tuple[int, str]:
+        out = io.StringIO()
+        with contextlib.redirect_stdout(out):
+            code = cc.main([cc.CMD_ALL, str(self.dir / cs.CONTRACT_FILE), f"--{cc.ARG_SOURCE}", str(ORG)])
+        return code, out.getvalue()
+
+    def test_the_new_contract_carries_the_default_patterns(self):
+        """reason-next-to-the-part, check 4."""
+        self.assertEqual(self.setup()[0], cc.PASS)
+        data = tomllib.loads((self.dir / cs.CONTRACT_FILE).read_text())
+        self.assertEqual(data["documents"]["absent"], self.DEFAULT)
+        self.assertEqual(self.check_all()[0], cc.PASS)
+
+    def test_a_decision_file_fails_the_check_of_a_new_repo(self):
+        """reason-next-to-the-part, check 4: one file under each of the four default patterns, one at a time."""
+        self.assertEqual(self.setup()[0], cc.PASS)
+        for name in ("docs/adr/adr-001-store.md", "doc/adr/0001-store.md", "doc/arch/adr-001.md",
+                     "docs/decisions/0001-store.md"):
+            with self.subTest(file=name):
+                path = self.dir / name
+                path.parent.mkdir(parents=True, exist_ok=True)
+                path.write_text("# A decision\n")
+                code, out = self.check_all()
+                self.assertEqual(code, cc.FAIL, out)
+                self.assertIn(f"fail: {name}: the contract forbids this path", out)
+                path.unlink()
+                self.assertEqual(self.check_all()[0], cc.PASS)
+
+    def test_the_architecture_template_holds_the_choice_at_the_part(self):
+        """reason-next-to-the-part, check 5."""
+        self.assertEqual(self.setup()[0], cc.PASS)
+        text = (self.dir / "docs" / "architecture.md").read_text()
+        self.assertIn(self.COLUMN, text)
+        self.assertEqual(re.findall(r"^## (.*)$", text, re.M), ["Parts"])
+        self.assertNotIn("Decisions", text)
+        self.assertNotIn("What runs on a change request", text)
+
+    def test_the_instructions_carry_the_rule(self):
+        """reason-next-to-the-part, check 6: the template that the setup step writes, and this repo."""
+        self.assertEqual(self.setup()[0], cc.PASS)
+        for path in (self.dir / cs.INSTRUCTIONS_FILE, ROOT / cs.INSTRUCTIONS_FILE):
+            with self.subTest(file=str(path)):
+                self.assertIn(self.RULE, " ".join(path.read_text().split()))
+        data = tomllib.loads((ROOT / cs.CONTRACT_FILE).read_text())
+        self.assertEqual(data["documents"]["absent"], self.DEFAULT)
+
+    def test_both_manifests_name_the_version(self):
+        """reason-next-to-the-part, check 9: 0.3.5 carries the check; a later version carries it too."""
+        versions = [json.loads((ROOT / plugin / ".claude-plugin" / "plugin.json").read_text())["version"]
+                    for plugin in ("charter", "charter-practices")]
+        self.assertEqual(versions[0], versions[1])
+        self.assertGreaterEqual(tuple(int(part) for part in versions[0].split(".")), (0, 3, 5))
+
+    def test_the_design_row_of_the_product_document_names_the_choice(self):
+        """reason-next-to-the-part, check 10."""
+        row = re.search(r"^\| Design \| (.*?) \|", (ROOT / "docs" / "product.md").read_text(), re.M)
+        self.assertIsNotNone(row, "no Design row")
+        self.assertIn("with each choice and its reason at the part", row.group(1))
+
+
 class Commands(unittest.TestCase):
     def test_the_four_commands_exist_and_the_manifests_agree(self):
         """setup-step, check 5."""

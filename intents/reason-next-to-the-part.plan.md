@@ -1,7 +1,7 @@
 # Plan: the architecture map holds each choice with its reason, and no file holds one decision (#84)
 
 Intent: `intents/reason-next-to-the-part.md`, checks 1 to 10. The leader merged the intent on 2026-11-18.
-This plan waits for the acceptance of the leader in the conversation, before the code.
+Accepted by the leader in the conversation on 2026-11-18, before the code.
 
 ## Steps
 

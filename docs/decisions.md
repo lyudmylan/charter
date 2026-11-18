@@ -103,6 +103,7 @@ A decision changes only through a reviewed change to this file.
 | G3 | The contract lists the necessary documents. Default: one architecture map. | Teams and systems differ. | 2026-09-29 |
 | G4 | Diagram skill (light), ten rules: draw at a level that changes rarely; show the mechanism, not names; prefer a sentence when it is faster; one claim, with title and caption; label every arrow; short labels; one color with a meaning; draw boundaries explicitly; planned parts dashed; diagrams stay as text. | | 2026-09-29 |
 | G5 | Two drawing tools for now: Mermaid for diagrams that change with the code, SVG for a small number of important diagrams. | Practice will show if SVG alone is sufficient. | 2026-09-29 |
+| G6 | A choice of the architecture and its reason live in the architecture map, next to the part, in one or two sentences. A choice that must always hold becomes a check. The history is in git. No separate file holds one decision; this record of the process decisions is one file and is not affected. | With one file for each decision a fact has two homes. A rule that only a document holds does not hold: the rule of 2026-10-01 lived in an epic, and an agent wrote eight decision files while both contract checks passed. Official: the design spec holds the decisions of a work item (Anthropic, the AI-native SDLC playbook); "When documentation falls short, we promote the rule into code" (OpenAI, Harness engineering). Community: one file for each decision (Nygard, 2011); neither official source asks for it. | 2026-11-18 |
 
 ## H. Sources and cost
 

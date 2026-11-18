@@ -8,7 +8,8 @@ Commands:
   text FILE --contract C             Check any text file against the pattern sets of the contract.
   source CONTRACT                    Print the address, the file, the version, and the cache path of the source.
   all CONTRACT                       Run check, then instructions on the declared instruction file, then text
-                                     on each declared text-checked file. The files are relative to the contract.
+                                     on each declared text-checked file, then look for a file under a path
+                                     that the contract forbids. The files are relative to the contract.
 
 Options:
   --schema PATH      The schema. Default: schema/contract.toml next to this script.
@@ -84,6 +85,12 @@ JSON_KEY_EFFECTIVE, JSON_KEY_FAILURES = "effective", "failures"
 # Fields that the "all" command reads.
 FIELD_INSTRUCTIONS_FILE = "instructions.file"
 FIELD_TEXT_CHECKED = "documents.text_checked"
+FIELD_ABSENT = "documents.absent"
+
+# Path patterns: `*` and `?` stay inside one segment; `**` crosses segments.
+PATH_WILDCARDS = "*?"
+SEGMENT_SEPARATOR = "/"
+GIT_DIR = ".git"
 
 # Identifiers in an instruction file: [a.b] or [a.b.c]. Only a mark whose first segment is a
 # field group of the schema counts; other bracketed text, such as a file name, is ignored.
@@ -126,6 +133,8 @@ MSG = {
     "no_ids": "{path}: no rule identifiers found, expected [a.b] marks",
     "unknown_id": "{path}: identifier [{id}] has no value in the contract or its source",
     "pattern_hit": "{path}:{line}: matches a pattern of {field}",
+    "absent_hit": "{path}: the contract forbids this path, a pattern of {field}. Move its content into a "
+                  "necessary document, at the part it concerns, and remove the file.",
     "instructions_pass": "{path} agrees with the contract ({count} identifiers, source: {origin})",
     "text_pass": "{path} contains none of the patterns (source: {origin})",
     "all_pass": "all contract checks of {contract} passed",
@@ -511,6 +520,66 @@ def pattern_hits(e: Effective, path: Path, text: str) -> list[str]:
     return problems
 
 
+def glob_to_regex(pattern: str) -> str:
+    """A path pattern: `*` and `?` stay inside one segment; `**` crosses segments."""
+    out = ""
+    i = 0
+    while i < len(pattern):
+        c = pattern[i]
+        if pattern.startswith("**/", i):
+            out += "(?:.*/)?"
+            i += 3
+        elif pattern.startswith("**", i):
+            out += ".*"
+            i += 2
+        elif c == "*":
+            out += "[^/]*"
+            i += 1
+        elif c == "?":
+            out += "[^/]"
+            i += 1
+        else:
+            out += re.escape(c)
+            i += 1
+    return f"^{out}$"
+
+
+def matches(file: str, patterns: list[str]) -> bool:
+    return any(re.match(glob_to_regex(p), file) for p in patterns)
+
+
+def has_wildcard(text: str) -> bool:
+    return any(c in text for c in PATH_WILDCARDS)
+
+
+def fixed_start(pattern: str) -> str:
+    """The folders of a pattern before its first wildcard: `docs/adr/**` gives `docs/adr`."""
+    folders: list[str] = []
+    for segment in pattern.split(SEGMENT_SEPARATOR)[:-1]:
+        if has_wildcard(segment):
+            break
+        folders.append(segment)
+    return SEGMENT_SEPARATOR.join(folders)
+
+
+def absent_hits(e: Effective, root: Path) -> list[str]:
+    """The files of the repo that are under a pattern of documents.absent. The folder of the contract is
+    read, not the index of git: a file that is not committed counts, and a repo without git is checked."""
+    found: set[str] = set()
+    for pattern in e.values.get(FIELD_ABSENT, []) or []:
+        if not has_wildcard(pattern):
+            if (root / pattern).is_file():
+                found.add(pattern)
+            continue
+        for folder, folders, files in os.walk(root / fixed_start(pattern)):
+            folders[:] = [name for name in folders if name != GIT_DIR]
+            for name in files:
+                relative = (Path(folder) / name).relative_to(root).as_posix()
+                if matches(relative, [pattern]):
+                    found.add(relative)
+    return [msg("absent_hit", path=path, field=FIELD_ABSENT) for path in sorted(found)]
+
+
 def cmd_instructions(args) -> int:
     e = effective_contract(args.contract, args.schema, args.source, args.cache_dir)
     if report_failures(e.failures) == FAIL:
@@ -565,6 +634,7 @@ def cmd_all(args) -> int:
         for name in e.values.get(FIELD_TEXT_CHECKED, []) or []:
             path = root / name
             problems += pattern_hits(e, path, read_text(path))
+        problems += absent_hits(e, root)
     if report_failures(problems) == FAIL:
         return FAIL
     emit(OUT_PASS, msg("all_pass", contract=args.contract))

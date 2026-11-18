@@ -59,7 +59,7 @@ Charter adds in each phase.
 | Phase | Artifacts of Charter | Verification | Included in Charter |
 |---|---|---|---|
 | Plan | `product.md`: the direction. The [intent](../intents/) of a work item: goal, in scope, out of scope, acceptance checks. The issue tracker: milestone, epic, issue. | A person approves the intent through a change request. | Yes |
-| Design | The design spec of the work item. The architecture map, kept current. | A person approves the design spec. | Roadmap |
+| Design | The design spec of the work item. The architecture map, kept current, with each choice and its reason at the part. | A person approves the design spec. | Roadmap |
 | Build | `plan.md`, accepted before the code. The change on a branch. The repository instructions. The gates, as code. | The plan exists before the code. The quality checks pass before the push. | Yes |
 | Test | The acceptance checks, which the agent cannot change alone. The tests. The evals of the skills. | A reviewer that is not the author, also for a reading that an agent drafts for a person. The check "verdict". | Yes |
 | Deploy | The evidence record. The merge by the approver of the risk tier. The release stages to production. | A person decides production. | Partly |

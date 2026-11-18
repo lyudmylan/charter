@@ -384,7 +384,7 @@ class Patterns(unittest.TestCase):
         ]
         for pattern, file, expected in cases:
             with self.subTest(pattern=pattern, file=file):
-                self.assertEqual(cg.matches(file, [pattern]), expected)
+                self.assertEqual(cc.matches(file, [pattern]), expected)
 
 
 class NoModel(unittest.TestCase):

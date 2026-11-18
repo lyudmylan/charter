@@ -39,6 +39,8 @@ When a file under a declared code path changes, `docs/product.md` changes too, o
 has one line in this exact form: `No document change: <reason>`. [documents.code_paths]
 A false failure of a gate: `False failure: <gate>: <reason>`. A finding of the intent reviewer that the
 author drops: `Dropped finding: <reason>`. One that the leader marks as wrong: `False finding: <reason>`. [checks.quality]
+A choice of the architecture and its reason go into `docs/architecture.md`, in the row of the part. No
+separate file holds one decision; a choice that must always hold becomes a check. [documents.absent]
 
 ## Text of commits, change requests, and issues
 

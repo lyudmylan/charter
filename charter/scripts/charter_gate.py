@@ -25,7 +25,6 @@ from __future__ import annotations
 import argparse
 import datetime
 import json
-import re
 import shlex
 import subprocess
 import sys
@@ -232,34 +231,6 @@ def effective(args) -> cc.Effective:
     return e
 
 
-def glob_to_regex(pattern: str) -> str:
-    """A path pattern: `*` and `?` stay inside one segment; `**` crosses segments."""
-    out = ""
-    i = 0
-    while i < len(pattern):
-        c = pattern[i]
-        if pattern.startswith("**/", i):
-            out += "(?:.*/)?"
-            i += 3
-        elif pattern.startswith("**", i):
-            out += ".*"
-            i += 2
-        elif c == "*":
-            out += "[^/]*"
-            i += 1
-        elif c == "?":
-            out += "[^/]"
-            i += 1
-        else:
-            out += re.escape(c)
-            i += 1
-    return f"^{out}$"
-
-
-def matches(file: str, patterns: list[str]) -> bool:
-    return any(re.match(glob_to_regex(p), file) for p in patterns)
-
-
 # ---------------------------------------------------------------------------
 # The gates
 # ---------------------------------------------------------------------------
@@ -281,7 +252,7 @@ def gate_documents(facts: dict, e: cc.Effective) -> GateResult:
     changed = facts[FACT_CHANGED_FILES]
     if not code_paths:
         return GateResult(CMD_DOCUMENTS, True, [msg("no_code_paths")])
-    code_changes = [f for f in changed if matches(f, code_paths)]
+    code_changes = [f for f in changed if cc.matches(f, code_paths)]
     if not code_changes:
         return GateResult(CMD_DOCUMENTS, True, [msg("no_code_change")])
     documents = [f for f in changed if f in necessary]
@@ -351,7 +322,7 @@ def tiers_in_order(e: cc.Effective) -> dict[str, dict]:
 def tier_of(changed: list[str], e: cc.Effective) -> tuple[str | None, dict]:
     """The tier of the change: the first tier of the repo contract that matches any changed file."""
     for name, spec in tiers_in_order(e).items():
-        if any(matches(f, spec.get(TIER_PATHS, [])) for f in changed):
+        if any(cc.matches(f, spec.get(TIER_PATHS, [])) for f in changed):
             return name, spec
     return None, {}
 

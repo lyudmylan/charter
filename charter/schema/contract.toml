@@ -115,6 +115,10 @@ note = "The instruction file of the repo. Each rule line in it ends with the ide
 kind = "set"
 note = "Path patterns. When a file under one of them changes, a necessary document must change too, or the change carries a recorded reason."
 
+[fields."documents.absent"]
+kind = "set"
+note = "Path patterns that the repo must not hold. The contract checks fail when a file is under one of them."
+
 # --- Quality checks ---
 
 [fields."checks.quality"]
