@@ -25,8 +25,12 @@ choice concerns, and a repo that keeps a file for each decision fails the contra
 - The default, in `charter/templates/charter.toml`, which the setup step writes: the folders of the
   common conventions for decision files, `docs/adr/**`, `doc/adr/**`, `doc/arch/adr-*.md`, and
   `docs/decisions/**`. A repo or its organization can change the set, as for each field.
-- `charter/templates/architecture.md`: the section "Decisions" leaves, and the table of parts gets the
-  column "Choice and reason".
+- `charter/templates/architecture.md`, in the form that the leader approved for the architecture map of
+  an adopter repo on 2026-11-18. The section "Decisions" leaves. The column "What it does" becomes "What
+  it does, and why it is built this way", so that the choice and its reason are in the row of the part.
+  The section "What runs on a change request" leaves, and the first sentence of the template no longer
+  says "and what runs when": that section is the process, not the architecture. The repository
+  instructions hold the process, and `docs/contract.md` holds the table of the workflows.
 - The rule line, with the identifier `documents.absent` and the wording of section G ("no separate file
   holds one decision"), in `charter/templates/AGENTS.md` and in the `AGENTS.md` of this repo. The
   contract of this repo, `charter.toml`, carries the field with the default.
@@ -62,8 +66,8 @@ its own version.
    `docs/decisions/0001-store.md`.
    test: `tests/test_setup.py::DecisionFiles.test_the_new_contract_carries_the_default_patterns`
    test: `tests/test_setup.py::DecisionFiles.test_a_decision_file_fails_the_check_of_a_new_repo`
-5. The template of the architecture map has no section "Decisions", and its table of parts has the
-   column "Choice and reason".
+5. The template of the architecture map has no section "Decisions" and no section "What runs on a
+   change request", and its table of parts has the column "What it does, and why it is built this way".
    test: `tests/test_setup.py::DecisionFiles.test_the_architecture_template_holds_the_choice_at_the_part`
 6. The instruction template and the `AGENTS.md` of this repo carry the rule line with the identifier
    `documents.absent`.
