@@ -9,13 +9,10 @@ choice concerns, and a repo that keeps a file for each decision fails the contra
 
 ## In scope
 
-- The decision, in `docs/decisions.md`, section G, accepted on 2026-11-18: a choice of the architecture
-  and its reason live in the architecture map, next to the part, in one or two sentences; a choice that
-  must always hold becomes a check; the history is in git; no separate file holds a decision. Reason:
-  with one file for each decision a fact has two homes, the row of the part and the file. Sources: the
-  design spec holds the decisions of a work item (the AI-native SDLC playbook of Anthropic); "When
-  documentation falls short, we promote the rule into code" (Harness engineering, OpenAI). One file for
-  each decision is a community practice (Michael Nygard, 2011); neither official source asks for it.
+- The decision, in `docs/decisions.md`, section G, accepted on 2026-11-18: the architecture map holds
+  each choice with its reason, next to the part; a choice that must always hold becomes a check; no
+  separate file holds one decision. The record of the process decisions, `docs/decisions.md`, is one
+  file and is not affected. The text, its reason, and its sources are in section G.
 - Why a check, and not the decision alone: the leader decided "no separate decision records" on
   2026-10-01. The sentence lived in an epic of the tracker and in no file that an agent or a check
   reads. On 2026-11-16 an agent wrote eight decision files in an adopter repo, and both contract checks
@@ -30,9 +27,9 @@ choice concerns, and a repo that keeps a file for each decision fails the contra
   `docs/decisions/**`. A repo or its organization can change the set, as for each field.
 - `charter/templates/architecture.md`: the section "Decisions" leaves, and the table of parts gets the
   column "Choice and reason".
-- The rule line, with the identifier `documents.absent`, in `charter/templates/AGENTS.md` and in the
-  `AGENTS.md` of this repo. The contract of this repo, `charter.toml`, carries the field with the
-  default.
+- The rule line, with the identifier `documents.absent` and the wording of section G ("no separate file
+  holds one decision"), in `charter/templates/AGENTS.md` and in the `AGENTS.md` of this repo. The
+  contract of this repo, `charter.toml`, carries the field with the default.
 - `docs/product.md`, the Design row of the lifecycle map: the architecture map holds each choice with
   its reason.
 - Both manifests: 0.3.5, so that an adopter can name the version that carries the check.
@@ -60,7 +57,9 @@ its own version.
    test: `tests/test_charter_check.py::AbsentPaths.test_no_file_under_a_pattern_passes`
    test: `tests/test_charter_check.py::AbsentPaths.test_an_absent_or_empty_field_checks_nothing`
 4. The contract that the setup step writes carries the default patterns, and a repo that the setup step
-   made fails the check after a file `docs/adr/adr-001-store.md` is added.
+   made fails the check after a file is added under each of the four default patterns, one at a time:
+   `docs/adr/adr-001-store.md`, `doc/adr/0001-store.md`, `doc/arch/adr-001.md`, and
+   `docs/decisions/0001-store.md`.
    test: `tests/test_setup.py::DecisionFiles.test_the_new_contract_carries_the_default_patterns`
    test: `tests/test_setup.py::DecisionFiles.test_a_decision_file_fails_the_check_of_a_new_repo`
 5. The template of the architecture map has no section "Decisions", and its table of parts has the
@@ -75,9 +74,12 @@ its own version.
    command: `python3 charter/scripts/charter_check.py all charter.toml`
 9. Both manifests name the version 0.3.5.
    test: `tests/test_setup.py::DecisionFiles.test_both_manifests_name_the_version`
+10. The Design row of the lifecycle map in `docs/product.md` says that the architecture map holds each
+    choice with its reason.
+    test: `tests/test_setup.py::DecisionFiles.test_the_design_row_of_the_product_document_names_the_choice`
 
 ## Manual checks
 
-10. The first use, in an adopter repo: with the version 0.3.5 and the default patterns, the contract
+11. The first use, in an adopter repo: with the version 0.3.5 and the default patterns, the contract
     checks fail while the folder of decision files exists, and pass after its content is in the
     architecture map. who: the leader. Not automatic: the adopter repo is outside this repo.
