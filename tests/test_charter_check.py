@@ -347,6 +347,18 @@ class AbsentPaths(Temp):
         self.assertIn("Move its content into a necessary document, at the part it concerns, and remove the file.", out)
         self.assertNotIn("all contract checks", out)
 
+    def test_a_file_that_is_not_committed_fails(self):
+        """reason-next-to-the-part, check 2: the check reads the folder, not the index of git."""
+        self.assertEqual(self.repo(self.PATTERNS)[0], cc.PASS)
+        git = ["git", "-C", str(self.dir), "-c", "user.name=test", "-c", "user.email=test@example.com"]
+        for command in (["init", "-q"], ["add", "-A"], ["commit", "-q", "-m", "the contract"]):
+            subprocess.run(git + command, check=True, capture_output=True)
+        code, out = self.repo(self.PATTERNS, "docs/adr/adr-001-store.md")
+        tracked = subprocess.run(git + ["ls-files", "docs"], check=True, capture_output=True, text=True).stdout
+        self.assertEqual(tracked, "", "git does not track the new file")
+        self.assertEqual(code, cc.FAIL, out)
+        self.assertIn("fail: docs/adr/adr-001-store.md: the contract forbids this path", out)
+
     def test_no_file_under_a_pattern_passes(self):
         """reason-next-to-the-part, check 3: one file of decisions, a folder next to a pattern, and a folder
         with no file are not under a pattern."""

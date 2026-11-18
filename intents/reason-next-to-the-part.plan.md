@@ -48,10 +48,12 @@ Accepted by the leader in the conversation on 2026-11-18, before the code.
    the new step; one sentence says that the field needs the version 0.3.5 of the core.
 9. `docs/product.md`, the Design row: "The design spec of the work item. The architecture map, kept
    current, with each choice and its reason at the part."
-10. `tests/test_charter_check.py`, a class `AbsentPaths`, six tests:
+10. `tests/test_charter_check.py`, a class `AbsentPaths`, seven tests:
     `test_the_field_is_in_the_schema_and_in_the_contract_document`,
     `test_a_file_under_an_absent_path_fails`,
     `test_the_failure_names_the_file_the_field_and_the_remedy`,
+    `test_a_file_that_is_not_committed_fails` (a git repo with one commit, and a new file that git does
+    not track),
     `test_no_file_under_a_pattern_passes` (also: a file `docs/decisions.md` passes, and a file in a
     folder next to a pattern passes), `test_an_absent_or_empty_field_checks_nothing`,
     `test_the_decision_is_recorded`.
@@ -84,7 +86,7 @@ Accepted by the leader in the conversation on 2026-11-18, before the code.
 
 ## Tests
 
-Twelve new tests, step 10. The existing tests of the gate cover the matcher after its move.
+Thirteen new tests, step 10. The existing tests of the gate cover the matcher after its move.
 
 ## What this plan does not do
 
