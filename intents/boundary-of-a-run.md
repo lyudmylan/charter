@@ -139,6 +139,7 @@ decision E4: the second decision above replaces it for a run.
 16. On a runner of the code host, in the first run of #92, with the settings that the command printed:
     the run starts with the sandbox, the edit tool refuses a write to the contract, a shell command
     reaches no host, and the log of the run names the refused write and the refused network access.
-    who: the leader. Not automatic: the
-    check needs a model call and a runner, and the workflow of the run comes with #92. The issue #92
-    carries a line for this check, and the leader closes it there.
+    Also: a read of `.env` is refused, a shell command sees no token of the model or of the code host,
+    and a call that needs a question is refused, not asked.
+    who: the leader. Not automatic: the check needs a model call and a runner, and the workflow of the
+    run comes with #92. The issue #92 carries a line for this check, and the leader closes it there.
