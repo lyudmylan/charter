@@ -1,6 +1,6 @@
 # Plan: the boundary gate reads a changed path with any character in its name (#101)
 
-Intent: `intents/boundary-gate-reads-any-path.md`, checks 1 to 5.
+Intent: `intents/boundary-gate-reads-any-path.md`, checks 1 to 6.
 The leader gave the acceptance of the plans of this milestone in advance, in the conversation on
 2026-11-20: the intent, the plan, and the code of a work item reach her together, and her merge
 approves the three.
@@ -23,12 +23,13 @@ approves the three.
    of a run writes the form with NUL.
 4. Both manifests: 0.3.7.
 5. `intents/boundary-gate-reads-any-path.md`: `Status: done`.
-6. `tests/test_boundary.py`, class `Gate`, four tests:
+6. `tests/test_boundary.py`, class `Gate`, five tests:
    `test_a_list_with_nul_between_the_paths_is_read` (five names, each under a closed folder and outside:
    a letter outside ASCII, a space, a line break, a double quote at the start, a backslash),
    `test_a_path_in_the_quotes_of_git_fails`,
    `test_the_contract_document_names_the_two_forms_of_the_list`,
-   `test_the_version_carries_the_correction`.
+   `test_the_version_carries_the_correction`,
+   `test_double_star_crosses_a_line_break_in_a_name`.
 
 ## Files
 

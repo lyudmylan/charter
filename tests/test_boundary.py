@@ -295,6 +295,15 @@ class Gate(Temp):
         self.assertIn("With a NUL character between the paths, as git writes them with `-z`", section)
         self.assertIn("a line in the quotes of git fails", section)
 
+    def test_double_star_crosses_a_line_break_in_a_name(self):
+        """boundary-gate-reads-any-path, check 6: the matcher that the tiers, the code paths, the forbidden
+        paths, and the boundary share. A star still stays inside one segment."""
+        self.assertTrue(cc.matches("intents/a\nb.md", ["intents/**"]))
+        self.assertTrue(cc.matches("docs/a\nb/c.md", ["docs/**/c.md"]))
+        self.assertTrue(cc.matches("intents/a.md", ["intents/**"]))
+        self.assertFalse(cc.matches("notes/a\nb.md", ["intents/**"]))
+        self.assertFalse(cc.matches("src/a/b.py", ["src/*.py"]))
+
     def test_the_version_carries_the_correction(self):
         """boundary-gate-reads-any-path, check 5."""
         versions = [json.loads((ROOT / plugin / ".claude-plugin" / "plugin.json").read_text())["version"]

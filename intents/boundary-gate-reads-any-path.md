@@ -5,7 +5,8 @@ Work item: #101. Status: done. Approval: a person merges the change request that
 ## Goal
 
 The gate `charter-gate boundary` refuses a changed path under a pattern of `boundary.no_write`, whatever
-characters the name of the file holds.
+characters the name of the file holds, a line break and a double quote included, when the list is written
+with `-z`.
 
 ## In scope
 
@@ -18,6 +19,9 @@ characters the name of the file holds.
   reads this form; else it reads lines, as today.
 - In a list of lines, a line that starts with a double quote fails. The failure says that git quoted the
   path, and that the list is to be written with `-z`.
+- The path matcher of `charter_check.py`: `**` also crosses a line break in a name. The matcher serves
+  the tiers, the code paths, the forbidden paths, and the boundary; their results for a name without a
+  line break stay as they are.
 - `docs/contract.md`, section "The boundary of a run": the two forms, and which one the workflow of a run
   writes.
 - Both manifests: the same version, 0.3.7 or later.
@@ -48,6 +52,10 @@ paths of files that exist, read from the folder, with no quotes.
    test: `tests/test_boundary.py::Gate.test_the_contract_document_names_the_two_forms_of_the_list`
 5. Both manifests name the same version, 0.3.7 or later.
    test: `tests/test_boundary.py::Gate.test_the_version_carries_the_correction`
+6. A pattern with `**` matches a name with a line break, and the test of the matcher that exists passes
+   unchanged.
+   test: `tests/test_boundary.py::Gate.test_double_star_crosses_a_line_break_in_a_name`
+   test: `tests/test_charter_gate.py::Patterns.test_star_stays_in_one_segment_and_double_star_crosses`
 
 ## Manual checks
 
