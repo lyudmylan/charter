@@ -66,7 +66,7 @@ Charter adds in each phase.
 | Design | The design spec of the work item. The architecture map, kept current, with each choice and its reason at the part. | A person approves the design spec. | Roadmap |
 | Build | `plan.md`, accepted before the code. The change on a branch. The repository instructions. The gates, as code. | The plan exists before the code. The quality checks pass before the push. | Yes |
 | Test | The acceptance checks, which the agent cannot change alone. The tests. The evals of the skills. | A reviewer that is not the author, also for a reading that an agent drafts for a person. An agent that is not the author reviews the code. The check "verdict". | Yes |
-| Deploy | The evidence record. The merge by the approver of the risk tier. The release stages to production. | A person decides production. | Partly |
+| Deploy | The evidence record. The merge by the approver of the risk tier: a person, or the verdict for a tier whose approver is `agent`. The release stages to production. | A person decides production. | Partly |
 | Maintain | A failure re-enters the cycle as an intent and ends as a check. Each model upgrade is tested. | Monitoring. | Partly |
 
 Every phase has its own verification. The issue tracker connects all phases, from the plan to

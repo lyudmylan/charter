@@ -75,6 +75,7 @@ FACT_INTENTS = "intents"                     # optional: [{"path": "intents/x.md
 FACT_CODE_REVIEW_REPORTS = "code_review_reports"   # optional: [severity or null], each report of the reviewer of the code, oldest first
 FACT_CODE_REVIEW_COMMIT = "code_review_commit"     # optional: the line `Commit:` of the newest report of the code review, or null
 FACT_HEAD_COMMIT = "head_commit"                   # optional: the commit that the facts describe
+FACT_REVIEW_COMMIT = "review_commit"               # optional: the line `Commit:` of the newest report of the intent reviewer, or null
 # FACT_APPROVALS is optional and not checked in this version: the merge by the approver is the approval.
 ISSUE_NUMBER, ISSUE_STATE = "number", "state"
 INTENT_PATH, INTENT_PLAN, INTENT_REMOVED = "path", "plan", "removed"   # removed: the change request removes or renames the intent away
@@ -99,6 +100,10 @@ DEFAULT_REVIEW_THRESHOLD = "medium"
 # false, it is in its shadow period: the verdict prints its state and blocks nothing.
 FIELD_CODE_BLOCKS = "review.code_blocks"
 
+# The merge by the verdict. Only a tier whose approver is this role is merged by the verdict; a person merges
+# every other tier, and also this one when a condition of the merge does not hold or a fact is missing.
+APPROVER_AGENT = "agent"
+
 # Fields of the contract that the gates read.
 FIELD_CODE_PATHS = "documents.code_paths"
 FIELD_NECESSARY = "documents.necessary"
@@ -121,9 +126,10 @@ ARG_RECORD, ARG_SCRIPTS_VERSION = "record", "scripts_version"
 # The evidence record: the verdict, plus these fields.
 RECORD_FORM = 1
 CODE_REVIEW_ROUND, CODE_REVIEW_SEVERITY = "code_review_round", "code_review_highest_severity"   # the round of the current loop
+RECORD_MERGE_BY_VERDICT = "merge_by_verdict"   # true when the verdict merges the change request, else a person merges
 RECORD_KEYS = ("record_form", "change_request", "time", "scripts_version", "false_failures", "dropped_findings", "false_findings",
                FACT_REVIEW_ROUNDS, FACT_REVIEW_SEVERITY, FACT_INTENTS, FACT_REVIEW_REPORTS, "review_round",
-               FACT_CODE_REVIEW_REPORTS, CODE_REVIEW_ROUND, CODE_REVIEW_SEVERITY)
+               FACT_CODE_REVIEW_REPORTS, CODE_REVIEW_ROUND, CODE_REVIEW_SEVERITY, RECORD_MERGE_BY_VERDICT)
 RECORD_REVIEW_ROUND = RECORD_KEYS[11]        # the round of the current loop; `review_rounds` is the number of all reports
 
 MSG = {
@@ -168,6 +174,17 @@ MSG = {
     "code_review_closed": "code review: {where}, highest open severity {severity}: the loop is closed",
     "code_review_stale": "{line}; the newest report names the commit {commit}, not the head commit {head}: a push after the last report is not reviewed yet",
     "code_review_shadow": "{line} (shadow period: {field} is not true, so the code review blocks nothing)",
+    "merge_verdict": "merge: the verdict merges: the approver of the tier is {approver}, and the reviews by agents closed on the head commit {head}",
+    "merge_person": "merge: a person merges: {reason}",
+    "merge_not_ready": "the verdict is not ready",
+    "merge_approver": "the approver of the tier is {approver}, not {agent}",
+    "merge_shadow": "{field} is not true, so the code review is in its shadow period",
+    "merge_no_head": "the facts name no head commit",
+    "merge_code_review": "the newest report of the code review is missing, is not closed, or names another commit than the head commit",
+    "merge_plan_none": "a file under {intents} or {plans} changed, and the facts hold no report of the intent reviewer",
+    "merge_plan_no_line": "a file under {intents} or {plans} changed, and the newest report of the intent reviewer has no severity line",
+    "merge_plan_open": "a file under {intents} or {plans} changed, and the newest report of the intent reviewer is open at {severity}, at {threshold} or above",
+    "merge_plan_commit": "a file under {intents} or {plans} changed, and the newest report of the intent reviewer names the commit {commit}, not the head commit {head}",
     "plan_intents_only": "not needed, the change is the Plan phase (only files under {dir})",
     "plan_no_intent": "no linked issue names an intent (a line `Intent: {dir}<part>{suffix}` in the issue)",
     "plan_missing": "`{plan}` is missing. A plan at the old place, `{old}`, counts too.",
@@ -259,7 +276,7 @@ def load_facts(path: Path) -> dict:
     code_reports = facts.get(FACT_CODE_REVIEW_REPORTS, [])
     if not (isinstance(code_reports, list) and all(r in (None, *SEVERITIES) for r in code_reports)):
         raise cc.CannotRun(msg("facts_bad_value", key=FACT_CODE_REVIEW_REPORTS, path=path))
-    for key in (FACT_CODE_REVIEW_COMMIT, FACT_HEAD_COMMIT):
+    for key in (FACT_CODE_REVIEW_COMMIT, FACT_HEAD_COMMIT, FACT_REVIEW_COMMIT):
         if not (facts.get(key) is None or isinstance(facts.get(key), str)):
             raise cc.CannotRun(msg("facts_bad_value", key=key, path=path))
     return facts
@@ -491,6 +508,47 @@ def code_review_state(facts: dict, e: cc.Effective) -> tuple[str, bool]:
     return line, blocks
 
 
+def merge_decision(facts: dict, e: cc.Effective, ready: bool, spec: dict) -> tuple[bool, str]:
+    """Whether the verdict merges the change request, and the line that says so. It checks the conditions in
+    their order and names the first one that does not hold. A missing fact means that a person merges: a
+    missing commit agrees with no other commit, also with no other missing commit. The readiness stays as it is."""
+    def person(message_id: str, **values: object) -> tuple[bool, str]:
+        return False, msg("merge_person", reason=msg(message_id, **values))
+
+    if not ready:
+        return person("merge_not_ready")
+    approver = spec.get(TIER_APPROVER)
+    if approver != APPROVER_AGENT:
+        return person("merge_approver", approver=approver, agent=APPROVER_AGENT)
+    if e.values.get(FIELD_CODE_BLOCKS) is not True:
+        return person("merge_shadow", field=FIELD_CODE_BLOCKS)
+    head = facts.get(FACT_HEAD_COMMIT)
+    if not head:
+        return person("merge_no_head")
+    threshold = e.values.get(FIELD_REVIEW_THRESHOLD, DEFAULT_REVIEW_THRESHOLD)
+    changed = facts[FACT_CHANGED_FILES]
+    if any(is_code(f) for f in changed):
+        reports = facts.get(FACT_CODE_REVIEW_REPORTS) or []
+        severity = reports[-1] if reports else None
+        if (severity is None or SEVERITIES.index(severity) >= SEVERITIES.index(threshold)
+                or facts.get(FACT_CODE_REVIEW_COMMIT) != head):
+            return person("merge_code_review")
+    if any(not is_code(f) for f in changed):
+        folders = dict(intents=INTENTS_DIR, plans=PLANS_DIR)
+        reports = facts.get(FACT_REVIEW_REPORTS) or []
+        if not reports:
+            return person("merge_plan_none", **folders)
+        severity = reports[-1]
+        if severity is None:
+            return person("merge_plan_no_line", **folders)
+        if SEVERITIES.index(severity) >= SEVERITIES.index(threshold):
+            return person("merge_plan_open", severity=severity, threshold=threshold, **folders)
+        commit = facts.get(FACT_REVIEW_COMMIT)
+        if commit != head:
+            return person("merge_plan_commit", commit=commit, head=head, **folders)
+    return True, msg("merge_verdict", approver=approver, head=head)
+
+
 def gate_plan(facts: dict, e: cc.Effective) -> GateResult | None:
     """The plan of the work item exists before the code. None when the contract does not set the flag. A
     change of intents alone is the Plan phase and needs no plan. An intent that the change request removes or
@@ -557,6 +615,10 @@ def gate_verdict(facts: dict, e: cc.Effective) -> tuple[bool, list[str], dict]:
         who = e.values.get(FIELD_ROLE.format(role=spec.get(TIER_APPROVER)), [])
         detail[JSON_KEY_MERGES] = who
         reasons.append(msg("tier", tier=tier, review=spec.get(TIER_REVIEW), approver=spec.get(TIER_APPROVER), who=who))
+    merges, merge_line = merge_decision(facts, e, passed, spec)
+    reasons.append(merge_line)
+    detail[RECORD_MERGE_BY_VERDICT] = merges
+    if tier is not None:
         reasons.append(msg("approvals_not_checked", approver=spec.get(TIER_APPROVER)))
     detail[JSON_KEY_GATES] = [g.as_dict() for g in gates]
     return passed, reasons, detail
@@ -651,6 +713,7 @@ def build_record(facts: dict, verdict: str, origin: str, reasons: list[str], det
         FACT_CODE_REVIEW_REPORTS: facts.get(FACT_CODE_REVIEW_REPORTS, []),
         CODE_REVIEW_ROUND: detail.get(CODE_REVIEW_ROUND, 0),
         CODE_REVIEW_SEVERITY: (facts.get(FACT_CODE_REVIEW_REPORTS) or [None])[-1],
+        RECORD_MERGE_BY_VERDICT: detail.get(RECORD_MERGE_BY_VERDICT) is True,
     }
 
 

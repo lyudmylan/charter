@@ -318,5 +318,35 @@ class CodeReview(unittest.TestCase):
         self.assertEqual(only_code[cg.FACT_CODE_REVIEW_REPORTS], ["medium"])
 
 
+class VerdictMerges(unittest.TestCase):
+    bot = {cf.COMMENT_USER: {cf.USER_LOGIN: cf.RECORD_AUTHOR}}
+
+    def report(self, marker: str, commit: str, line: str) -> dict:
+        return {**self.bot, cf.COMMENT_BODY: f"{marker}\nCommit: {commit}\n\n| intent | verdict |\n{line}\n"}
+
+    def test_the_commit_of_the_newest_intent_report_is_a_fact(self):
+        """verdict-merges, check 3."""
+        person = {cf.COMMENT_USER: {cf.USER_LOGIN: "alice"},
+                  cf.COMMENT_BODY: f"{cf.REVIEW_MARKER}\nCommit: fff\nHighest open severity: low\n"}
+        comments = [self.report(cf.REVIEW_MARKER, "aaa", "Highest open severity: high"),
+                    self.report(cf.REVIEW_MARKER, "BBB", "Highest open severity: low"),
+                    self.report(cf.CODE_REVIEW_MARKER, "ccc", "Highest open severity: low"), person]
+
+        class Host(FakeHost):
+            def pages(self, path: str) -> list:
+                return comments if path.endswith("/comments") else super().pages(path)
+
+        facts = cf.collect(FakeHost.REPO, FakeHost.NUMBER, {}, [], Host(set()), review_workflow="review-intents.yml",
+                           code_review_workflow="review-code.yml")
+        self.assertEqual(facts[cg.FACT_REVIEW_COMMIT], "bbb")
+        self.assertEqual(facts[cg.FACT_CODE_REVIEW_COMMIT], "ccc")
+        no_report = cf.collect(FakeHost.REPO, FakeHost.NUMBER, {}, [], Host(set()), review_workflow="review-intents.yml",
+                               author="nobody")
+        self.assertIn(cg.FACT_REVIEW_COMMIT, no_report)
+        self.assertIsNone(no_report[cg.FACT_REVIEW_COMMIT])
+        only_code = cf.collect(FakeHost.REPO, FakeHost.NUMBER, {}, [], Host(set()), code_review_workflow="review-code.yml")
+        self.assertNotIn(cg.FACT_REVIEW_COMMIT, only_code)
+
+
 if __name__ == "__main__":
     unittest.main()

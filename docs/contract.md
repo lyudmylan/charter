@@ -49,7 +49,7 @@ any of its patterns. The `instructions` and `text` commands read this from the s
 | `build.plan_before_code` | flag | Each work item has its plan, `plans/<part>.md`, before the code; the verdict checks that it exists |
 | `tiers.<tier>.paths` | set | Path patterns of the files in the tier |
 | `tiers.<tier>.review` | choice | `light` or `deep` |
-| `tiers.<tier>.approver` | choice | `agent`, `engineer`, `team_lead`, or `leader` |
+| `tiers.<tier>.approver` | choice | `agent`, `engineer`, `team_lead`, or `leader`: the role that merges a change of the tier. With `agent`, the verdict merges, under the conditions of the section "The merge by the verdict". Needs the version 0.3.11 of the core for `agent` |
 | `tiers.<tier>.approvals` | count | Approvals that a merge needs |
 | `documents.necessary` | set | Documents that the repo keeps current |
 | `documents.code_paths` | set | Paths whose change needs a document change or a recorded reason |
@@ -105,7 +105,7 @@ python3 charter/scripts/charter_gate.py verdict   --facts facts.json --contract 
 | `link` | The change request links an open issue with a closing keyword of the code host followed by the number: `close`, `closes`, `closed`, `fix`, `fixes`, `fixed`, `resolve`, `resolves` or `resolved`, in any case, with or without a colon, then `#N` (`Closes #N`); or `Part of #N`, which links the issue without closing it, the form of a change request of the Plan phase, the intent alone. A bare `#N` in the text is a mention, not a link. |
 | `documents` | No file under `documents.code_paths` changed; or a document in `documents.necessary` changed; or the change request records a reason. |
 | `quality` | Each command in `checks.quality` exits with 0. |
-| `verdict` | `link` and `documents` pass, all reported checks passed, no review thread is unresolved, a tier matches the changed files, and, when the contract sets `build.plan_before_code`, the plan of each intent that a linked issue names exists at the head commit (a change of intents alone needs no plan; an intent that the change request removes or renames away needs no plan). The first line of the output is `ready` or `not ready`; the reasons follow. The verdict names the tier and who merges. |
+| `verdict` | `link` and `documents` pass, all reported checks passed, no review thread is unresolved, a tier matches the changed files, and, when the contract sets `build.plan_before_code`, the plan of each intent that a linked issue names exists at the head commit (a change of intents alone needs no plan; an intent that the change request removes or renames away needs no plan). The first line of the output is `ready` or `not ready`; the reasons follow. The verdict names the tier and who merges, and prints one line `merge: ...`: the verdict merges, or a person merges and why. |
 
 The facts file:
 
@@ -271,6 +271,35 @@ Claude Code has a review of its own: the plugin `code-review` of the official ma
 `/security-review`. They report faults of correctness as inline comments, and know no intent, no plan, and
 no severity line that the verdict reads. A repo can run them beside the reviewer of Charter.
 
+## The merge by the verdict
+
+The approver of a tier merges its change requests. With `leader`, `team_lead`, or `engineer`, a person
+merges. With `agent`, the verdict merges, when each of these holds; else it names the first one that does
+not hold, and a person merges:
+
+- the verdict is ready;
+- the approver of the tier of the change is `agent`;
+- `review.code_blocks` is true, and the newest report of the reviewer of the code is closed on the head commit;
+- when the change holds a file under `plans/` or `intents/`: the newest report of the intent reviewer is
+  below `review.threshold` and names the head commit. In such a tier, this review is the acceptance of the plan.
+
+A missing fact means that a person merges. The collecting step writes `review_commit`, the line `Commit:` of
+the newest report of the intent reviewer. The verdict prints one line, `merge: the verdict merges: ...` or
+`merge: a person merges: <the reason>`, and the evidence record holds the decision under `merge_by_verdict`.
+The decision changes no readiness. A change request that holds an intent is in the high tier, so a person
+merges it.
+
+The workflow `verdict` has one step after the step that publishes the check "verdict": "Merge, for a tier
+whose approver is agent". It runs only when the verdict is ready, and merges only when the record says that
+the verdict merges. It merges with `gh pr merge --match-head-commit` and the commit that the verdict read,
+so a push after the verdict is not merged. A refusal of the code host fails the run, and a person merges.
+
+The merge uses the secret `CHARTER_MERGE_TOKEN`, a token that a person creates, with write access to the
+contents and the pull requests of the repo. A merge with the token of the workflow starts no workflow on the
+main branch. Without the secret the step merges nothing and says that a person merges. So three settings of
+a person turn the merge on: the approver `agent` in a tier, the flag `review.code_blocks`, and the secret.
+The contract that the setup step writes sets none of them. Needs the version 0.3.11 of the core.
+
 ## The evidence record
 
 Each run of the verdict writes the evidence record of the change: the JSON form of the verdict, with
@@ -287,6 +316,7 @@ else does not count. The check "verdict" keeps the short text.
 | `verdict`, `reasons` | `ready` or `not ready`, and the reasons |
 | `source` | The organization source and its version |
 | `tier`, `approver`, `merges` | The tier of the change, the role that merges, and who holds it |
+| `merge_by_verdict` | `true` when the verdict merges the change request, else `false`: a person merges. The line `merge: ...` among the reasons gives the cause |
 | `gates` | Each gate with its result and its reasons |
 | `checks` | The state of each check |
 | `false_failures` | What a person recorded with a line `False failure: <gate>: <reason>` in the change request |

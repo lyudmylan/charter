@@ -355,5 +355,36 @@ class CodeReviewer(unittest.TestCase):
                 self.assertIn("\ncode_blocks = false\n", "\n" + table + "\n")
 
 
+class VerdictMerges(Temp):
+    def test_the_setup_turns_no_merge_on_and_names_the_token(self):
+        """verdict-merges, check 7: the written contract and the contract of this repo name no tier with the
+        approver `agent` and set the flag to false; the printed steps name the merge token as optional."""
+        code, out = self.setup()
+        self.assertEqual(code, cc.PASS, out)
+        for name, path in (("the written contract", self.dir / cs.CONTRACT_FILE), ("this repo", ROOT / cs.CONTRACT_FILE)):
+            with self.subTest(contract=name):
+                data = tomllib.loads(path.read_text())
+                self.assertTrue(data["tiers"])
+                for tier, spec in data["tiers"].items():
+                    self.assertNotEqual(spec.get("approver"), "agent", tier)
+                self.assertIs(data["review"]["code_blocks"], False)
+        steps = out.split(cs.msg("steps_title"), 1)[1]
+        line = next((step for step in steps.splitlines() if "CHARTER_MERGE_TOKEN" in step), None)
+        self.assertIsNotNone(line, steps)
+        self.assertIn("Optional, for a repo that gives a tier the approver `agent`", line)
+        self.assertRegex(line, r"^  \d+\. ")
+
+    def test_the_instructions_say_who_merges(self):
+        """verdict-merges, check 7: the instruction template and the instructions of this repo."""
+        for path in (ROOT / "charter" / "templates" / cs.INSTRUCTIONS_FILE, ROOT / cs.INSTRUCTIONS_FILE):
+            with self.subTest(file=str(path.relative_to(ROOT))):
+                text = " ".join(path.read_text().split())
+                self.assertIn("The approver of the tier merges: a person, or the verdict for a tier whose approver is "
+                              "`agent`. [tiers.high.approver]", text)
+                self.assertIn("In a tier whose approver is `agent`, the review of the plan by the intent reviewer is its "
+                              "acceptance.", text)
+                self.assertNotIn("A person merges.", text)
+
+
 if __name__ == "__main__":
     unittest.main()

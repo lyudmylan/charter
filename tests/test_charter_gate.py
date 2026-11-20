@@ -702,5 +702,159 @@ class CodeReview(Temp):
         self.assertIn(cg.msg("no_tier"), out)
 
 
+class VerdictMerges(Temp):
+    """The sample repo, with the approver `agent` in the low tier. The facts change `src/app.py`, a file of code."""
+    HEAD, OTHER = "1111111111111111111111111111111111111111", "2222222222222222222222222222222222222222"
+    MERGES = "merge: the verdict merges"
+    PERSON = "merge: a person merges: "
+
+    def contract(self, approver: str = "agent", blocks: bool | None = True) -> list[str]:
+        text = REPO.read_text().replace('review = "light"\napprover = "engineer"', f'review = "light"\napprover = "{approver}"')
+        if blocks is not None:
+            text = text.replace('[review]\nthreshold = "medium"\n', f'[review]\nthreshold = "medium"\ncode_blocks = {str(blocks).lower()}\n')
+        path = self.dir / "repo-merge.toml"
+        path.write_text(text)
+        return [f"--{cc.ARG_CONTRACT}", str(path), f"--{cc.ARG_SOURCE}", str(ORG)]
+
+    def reviewed(self, **changes) -> dict:
+        return {cg.FACT_CODE_REVIEW_REPORTS: ["low"], cg.FACT_CODE_REVIEW_COMMIT: self.HEAD, cg.FACT_HEAD_COMMIT: self.HEAD, **changes}
+
+    def verdict(self, contract: list[str], **changes) -> tuple[int, str]:
+        return run(cg.CMD_VERDICT, f"--{cg.ARG_FACTS}", str(self.facts(**changes)), *contract)
+
+    def merge_lines(self, out: str) -> list[str]:
+        return [line.strip() for line in out.splitlines() if line.strip().startswith("merge: ")]
+
+    def test_the_verdict_merges_a_ready_change_of_an_agent_tier(self):
+        """verdict-merges, check 1."""
+        code, out = self.verdict(self.contract(), **self.reviewed())
+        self.assertEqual(code, cc.PASS, out)
+        self.assertEqual(len(self.merge_lines(out)), 1, out)
+        self.assertTrue(self.merge_lines(out)[0].startswith(self.MERGES), out)
+        self.assertIn(self.HEAD, self.merge_lines(out)[0])
+        lines = [line.strip() for line in out.splitlines()]
+        tier = next(i for i, line in enumerate(lines) if line.startswith("tier low:"))
+        self.assertTrue(lines[tier + 1].startswith(self.MERGES), out)
+        plan = {cg.FACT_CHANGED_FILES: ["src/app.py", "docs/product.md", "plans/app.md"],
+                cg.FACT_REVIEW_REPORTS: ["high", "low"], cg.FACT_REVIEW_COMMIT: self.HEAD}
+        code, out = self.verdict(self.contract(), **self.reviewed(**plan))
+        self.assertEqual(code, cc.PASS, out)
+        self.assertTrue(self.merge_lines(out)[0].startswith(self.MERGES), out)
+
+    def test_a_tier_of_a_person_is_merged_by_a_person(self):
+        """verdict-merges, check 2: a tier whose approver is a person, also the high tier of a contract that
+        gives the low tier to an agent."""
+        for approver in ("engineer", "team_lead", "leader"):
+            with self.subTest(approver=approver):
+                code, out = self.verdict(self.contract(approver), **self.reviewed())
+                self.assertEqual(code, cc.PASS, out)
+                self.assertEqual(self.merge_lines(out), [self.PERSON + f"the approver of the tier is {approver}, not agent"])
+        code, out = self.verdict(self.contract(), **self.reviewed(**{cg.FACT_CHANGED_FILES: ["scripts/x.py", "docs/product.md"]}))
+        self.assertEqual(code, cc.PASS, out)
+        self.assertIn("tier high:", out)
+        self.assertEqual(self.merge_lines(out), [self.PERSON + "the approver of the tier is leader, not agent"])
+
+    def test_a_change_that_is_not_ready_is_not_merged(self):
+        """verdict-merges, check 2: the readiness stays as it was."""
+        for changes in ({cg.FACT_UNRESOLVED_THREADS: 1}, {cg.FACT_CHECKS: {"tests": "fail"}}, {cg.FACT_LINKED_ISSUES: []},
+                        {cg.FACT_CODE_REVIEW_REPORTS: ["high"]}, {cg.FACT_CODE_REVIEW_COMMIT: self.OTHER}):
+            with self.subTest(changes=changes):
+                code, out = self.verdict(self.contract(), **self.reviewed(**changes))
+                self.assertEqual(code, cc.FAIL, out)
+                self.assertTrue(out.startswith(cg.VERDICT_NOT_READY + "\n"))
+                self.assertEqual(self.merge_lines(out), [self.PERSON + "the verdict is not ready"])
+
+    def test_the_shadow_period_of_the_code_review_keeps_the_merge_with_a_person(self):
+        """verdict-merges, check 2: without the flag, and with false."""
+        for blocks in (None, False):
+            with self.subTest(blocks=blocks):
+                code, out = self.verdict(self.contract(blocks=blocks), **self.reviewed())
+                self.assertEqual(code, cc.PASS, out)
+                self.assertEqual(self.merge_lines(out),
+                                 [self.PERSON + f"{cg.FIELD_CODE_BLOCKS} is not true, so the code review is in its shadow period"])
+
+    def test_a_plan_without_a_closed_review_at_the_head_commit_is_not_merged(self):
+        """verdict-merges, check 2: the newest intent report is open, is missing, has no severity line, or names
+        another commit. A missing commit agrees with no other commit, also with no other missing commit."""
+        plan = ["src/app.py", "docs/product.md", "plans/app.md"]
+        cases = {
+            "open": ({cg.FACT_REVIEW_REPORTS: ["medium"], cg.FACT_REVIEW_COMMIT: self.HEAD}, "is open at medium"),
+            "open after a closed one": ({cg.FACT_REVIEW_REPORTS: ["low", "high"], cg.FACT_REVIEW_COMMIT: self.HEAD}, "is open at high"),
+            "no report": ({cg.FACT_REVIEW_REPORTS: [], cg.FACT_REVIEW_COMMIT: None}, "hold no report"),
+            "no facts of the review": ({}, "hold no report"),
+            "no severity line": ({cg.FACT_REVIEW_REPORTS: ["low", None], cg.FACT_REVIEW_COMMIT: self.HEAD}, "no severity line"),
+            "another commit": ({cg.FACT_REVIEW_REPORTS: ["low"], cg.FACT_REVIEW_COMMIT: self.OTHER}, f"names the commit {self.OTHER}"),
+            "no commit": ({cg.FACT_REVIEW_REPORTS: ["low"], cg.FACT_REVIEW_COMMIT: None}, "names the commit None"),
+        }
+        for name, (review, reason) in cases.items():
+            for files in (plan, ["plans/app.md"], ["intents/app.md", "src/app.py", "docs/product.md"]):
+                with self.subTest(case=name, files=files):
+                    code, out = self.verdict(self.contract(), **self.reviewed(**{cg.FACT_CHANGED_FILES: files, **review}))
+                    self.assertEqual(code, cc.PASS, out)
+                    lines = self.merge_lines(out)
+                    self.assertEqual(len(lines), 1, out)
+                    self.assertTrue(lines[0].startswith(self.PERSON), out)
+                    self.assertIn(reason, lines[0])
+        both_absent = {cg.FACT_REVIEW_REPORTS: ["low"], cg.FACT_CODE_REVIEW_COMMIT: None, cg.FACT_HEAD_COMMIT: None}
+        for files in (plan, ["plans/app.md"]):
+            with self.subTest(case="no head commit and no review commit", files=files):
+                facts = {**self.reviewed(**{cg.FACT_CHANGED_FILES: files, **both_absent})}
+                del facts[cg.FACT_HEAD_COMMIT]
+                code, out = self.verdict(self.contract(), **facts)
+                self.assertEqual(code, cc.PASS, out)
+                self.assertEqual(len(self.merge_lines(out)), 1, out)
+                self.assertTrue(self.merge_lines(out)[0].startswith(self.PERSON), out)
+        code, out = self.verdict(self.contract(), **self.reviewed(**{cg.FACT_REVIEW_COMMIT: 7}))
+        self.assertEqual(code, cc.CANNOT_RUN, out)
+
+    def test_the_record_holds_the_merge_and_its_reason(self):
+        """verdict-merges, check 4."""
+        self.assertIn(cg.RECORD_MERGE_BY_VERDICT, cg.RECORD_KEYS)
+        record = self.dir / "record.json"
+        for blocks, merges in ((True, True), (False, False)):
+            with self.subTest(blocks=blocks):
+                code, out = run(cg.CMD_VERDICT, f"--{cg.ARG_FACTS}", str(self.facts(**self.reviewed())),
+                                *self.contract(blocks=blocks), f"--{cg.ARG_RECORD}", str(record))
+                self.assertEqual(code, cc.PASS, out)
+                data = json.loads(record.read_text())
+                self.assertIs(data[cg.RECORD_MERGE_BY_VERDICT], merges)
+                lines = [r for r in data[cg.JSON_KEY_REASONS] if r.startswith("merge: ")]
+                self.assertEqual(len(lines), 1, data[cg.JSON_KEY_REASONS])
+                self.assertTrue(lines[0].startswith(self.MERGES if merges else self.PERSON), lines)
+        self.assertIs(cg.build_record(FACTS_READY, cg.VERDICT_READY, "", [], {}, "", "t")[cg.RECORD_MERGE_BY_VERDICT], False)
+
+    def test_the_decision_and_the_documents_name_the_merge(self):
+        """verdict-merges, check 8."""
+        decisions = (ROOT / "docs" / "decisions.md").read_text()
+        control = decisions.split("\n## C. Control\n", 1)[1].split("\n## ", 1)[0]
+        rows = [line for line in control.splitlines() if "approver is `agent`" in line and "CHARTER_MERGE_TOKEN" in line]
+        self.assertEqual(len(rows), 1, "no row of the merge by the verdict in section C")
+        cells = [cell.strip() for cell in rows[0].strip("|").split(" | ")]
+        self.assertRegex(cells[0], r"^C\d+$")
+        self.assertIn("`review.code_blocks`", cells[1])
+        for part in ("B3", "C10", "a fact that a script reads", "the verdict runs from the main branch"):
+            self.assertIn(part, cells[2])
+        self.assertEqual(cells[3], "2026-11-20")
+        contract = (ROOT / "docs" / "contract.md").read_text()
+        section = " ".join(contract.split("## The merge by the verdict\n", 1)[1].split("\n## ", 1)[0].split())
+        for part in ("With `agent`, the verdict merges", "`review.code_blocks` is true", "`review_commit`", "`merge_by_verdict`",
+                     "`merge: a person merges: <the reason>`", "--match-head-commit", "`CHARTER_MERGE_TOKEN`",
+                     "starts no workflow on the main branch"):
+            with self.subTest(part=part):
+                self.assertIn(part, section)
+        row = re.search(r"^\| `tiers\.<tier>\.approver` \| choice \| (.*)$", contract, re.M)
+        self.assertIn("With `agent`, the verdict merges", row.group(1))
+        self.assertIn("| `merge_by_verdict` |", contract)
+        deploy = re.search(r"^\| Deploy \| (.*)$", (ROOT / "docs" / "product.md").read_text(), re.M)
+        self.assertIn("the verdict for a tier whose approver is `agent`", deploy.group(1))
+
+    def test_both_manifests_name_the_version(self):
+        """verdict-merges, check 9."""
+        versions = [json.loads((ROOT / plugin / ".claude-plugin" / "plugin.json").read_text())["version"]
+                    for plugin in ("charter", "charter-practices")]
+        self.assertEqual(versions[0], versions[1])
+        self.assertGreaterEqual(tuple(int(part) for part in versions[0].split(".")), (0, 3, 11))
+
+
 if __name__ == "__main__":
     unittest.main()

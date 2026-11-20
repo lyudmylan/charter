@@ -9,8 +9,9 @@ path of the shell while the plugin is enabled.
 
 - Each change to a source file (code, config, doc) has an issue in the tracker. [change.ticket_per_change]
 - Work on a branch. Open a change request that closes the issue, `Closes #N`, or that is a part of it,
-  `Part of #N`, for the intent of the Plan phase. A bare `#N` in the text is a mention, not a link. A person
-  merges. [tiers.high.approver]
+  `Part of #N`, for the intent of the Plan phase. A bare `#N` in the text is a mention, not a link. The
+  approver of the tier merges: a person, or the verdict for a tier whose approver is `agent`.
+  [tiers.high.approver]
 - The author of a change is not its reviewer. [change.author_not_reviewer]
 - The contract, this file, the intents, and the workflows are in the high risk tier: a deep review, and
   the leader approves. [tiers.high.paths]
@@ -28,7 +29,8 @@ request before the work starts. The skill `tracker` writes the issue and the int
 intent with one line, `Intent: intents/<part>.md`. [tiers.high.paths]
 Before the code, the plan `plans/<part>.md`: the steps, the files to change, the tests to add, in the
 words of the author. `plans/_template.md` is the form. The agent stops and asks the person who holds the work item to accept it; the
-code starts after the acceptance. The verdict checks that the plan exists; a change request that changes
+code starts after the acceptance. In a tier whose approver is `agent`, the review of the plan by the intent
+reviewer is its acceptance. The verdict checks that the plan exists; a change request that changes
 only intents needs no plan. [build.plan_before_code]
 
 ## Before a push

@@ -13,7 +13,8 @@ Commands:
           [--check name=result]...                      A check result given by the caller.
           [--check-run name]...                         A check read from the check runs of the head commit.
           [--review-workflow FILE]                      The repo has this reviewer workflow: read the severity line
-                                                        of each report of the reviewer on the change request.
+                                                        of each report of the reviewer on the change request, and
+                                                        the commit of the newest.
           [--code-review-workflow FILE]                 The repo has this reviewer of the code: read the severity
                                                         line of each of its reports, and the commit of the newest.
 
@@ -271,10 +272,11 @@ def build_facts(pr: dict, files: list[dict], issues: dict[int, dict | None], unr
                 checks: dict[str, str | None], review: list[str | None] | None = None,
                 plans: dict[str, bool] | None = None, removed: set[str] | None = None,
                 code_review: list[str | None] | None = None, code_commit: str | None = None,
-                head: str | None = None) -> dict:
+                head: str | None = None, review_commit: str | None = None) -> dict:
     """The facts file, from the API data. Numbers that are not issues are left out. The review loop
     facts are written only when the caller named a reviewer workflow: `review` holds the severity line of each
-    report, oldest first; the round count and the newest severity come from it. `plans` says, for each intent that
+    report, oldest first; the round count and the newest severity come from it; `review_commit` is the line
+    `Commit:` of the newest report. `plans` says, for each intent that
     a linked issue names, whether its plan exists at the commit; `removed` holds the paths that the change
     request removes or renames away, and an intent among them is marked, so that the gate asks no plan for it.
     The facts of the code review are written only when the caller named the reviewer of the code: `code_review`
@@ -287,7 +289,8 @@ def build_facts(pr: dict, files: list[dict], issues: dict[int, dict | None], unr
     ]
     text = f"{pr.get(PR_TITLE) or ''}\n{pr.get(PR_BODY) or ''}"
     loop = {} if review is None else {cg.FACT_REVIEW_REPORTS: review, cg.FACT_REVIEW_ROUNDS: len(review),
-                                      cg.FACT_REVIEW_SEVERITY: review[-1] if review else None}
+                                      cg.FACT_REVIEW_SEVERITY: review[-1] if review else None,
+                                      cg.FACT_REVIEW_COMMIT: review_commit}
     code = {} if code_review is None else {cg.FACT_CODE_REVIEW_REPORTS: code_review, cg.FACT_CODE_REVIEW_COMMIT: code_commit}
     return {
         cg.FACT_CHANGE_REQUEST: pr[PR_NUMBER],
@@ -401,11 +404,12 @@ def collect(repo: str, number: int, given: dict[str, str], run_names: list[str],
     if run_names:
         runs = github.get(f"/repos/{repo}/commits/{commit}/check-runs?per_page={PAGE_SIZE}")
         checks.update(conclusions(runs.get(RUNS, []), run_names))
-    review, code_review, code_commit = None, None, None
+    review, review_commit, code_review, code_commit = None, None, None, None
     if review_workflow or code_review_workflow:
         comments = github.pages(f"/repos/{repo}/issues/{number}/comments")
         if review_workflow:
             review = review_reports(comments, author)
+            review_commit = report_commit(comments, author, REVIEW_MARKER)
         if code_review_workflow:
             code_review = review_reports(comments, author, CODE_REVIEW_MARKER)
             code_commit = report_commit(comments, author, CODE_REVIEW_MARKER)
@@ -414,7 +418,7 @@ def collect(repo: str, number: int, given: dict[str, str], run_names: list[str],
                          for place in (cg.plan_of, cg.old_plan_of))
              for intent in intent_paths(issues)}
     return build_facts(pr, files, issues, unresolved, checks, review, plans, removed_paths(files),
-                       code_review, code_commit, commit)
+                       code_review, code_commit, commit, review_commit)
 
 
 def put_record(repo: str, number: int, record: dict, github: GitHub, author: str) -> str:
