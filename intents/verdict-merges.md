@@ -19,6 +19,7 @@ agents that are not the author closed on its head commit, and a person still mer
   - the verdict is ready;
   - the approver of the tier of the change is `agent`;
   - `review.code_blocks` is true, so the reviewer of the code is past its shadow period;
+  - the facts name the head commit;
   - no file under `intents/` changed: a person approves an intent, whatever tier the contract gives to
     that folder;
   - when the change holds a file outside `intents/` and `plans/`: the newest report of the code review
@@ -72,7 +73,7 @@ approval of an intent by an agent: the leader noted the question on 2026-11-20 a
 2. It says that a person merges, with the reason, in each other case: a tier of a person; a verdict that
    is not ready; the shadow period of the code review; a change that holds a file under `intents/`; a
    change with a plan whose newest intent report is open, is missing, has no severity line, or names
-   another commit.
+   another commit; a change whose facts name no head commit, which the last test of this check covers.
    test: `tests/test_charter_gate.py::VerdictMerges.test_a_change_that_holds_an_intent_stays_with_a_person`
    test: `tests/test_charter_gate.py::VerdictMerges.test_a_tier_of_a_person_is_merged_by_a_person`
    test: `tests/test_charter_gate.py::VerdictMerges.test_a_change_that_is_not_ready_is_not_merged`
@@ -87,7 +88,8 @@ approval of an intent by an agent: the leader noted the question on 2026-11-20 a
    test: `tests/test_workflows.py::VerdictMerges.test_the_merge_step_follows_the_published_check`
    test: `tests/test_workflows.py::VerdictMerges.test_the_workflow_of_this_repo_follows_the_template`
 6. The step, run with a fake of the code host: with a record that says so and a token, it merges the
-   change request at the head commit of the verdict. With a fake that refuses the merge, the step fails.
+   change request at the head commit of the verdict. With a fake that refuses the merge, the step fails;
+   the first test of this check covers both.
    With a record of a person's merge, or without a token, it calls no merge and ends well.
    test: `tests/test_workflows.py::VerdictMerges.test_the_step_merges_the_head_commit_with_the_merge_token`
    test: `tests/test_workflows.py::VerdictMerges.test_the_step_merges_nothing_for_a_person_or_without_the_token`
