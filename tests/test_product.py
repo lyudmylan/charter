@@ -198,19 +198,38 @@ class Verdict(Temp):
         return passed, [r for r in reasons if r.startswith("product test:")]
 
     def test_the_line_names_the_commands_or_the_reason(self):
-        """product-test, check 5: one line in each case; it changes no readiness of its own."""
+        """product-test, check 5: one line in each case, and the verdict stays ready."""
         command = contract_text(["python3 app.py"], reason=False)
         tests = {"tests": cg.CHECK_PASS}
         cases = {
             "passed": (command, {**tests, cg.CHECK_PRODUCT: cg.CHECK_PASS}, "product test: passed: ['python3 app.py']"),
             "a reason": (contract_text(), tests, f"product test: none, the contract says: {REASON}"),
-            "not reported": (command, tests, "product test: not reported"),
         }
         for case, (text, checks, expected) in cases.items():
             with self.subTest(case=case):
                 passed, lines = self.line(text, checks)
                 self.assertEqual(lines, [expected])
                 self.assertTrue(passed)
+
+    def test_commands_with_no_reported_check_are_not_ready(self):
+        """product-test, check 5: the contract names commands, and the facts hold no check `product`: nothing
+        ran the product test, for example in a repo whose verdict workflow does not read that check yet."""
+        passed, lines = self.line(contract_text(["python3 app.py"], reason=False), {"tests": cg.CHECK_PASS})
+        self.assertEqual(lines, ["product test: not reported"])
+        self.assertFalse(passed)
+
+    def test_the_record_holds_the_state_and_the_reason(self):
+        """product-test, check 5: the evidence record holds the line of the product test among its reasons, and
+        the state of the check `product` among its checks."""
+        for text, checks, line in ((contract_text(["python3 app.py"], reason=False),
+                                    {"tests": cg.CHECK_PASS, cg.CHECK_PRODUCT: cg.CHECK_PASS}, "product test: passed: ['python3 app.py']"),
+                                   (contract_text(), {"tests": cg.CHECK_PASS}, f"product test: none, the contract says: {REASON}")):
+            with self.subTest(line=line):
+                facts = {**FACTS, cg.FACT_CHECKS: checks}
+                passed, reasons, detail = cg.gate_verdict(facts, self.effective(text))
+                record = cg.build_record(facts, cg.VERDICT_READY if passed else cg.VERDICT_NOT_READY, "", reasons, detail, "", "t")
+                self.assertIn(line, record[cg.JSON_KEY_REASONS])
+                self.assertEqual(record[cg.FACT_CHECKS], checks)
 
     def test_a_failed_product_test_is_not_ready(self):
         """product-test, check 5."""

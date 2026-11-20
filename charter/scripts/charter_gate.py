@@ -458,21 +458,22 @@ def gate_product(e: cc.Effective, cwd: Path) -> GateResult:
     return gate_quality(e, cwd, FIELD_PRODUCT, CMD_PRODUCT)
 
 
-def product_line(facts: dict, e: cc.Effective) -> str:
-    """One line on the product test, for the verdict. Information only: a check `product` that did not pass
-    makes the verdict not ready through the rule for checks."""
+def product_line(facts: dict, e: cc.Effective) -> tuple[str, bool]:
+    """One line on the product test, for the verdict, and whether it blocks. A check `product` that did not
+    pass makes the verdict not ready through the rule for checks. The line itself blocks in one case: the
+    contract names commands, and the facts hold no check `product`, so nothing ran the product test."""
     commands = e.values.get(FIELD_PRODUCT) or []
     state = facts[FACT_CHECKS].get(CHECK_PRODUCT)
     if commands:
         if state is None:
-            return msg("product_not_reported")
+            return msg("product_not_reported"), True
         if state == CHECK_PASS:
-            return msg("product_passed", commands=commands)
-        return msg("product_not_passed")
+            return msg("product_passed", commands=commands), False
+        return msg("product_not_passed"), False
     reason = cc.product_reason(e)
     if reason:
-        return msg("product_line_none", reason=reason)
-    return msg("product_not_named")
+        return msg("product_line_none", reason=reason), False
+    return msg("product_not_named"), False
 
 
 def tiers_in_order(e: cc.Effective) -> dict[str, dict]:
@@ -703,7 +704,10 @@ def gate_verdict(facts: dict, e: cc.Effective) -> tuple[bool, list[str], dict]:
         reasons.append(msg("checks_pending", names=not_passed))
     else:
         reasons.append(msg("checks_ok", names=sorted(checks)))
-    reasons.append(product_line(facts, e))
+    product, product_blocks = product_line(facts, e)
+    reasons.append(product)
+    if product_blocks:
+        passed = False
 
     threads = facts[FACT_UNRESOLVED_THREADS]
     if threads:

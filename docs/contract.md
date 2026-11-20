@@ -174,8 +174,9 @@ Charter writes no product test.
   makes the change request not ready, and the evidence record holds its state. It prints one line:
   `product test: passed: <the commands>`, `product test: not passed`, `product test: not reported` when no
   check `product` reached the facts, `product test: none, the contract says: <the reason>`, or, for a
-  contract with neither field, `product test: none, the contract names no product test`. The line changes
-  no readiness of its own.
+  contract with neither field, `product test: none, the contract names no product test`. The line
+  `not reported` makes the change request not ready: the contract names commands, and nothing ran them.
+  Each other line changes no readiness of its own.
 - **The run.** The brief of a run tells the agent to run the commands of `checks.product` after the quality
   commands, in its sandbox. So a product test that a run can use needs no network and no secret. A product
   test that needs either runs in the job `product` only.

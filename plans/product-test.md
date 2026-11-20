@@ -23,7 +23,8 @@ milestone reach her in one change request; her merge is the acceptance of the th
      when the check `product` passed, `product test: not passed` when the facts hold the check and it did
      not pass, `product test: none, the contract says: <reason>` for a contract with a reason, and
      `product test: not reported` when the facts hold no check `product` for a contract with commands.
-     The readiness changes in no new way: a check that did not pass makes the verdict not ready already.
+     That last case makes the verdict not ready: nothing ran the product test. In each other case the
+     line changes no readiness: a check that did not pass makes the verdict not ready already.
 4. `charter/templates/tests.yml` and `.github/workflows/tests.yml`: a second job `product`, with the
    checkout, the toolchain block with the same steps as the job `tests`, the fetch of Charter, and the
    step that runs `charter_gate.py product --contract charter.toml --repo-only`. No secret, and
