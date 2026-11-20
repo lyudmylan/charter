@@ -51,6 +51,11 @@ contract holds one table of roles and rights for all actors; the code host and C
 Code enforce it. Separation of duties holds at every size: the author of a change is not
 its reviewer. A larger organization changes who holds a role, not the rules.
 
+An agent that works with no person present cannot change the contract, the instructions, an approved
+intent, or the workflows, and it holds no credential of the code host. A script publishes its result
+after a check of what it changed. A person starts such a run with the label `charter-run` on a ready
+issue; the workflow `run` builds the work item and opens its change request.
+
 ## The lifecycle map
 
 The phases are the six of the AI-native SDLC playbook of Anthropic (2026-08-21). The map says what
@@ -60,9 +65,9 @@ Charter adds in each phase.
 |---|---|---|---|
 | Plan | `product.md`: the direction. The [intent](../intents/) of a work item: goal, in scope, out of scope, acceptance checks. The issue tracker: milestone, epic, issue. | A person approves the intent through a change request. | Yes |
 | Design | The design spec of the work item. The architecture map, kept current, with each choice and its reason at the part. | A person approves the design spec. | Roadmap |
-| Build | `plan.md`, accepted before the code. The change on a branch. The repository instructions. The gates, as code. | The plan exists before the code. The quality checks pass before the push. | Yes |
-| Test | The acceptance checks, which the agent cannot change alone. The tests. The evals of the skills. | A reviewer that is not the author, also for a reading that an agent drafts for a person. The check "verdict". | Yes |
-| Deploy | The evidence record. The merge by the approver of the risk tier. The release stages to production. | A person decides production. | Partly |
+| Build | `plan.md`, accepted before the code; in a run of an agent with no person present, the plan comes with the code and its acceptance follows, by the review or by the merge. The change on a branch. The repository instructions. The gates, as code. The run: a ready issue with the label `charter-run` starts an agent with no person present, and the run ends as a change request. | The plan exists before the code. The quality checks pass before the push. In a run, the gate `boundary` passes before the publishing. | Yes |
+| Test | The acceptance checks, which the agent cannot change alone. The tests. The evals of the skills. | A reviewer that is not the author, also for a reading that an agent drafts for a person. An agent that is not the author reviews the code. The check "verdict". | Yes |
+| Deploy | The evidence record. The merge by the approver of the risk tier: a person, or the verdict for a tier whose approver is `agent`. The release stages to production. | A person decides production. | Partly |
 | Maintain | A failure re-enters the cycle as an intent and ends as a check. Each model upgrade is tested. | Monitoring. | Partly |
 
 Every phase has its own verification. The issue tracker connects all phases, from the plan to

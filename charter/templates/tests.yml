@@ -14,9 +14,12 @@ jobs:
     name: tests
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           persist-credentials: false
+      # The steps of the toolchain of this repo stand between the two marker lines. They run with no secret.
+      # charter:toolchain:start
+%{toolchain}      # charter:toolchain:end
       - name: Fetch Charter at the version of the contract
         run: |
           VERSION=$(python3 -c 'import tomllib; print(tomllib.load(open("charter.toml", "rb"))["charter"]["version"])')
