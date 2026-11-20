@@ -6,6 +6,7 @@ Each test names the intent and the check that it implements, in its docstring.
 import contextlib
 import io
 import json
+import re
 import shutil
 import sys
 import tempfile
@@ -16,6 +17,7 @@ ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / "charter" / "scripts"))
 import charter_check as cc  # noqa: E402
 import charter_gate as cg  # noqa: E402
+import charter_setup as cs  # noqa: E402
 
 SAMPLES = ROOT / "tests" / "samples"
 ORG = SAMPLES / "organization.toml"
@@ -255,11 +257,11 @@ class Verdict(Temp):
 
         code, out = run(cg.CMD_VERDICT, f"--{cg.ARG_FACTS}", str(self.facts(**{cg.FACT_INTENTS: [intent]})), *args)
         self.assertEqual(code, cc.FAIL)
-        self.assertIn("plan: intents/app.plan.md is missing", out)
+        self.assertIn("plan: `plans/app.md` is missing", out)
 
         code, out = run(cg.CMD_VERDICT, f"--{cg.ARG_FACTS}", str(self.facts(**{cg.FACT_INTENTS: [{**intent, cg.INTENT_PLAN: True}]})), *args)
         self.assertEqual(code, cc.PASS, out)
-        self.assertIn("plan: intents/app.plan.md exists", out)
+        self.assertIn("plan: plans/app.md exists", out)
 
         code, out = run(cg.CMD_VERDICT, f"--{cg.ARG_FACTS}", str(self.facts()), *args)
         self.assertEqual(code, cc.FAIL)
@@ -287,7 +289,7 @@ class Verdict(Temp):
 
         code, out = run(cg.CMD_VERDICT, f"--{cg.ARG_FACTS}", str(self.facts(**{cg.FACT_INTENTS: [old, new]})), *args)
         self.assertEqual(code, cc.PASS, out)
-        self.assertIn("plan: intents/b.plan.md exists", out)
+        self.assertIn("plan: plans/b.md exists", out)
         self.assertIn("plan: intents/a.md is removed by the change request, no plan needed", out)
 
         code, out = run(cg.CMD_VERDICT, f"--{cg.ARG_FACTS}", str(self.facts(**{cg.FACT_INTENTS: [old]})), *args)
@@ -295,7 +297,7 @@ class Verdict(Temp):
 
         code, out = run(cg.CMD_VERDICT, f"--{cg.ARG_FACTS}", str(self.facts(**{cg.FACT_INTENTS: [old, wrong]})), *args)
         self.assertEqual(code, cc.FAIL)
-        self.assertIn("plan: intents/gatez.plan.md is missing", out)
+        self.assertIn("plan: `plans/gatez.md` is missing", out)
 
 
 class ReviewLoop(Temp):
@@ -395,6 +397,158 @@ class NoModel(unittest.TestCase):
         for name in ("anthropic", "openai", "urllib", "http.client", "requests", "socket"):
             self.assertNotIn(f"import {name}", text)
             self.assertNotIn(f"from {name}", text)
+
+
+class PlanPlace(Temp):
+    SETUP_FLAGS = ["--repo", "sample", "--source", "https://example.com/org/rules", "--source-version", "v1",
+                   "--leader", "alice", "--quality", "python3 -m unittest discover -s tests"]
+
+    def test_the_plan_of_an_intent_is_in_the_plans_folder(self):
+        """plan-tier, check 1."""
+        self.assertEqual(cg.plan_of("intents/app.md"), "plans/app.md")
+        self.assertEqual(cg.plan_of("intents/sub/app.md"), "plans/sub/app.md")
+        self.assertEqual(cg.old_plan_of("intents/app.md"), "intents/app.plan.md")
+        self.assertEqual(cg.old_plan_of("intents/sub/app.md"), "intents/sub/app.plan.md")
+
+    def test_the_missing_plan_names_the_new_place(self):
+        """plan-tier, check 2: the message names the new place, and the old place that counts too."""
+        with_flag = self.dir / "repo-with-plan-flag.toml"
+        with_flag.write_text(REPO.read_text() + f"\n[build]\n{cg.FIELD_PLAN_BEFORE_CODE.split('.')[1]} = true\n")
+        args = [f"--{cc.ARG_CONTRACT}", str(with_flag), f"--{cc.ARG_SOURCE}", str(ORG)]
+        intent = {cg.INTENT_PATH: "intents/app.md", cg.INTENT_PLAN: False}
+        code, out = run(cg.CMD_VERDICT, f"--{cg.ARG_FACTS}", str(self.facts(**{cg.FACT_INTENTS: [intent]})), *args)
+        self.assertEqual(code, cc.FAIL)
+        self.assertIn("plan: `plans/app.md` is missing. A plan at the old place, `intents/app.plan.md`, counts too.", out)
+
+    def test_a_change_with_its_plan_takes_the_tier_of_its_code(self):
+        """plan-tier, check 3: the tiers of the contract that the setup step writes."""
+        with contextlib.redirect_stdout(io.StringIO()):
+            self.assertEqual(cs.main([*self.SETUP_FLAGS, "--target", str(self.dir)]), cc.PASS)
+        e = cc.effective_contract(self.dir / cs.CONTRACT_FILE, cc.DEFAULT_SCHEMA, ORG, self.dir / "cache")
+        self.assertEqual(e.failures, [])
+        self.assertEqual(cg.tier_of(["src/app.py", "plans/app.md"], e)[0], "low")
+        self.assertEqual(cg.tier_of(["src/app.py", "intents/app.plan.md"], e)[0], "high")
+
+    def test_the_decision_is_recorded(self):
+        """plan-tier, check 9: the row D18 with its reason, and the row E10 names it."""
+        text = (ROOT / "docs" / "decisions.md").read_text()
+        d18 = re.search(r"^\| D18 \| (.+?) \| (.+?) \| 2026-11-20 \|$", text, re.M)
+        self.assertIsNotNone(d18, "no row D18")
+        self.assertIn("`plans/<part>.md`", d18.group(1))
+        self.assertIn("no exclusion", d18.group(2))
+        e10 = re.search(r"^\| E10 \| (.+?) \|", text, re.M)
+        self.assertIn("Replaced by D18", e10.group(1))
+
+    def test_both_manifests_name_the_version(self):
+        """plan-tier, check 10."""
+        versions = [json.loads((ROOT / plugin / ".claude-plugin" / "plugin.json").read_text())["version"]
+                    for plugin in ("charter", "charter-practices")]
+        self.assertEqual(versions[0], versions[1])
+        self.assertGreaterEqual(tuple(int(part) for part in versions[0].split(".")), (0, 3, 8))
+
+
+class ReviewRounds(Temp):
+    """The sample repo: review_loop 3, threshold medium. The facts carry the reports, as the collector writes them."""
+    OPEN = "keeps the loop open"
+    CLOSED = "the loop is closed"
+    LIMIT = "the limit is reached, a person decides"
+
+    def verdict(self, reports: list, **changes) -> str:
+        facts = {cg.FACT_REVIEW_REPORTS: reports, cg.FACT_REVIEW_ROUNDS: len(reports),
+                 cg.FACT_REVIEW_SEVERITY: reports[-1] if reports else None, **changes}
+        code, out = run(cg.CMD_VERDICT, f"--{cg.ARG_FACTS}", str(self.facts(**facts)), *self.contract_args())
+        self.assertEqual(code, cc.PASS, out)     # shadow mode: the loop changes no verdict
+        return out
+
+    def test_the_round_is_the_number_of_reports_in_the_current_loop(self):
+        """review-rounds, check 1."""
+        self.assertEqual(cg.current_round(["high", "medium", "blocker"], "medium"), 3)
+        self.assertEqual(cg.current_round(["high"], "medium"), 1)
+        self.assertEqual(cg.current_round([], "medium"), 0)
+        self.assertIn("review loop: round 2 of 3, highest open severity high: a finding at medium", self.verdict(["medium", "high"]))
+
+    def test_a_report_after_a_closed_one_starts_a_new_loop(self):
+        """review-rounds, check 1."""
+        self.assertEqual(cg.current_round(["high", "low", "medium"], "medium"), 1)
+        self.assertEqual(cg.current_round(["high", "none", "high", "medium"], "medium"), 2)
+        self.assertEqual(cg.current_round(["high", "medium", "low"], "medium"), 3)     # the closing report ends its own loop
+        self.assertEqual(cg.current_round(["medium", "medium"], "high"), 1)            # the threshold of the contract decides
+        self.assertEqual(cg.current_round(["medium", "medium"], "medium"), 2)
+        out = self.verdict(["high", "low", "low"])
+        self.assertIn("review loop: round 1 of 3, highest open severity low: " + self.CLOSED, out)
+
+    def test_the_first_review_of_a_plan_is_round_one(self):
+        """review-rounds, check 2: the case of the adopter, an intent that used three rounds and closed, then the
+        first review of its plan with a medium finding."""
+        out = self.verdict(["high", "medium", "low", "medium"])
+        self.assertIn("review loop: round 1 of 3, highest open severity medium: a finding at medium or above " + self.OPEN, out)
+
+    def test_a_push_after_a_closed_loop_is_no_round_above_the_limit(self):
+        """review-rounds, check 2: the case of #57, pushes after a closed loop."""
+        for reports in (["high", "medium", "low", "low", "none"], ["high", "high", "high", "none", "low", "none", "low"]):
+            with self.subTest(reports=reports):
+                out = self.verdict(reports)
+                self.assertIn("review loop: round 1 of 3, highest open severity", out)
+                self.assertIn(self.CLOSED, out)
+                self.assertNotRegex(out, r"round [4-9] of 3")
+
+    def test_three_open_reports_reach_the_limit(self):
+        """review-rounds, check 3."""
+        out = self.verdict(["high", "medium", "high"])
+        self.assertIn("review loop: round 3 of 3, highest open severity high: " + self.LIMIT, out)
+        out = self.verdict(["low", "high", "medium", "high"])
+        self.assertIn("review loop: round 3 of 3, highest open severity high: " + self.LIMIT, out)
+
+    def test_a_report_without_a_severity_line_counts_as_open(self):
+        """review-rounds, check 3."""
+        self.assertEqual(cg.current_round(["high", None, "medium"], "medium"), 3)
+        self.assertEqual(cg.current_round([None, None], "medium"), 2)
+        out = self.verdict(["high", None, "medium"])
+        self.assertIn("review loop: round 3 of 3, highest open severity medium: " + self.LIMIT, out)
+        self.assertIn("review loop: round 2 of 3, no severity line in the report", self.verdict(["low", "high", None]))
+
+    def test_older_facts_are_read_as_before(self):
+        """review-rounds, check 4: a facts file without `review_reports` takes the round from `review_rounds`."""
+        older = {cg.FACT_REVIEW_ROUNDS: 2, cg.FACT_REVIEW_SEVERITY: "medium"}
+        code, out = run(cg.CMD_VERDICT, f"--{cg.ARG_FACTS}", str(self.facts(**older)), *self.contract_args())
+        self.assertEqual(code, cc.PASS, out)
+        self.assertIn("review loop: round 2 of 3, highest open severity medium: a finding at medium or above " + self.OPEN, out)
+        for wrong in (["huge"], "low", [1]):
+            with self.subTest(reports=wrong):
+                code, out = run(cg.CMD_VERDICT, f"--{cg.ARG_FACTS}", str(self.facts(**{cg.FACT_REVIEW_REPORTS: wrong})),
+                                *self.contract_args())
+                self.assertEqual(code, cc.CANNOT_RUN)
+                self.assertIn(f"wrong value for {cg.FACT_REVIEW_REPORTS}", out)
+
+    def test_the_record_holds_the_reports_and_the_round(self):
+        """review-rounds, check 7."""
+        reports = ["high", "low", None, "medium"]
+        record = self.dir / "record.json"
+        facts = self.facts(**{cg.FACT_REVIEW_REPORTS: reports, cg.FACT_REVIEW_ROUNDS: 4, cg.FACT_REVIEW_SEVERITY: "medium"})
+        code, out = run(cg.CMD_VERDICT, f"--{cg.ARG_FACTS}", str(facts), *self.contract_args(), f"--{cg.ARG_RECORD}", str(record))
+        self.assertEqual(code, cc.PASS, out)
+        data = json.loads(record.read_text())
+        self.assertEqual(data[cg.FACT_REVIEW_REPORTS], reports)
+        self.assertEqual(data[cg.FACT_REVIEW_ROUNDS], 4)
+        self.assertEqual(data[cg.RECORD_REVIEW_ROUND], 2)
+        self.assertEqual(data[cg.FACT_REVIEW_SEVERITY], "medium")
+
+    def test_the_contract_document_says_what_a_round_is(self):
+        """review-rounds, check 9."""
+        text = (ROOT / "docs" / "contract.md").read_text()
+        section = " ".join(text[text.index("### The review loop"):text.index("## The evidence record")].split())
+        for part in ("A round is a report of the reviewer in the current loop", "A loop starts with the first report",
+                     "a report without a severity line counts as open", "Each report stays on the change request as its own comment",
+                     "fails, is no round"):
+            with self.subTest(part=part):
+                self.assertIn(part, section)
+
+    def test_both_manifests_name_the_version(self):
+        """review-rounds, check 10."""
+        versions = [json.loads((ROOT / plugin / ".claude-plugin" / "plugin.json").read_text())["version"]
+                    for plugin in ("charter", "charter-practices")]
+        self.assertEqual(versions[0], versions[1])
+        self.assertGreaterEqual(tuple(int(part) for part in versions[0].split(".")), (0, 3, 9))
 
 
 if __name__ == "__main__":

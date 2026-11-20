@@ -296,5 +296,44 @@ class Commands(unittest.TestCase):
         self.assertEqual(core, practices)
 
 
+class PlanPlace(Temp):
+    def test_the_setup_writes_the_template_of_a_plan(self):
+        """plan-tier, check 4."""
+        code, out = self.setup()
+        self.assertEqual(code, cc.PASS, out)
+        text = (self.dir / cs.PLAN_TEMPLATE).read_text()
+        self.assertEqual(cs.PLAN_TEMPLATE, "plans/_template.md")
+        for heading in ("## Steps", "## Files", "## Tests"):
+            self.assertIn(heading, text)
+        self.assertIn("Intent: `intents/", text)
+        high = tomllib.loads((self.dir / cs.CONTRACT_FILE).read_text())["tiers"]["high"]["paths"]
+        for path in ("plans/app.md", "plans/sub/app.md", cs.PLAN_TEMPLATE):
+            with self.subTest(path=path):
+                self.assertFalse(cc.matches(path, high), high)
+
+    def test_the_instructions_and_the_documents_name_the_new_place(self):
+        """plan-tier, check 7: the instruction template, the instructions of this repo, the skill `tracker`,
+        and the document of the contract, which also holds the command of the move."""
+        files = (ROOT / "charter" / "templates" / cs.INSTRUCTIONS_FILE, ROOT / cs.INSTRUCTIONS_FILE,
+                 ROOT / "charter-practices" / "skills" / "tracker" / "SKILL.md", ROOT / "docs" / "contract.md")
+        for path in files:
+            with self.subTest(file=path.name):
+                text = path.read_text()
+                self.assertIn("plan `plans/<part>.md`", " ".join(text.split()))
+                self.assertNotIn("plan `intents/<part>.plan.md`", " ".join(text.split()))
+        contract = (ROOT / "docs" / "contract.md").read_text()
+        self.assertIn("git mv intents/<part>.plan.md plans/<part>.md", contract)
+
+
+class ReviewRounds(unittest.TestCase):
+    def test_the_intent_template_names_no_language(self):
+        """review-rounds, check 8: the test line of the intent template names no file of one language."""
+        text = (ROOT / "charter" / "templates" / "intent.md").read_text()
+        test_lines = [line.strip() for line in text.splitlines() if line.strip().startswith("test:")]
+        self.assertEqual(test_lines, ["test: <the file of the test, and the name of the test in it>"])
+        for language in (".py", ".ts", ".js", ".go", ".rb", "::"):
+            with self.subTest(language=language):
+                self.assertNotIn(language, " ".join(test_lines))
+
 if __name__ == "__main__":
     unittest.main()

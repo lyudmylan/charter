@@ -46,7 +46,7 @@ refusals = 3
 [review]
 threshold = "medium"
 
-# The Build phase: each work item has its plan, intents/<part>.plan.md, before the code.
+# The Build phase: each work item has its plan, plans/<part>.md, before the code.
 [build]
 plan_before_code = true
 
@@ -55,6 +55,12 @@ necessary = ["docs/product.md"]
 code_paths = ["charter/**"]
 text_checked = ["README.md", "docs/product.md"]   # they must contain none of the text-checked patterns
 absent = ["docs/adr/**", "doc/adr/**", "doc/arch/adr-*.md", "docs/decisions/**"]   # no file for one decision: the choice and its reason go into the architecture map
+
+# The boundary of a run of an agent without a person. Such a run never changes a file under no_write and
+# never reads a file under no_read. The plan of a work item, plans/<part>.md, is under no pattern and passes.
+[boundary]
+no_write = ["charter.toml", "AGENTS.md", "CLAUDE.md", "intents/**", ".github/**", ".claude/**"]
+no_read = [".env", ".env.*", "**/.env", "**/.env.*"]
 
 [instructions]
 file = "AGENTS.md"
