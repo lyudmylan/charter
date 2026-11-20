@@ -545,5 +545,129 @@ class VerdictMerges(unittest.TestCase):
             shutil.rmtree(folder, ignore_errors=True)
 
 
+# The sample of a toolchain file: three steps, as they stand in a workflow, with no indent before the first `- `.
+TOOLCHAIN = """- uses: pnpm/action-setup@v4
+- uses: actions/setup-node@v4
+  with:
+    node-version: 22
+    cache: pnpm
+
+- name: Install the dependencies
+  run: pnpm install --frozen-lockfile && echo "%{name} ${{ github.sha }}"
+"""
+CHECKOUT_STEP = "      - uses: actions/checkout@"
+QUALITY_STEP = "      - name: Run the quality checks of the contract on this code"
+SETUP_FLAGS = ["--repo", "sample", "--source", "https://example.com/org/rules", "--source-version", "v1",
+               "--leader", "alice"]
+
+
+def block_place(text: str) -> tuple[int, int]:
+    """The indexes of the two marker lines; the test fails unless the block stands after the checkout and
+    before the quality step."""
+    lines = text.splitlines()
+    start = lines.index(cs.STEP_INDENT + cs.TOOLCHAIN_START)
+    end = lines.index(cs.STEP_INDENT + cs.TOOLCHAIN_END)
+    checkout = next(i for i, line in enumerate(lines) if line.startswith(CHECKOUT_STEP))
+    quality = lines.index(QUALITY_STEP)
+    assert checkout < start < end < quality, (checkout, start, end, quality)
+    return start, end
+
+
+class Toolchain(unittest.TestCase):
+    template = (TEMPLATES / "tests.yml").read_text()
+
+    def setUp(self):
+        self.dir = Path(tempfile.mkdtemp())
+
+    def tearDown(self):
+        shutil.rmtree(self.dir, ignore_errors=True)
+
+    def setup(self, *more: str) -> tuple[int, str]:
+        out = io.StringIO()
+        with contextlib.redirect_stdout(out):
+            code = cs.main([*SETUP_FLAGS, "--target", str(self.dir / "repo"), *more])
+        return code, out.getvalue()
+
+    def written(self, *more: str) -> str:
+        code, out = self.setup(*more)
+        self.assertEqual(code, cc.PASS, out)
+        return (self.dir / "repo" / cs.WORKFLOWS / "tests.yml").read_text()
+
+    def toolchain_file(self, text: str) -> str:
+        path = self.dir / "toolchain.yml"
+        path.write_text(text)
+        return str(path)
+
+    def test_the_block_is_empty_without_the_flag(self):
+        """toolchain-in-the-tests-workflow, check 1."""
+        written = self.written()
+        start, end = block_place(written)
+        self.assertEqual(end, start + 1, "the block of the written workflow is not empty")
+        self.assertEqual(written, self.template.replace("%{charter_address}", cs.CHARTER_ADDRESS)
+                         .replace("%{toolchain}", ""))
+        own = (WORKFLOWS / "tests.yml").read_text()
+        start, end = block_place(own)
+        self.assertEqual(end, start + 1, "the block of the tests workflow of this repo is not empty")
+
+    def test_the_steps_of_the_file_stand_in_the_block(self):
+        """toolchain-in-the-tests-workflow, check 2."""
+        written = self.written("--toolchain", self.toolchain_file(TOOLCHAIN))
+        indented = "".join(f"      {line}\n" if line else "\n" for line in TOOLCHAIN.splitlines())
+        self.assertEqual(written, self.template.replace("%{charter_address}", cs.CHARTER_ADDRESS)
+                         .replace("%{toolchain}", indented))
+        start, end = block_place(written)
+        self.assertEqual(written.splitlines()[start + 1:end], indented.splitlines())
+        self.assertIn('      - name: Install the dependencies\n        run: pnpm install', written)
+        self.assertIn("        with:\n          node-version: 22\n", written)
+        # The file is data of the adopter: its placeholders and expressions reach the workflow as they are.
+        self.assertIn('echo "%{name} ${{ github.sha }}"', written)
+
+    def test_the_block_is_read_back(self):
+        """toolchain-in-the-tests-workflow, check 3."""
+        self.assertEqual(cs.toolchain_of(self.written("--toolchain", self.toolchain_file(TOOLCHAIN))), TOOLCHAIN)
+        shutil.rmtree(self.dir / "repo")
+        self.assertEqual(cs.toolchain_of(self.written()), "")
+        self.assertEqual(cs.toolchain_of((WORKFLOWS / "tests.yml").read_text()), "")
+
+    def test_a_file_with_a_marker_or_no_file_is_refused(self):
+        """toolchain-in-the-tests-workflow, check 4."""
+        cases = {
+            "the start marker": (self.toolchain_file(TOOLCHAIN + cs.TOOLCHAIN_START + "\n"), "holds a marker line"),
+            "the end marker": (self.toolchain_file("  " + cs.TOOLCHAIN_END + "\n" + TOOLCHAIN), "holds a marker line"),
+            "no file": (str(self.dir / "absent.yml"), "the toolchain file is missing"),
+        }
+        for case, (path, cause) in cases.items():
+            with self.subTest(case=case):
+                code, out = self.setup("--toolchain", path)
+                self.assertEqual(code, cc.FAIL, out)
+                self.assertIn(cause, out)
+                self.assertFalse((self.dir / "repo").exists() and any((self.dir / "repo").iterdir()),
+                                 "a refused setup wrote a file")
+
+    def test_the_checkout_action_of_each_workflow(self):
+        """toolchain-in-the-tests-workflow, check 5."""
+        for name, version in (("tests.yml", "v7"), ("review-intents.yml", "v7"), ("review-code.yml", "v7"),
+                              ("verdict.yml", "v4")):
+            for folder in (TEMPLATES, WORKFLOWS):
+                with self.subTest(workflow=name, folder=folder.name):
+                    versions = re.findall(r"uses: actions/checkout@(\S+)", (folder / name).read_text())
+                    self.assertTrue(versions, "no checkout step")
+                    self.assertEqual(set(versions), {version})
+
+    def test_the_contract_document_names_the_block(self):
+        """toolchain-in-the-tests-workflow, check 6."""
+        text = (ROOT / "docs" / "contract.md").read_text()
+        section = text[text.index("## The setup step"):text.index("## The checker")]
+        for part in ("--toolchain FILE", cs.TOOLCHAIN_START, cs.TOOLCHAIN_END, "An update of the repo keeps the block"):
+            self.assertIn(part, section)
+
+    def test_both_manifests_name_the_version(self):
+        """toolchain-in-the-tests-workflow, check 7."""
+        versions = [json.loads((ROOT / plugin / ".claude-plugin" / "plugin.json").read_text())["version"]
+                    for plugin in ("charter", "charter-practices")]
+        self.assertEqual(versions[0], versions[1])
+        self.assertGreaterEqual(tuple(int(part) for part in versions[0].split(".")), (0, 3, 12))
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -12,7 +12,7 @@ It writes no file when any file that it would write exists; it names the files. 
 `docs/product.md` and `docs/architecture.md` only when they are missing. At the end it prints the steps
 that a person does by hand.
 
-Exit codes: 0 done, 1 refused (a file exists, or a value is missing), 2 the setup could not run.
+Exit codes: 0 done, 1 refused (a file exists, a value is missing, or the toolchain file is refused), 2 the setup could not run.
 """
 
 from __future__ import annotations
@@ -62,6 +62,12 @@ WRITTEN_IF_MISSING = {
     "architecture.md": "docs/architecture.md",
     "product.md": PRODUCT_FILE,
 }
+# The block of the toolchain in `tests.yml`: the steps of the repo that install its tools.
+TOOLCHAIN_TEMPLATE = "tests.yml"
+TOOLCHAIN_VALUE = "toolchain"
+TOOLCHAIN_START = "# charter:toolchain:start"
+TOOLCHAIN_END = "# charter:toolchain:end"
+STEP_INDENT = "      "
 HIGH_TIER_PATHS = [CONTRACT_FILE, INSTRUCTIONS_FILE, "intents/**", ".github/**"]
 
 DEFAULTS = {
@@ -90,6 +96,8 @@ MSG = {
     "missing": "refused: no value for --{flag}; give it as a flag, or run the setup in a terminal",
     "written": "written: {path}",
     "kept": "kept: {path}",
+    "toolchain_missing": "refused: the toolchain file is missing: {path}",
+    "toolchain_marker": "refused: the toolchain file holds a marker line: {path}: {line}",
     "manifest": "the version of Charter cannot be read: {path}",
     "template": "the template is missing: {path}",
     "steps_title": "\nSteps that a person does by hand:",
@@ -153,6 +161,32 @@ def values_of(args: argparse.Namespace, target: Path, version: str) -> dict[str,
     }
 
 
+def toolchain_block(path: Path | None) -> tuple[str, str | None]:
+    """The steps of the toolchain file with the indent of a step, and the refusal or None. An empty line
+    stays empty. No file gives no step. The text of the file is data: it is not substituted."""
+    if path is None:
+        return "", None
+    if not path.is_file():
+        return "", msg("toolchain_missing", path=path)
+    lines = path.read_text().splitlines()
+    for line in lines:
+        if line.strip() in (TOOLCHAIN_START, TOOLCHAIN_END):
+            return "", msg("toolchain_marker", path=path, line=line.strip())
+    return "".join(f"{STEP_INDENT}{line}\n" if line else "\n" for line in lines), None
+
+
+def toolchain_of(text: str) -> str:
+    """The steps between the two marker lines of a written workflow, without the indent of a step, as the
+    toolchain file gave them. No block or an empty block gives an empty text."""
+    lines = text.splitlines()
+    try:
+        start = lines.index(STEP_INDENT + TOOLCHAIN_START)
+        end = lines.index(STEP_INDENT + TOOLCHAIN_END, start + 1)
+    except ValueError:
+        return ""
+    return "".join(f"{line.removeprefix(STEP_INDENT)}\n" for line in lines[start + 1:end])
+
+
 def render(name: str, values: dict[str, str]) -> str:
     path = TEMPLATES / name
     if not path.is_file():
@@ -187,8 +221,13 @@ def setup(args: argparse.Namespace, target: Path, cache_dir: Path, out) -> int:
         for path in found:
             print(msg("exists", path=path), file=out)
         return cc.FAIL
+    toolchain, refusal = toolchain_block(args.toolchain)
+    if refusal:
+        print(refusal, file=out)
+        return cc.FAIL
     values = values_of(args, target, charter_version())
-    rendered = {written: render(name, values) for name, written in WRITTEN.items()}
+    rendered = {written: render(name, {**values, TOOLCHAIN_VALUE: toolchain} if name == TOOLCHAIN_TEMPLATE else values)
+                for name, written in WRITTEN.items()}
     rendered_if_missing = {written: render(name, values) for name, written in WRITTEN_IF_MISSING.items()}
     for written, text in rendered.items():
         path = target / written
@@ -242,6 +281,8 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--high-path", dest="high_path", action="append", default=[],
                         help="a path pattern added to the high risk tier; repeatable")
     parser.add_argument("--quality", action="append", default=[], help="a command that must pass before a push; repeatable")
+    parser.add_argument("--toolchain", type=Path, metavar="FILE",
+                        help="the steps that install the tools of the repo, for the block of the tests workflow")
     parser.add_argument("--target", type=Path, default=Path("."), help="the root of the repo; default: here")
     parser.add_argument(f"--{cc.ARG_CACHE_DIR.replace('_', '-')}", dest=cc.ARG_CACHE_DIR, type=Path,
                         default=Path(cc.os.environ.get(cc.ENV_CACHE_DIR, cc.DEFAULT_CACHE_DIR)))

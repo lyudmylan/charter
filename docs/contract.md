@@ -343,7 +343,7 @@ clone of the Charter repo, the same scripts are `charter/scripts/charter_*.py`.
 
 ```
 charter-setup --repo NAME --source ADDRESS --source-version TAG --leader LOGIN \
-              [--quality CMD]... [--code-path PATTERN]... [--high-path PATTERN]...
+              [--quality CMD]... [--code-path PATTERN]... [--high-path PATTERN]... [--toolchain FILE]
 ```
 
 It writes `charter.toml`, `AGENTS.md`, `intents/_template.md`, `plans/_template.md`, and the four workflows from
@@ -354,6 +354,14 @@ does by hand: the secrets, the ruleset, the cache command, and the first intent.
 The written workflows fetch Charter at the tag `charter--v<charter.version>` outside the checkout, and
 run the scripts from there: `tests` with the version of the change request, `verdict` with the version in
 the main branch, so that a change request cannot pick the scripts that judge it.
+
+The `tests` workflow has a block for the toolchain of the repo: the steps that install its tools, after
+the checkout and before the quality step, between the line `# charter:toolchain:start` and the line
+`# charter:toolchain:end`. The flag `--toolchain FILE` fills the block. The file holds steps as they stand
+in a workflow, with no indent before the first `- `; the setup step gives them the indent of a step and
+does not substitute their text. A file that holds a marker line is refused, and so is a missing file.
+Without the flag the block is empty. The steps run in the `tests` workflow, which holds no secret.
+An update of the repo keeps the block.
 
 ## The checker
 
