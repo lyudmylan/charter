@@ -1,6 +1,6 @@
 # Plan: an agent that is not the author reviews the code of a change request (#95)
 
-Intent: `intents/code-reviewer.md`, checks 1 to 15. Checks 16 and 17 are manual.
+Intent: `intents/code-reviewer.md`, checks 1 to 17. Checks 18 and 19 are manual.
 The leader decided on 2026-11-20 that the intent, the plan, and the code of a work item of this
 milestone reach her in one change request; her merge is the acceptance of the three.
 This plan builds on #61 and #86: each report is its own comment and names its commit.
@@ -78,8 +78,8 @@ This plan builds on #61 and #86: each report is its own comment and names its co
 
 ## Tests
 
-A class `CodeReview` in `tests/test_charter_gate.py` (eleven tests) and in
-`tests/test_charter_facts_github.py` (two), a class `CodeReviewer` in `tests/test_workflows.py` (six) and
+A class `CodeReview` in `tests/test_charter_gate.py` (twelve tests) and in
+`tests/test_charter_facts_github.py` (two), a class `CodeReviewer` in `tests/test_workflows.py` (seven) and
 in `tests/test_setup.py` (one), and a class `ChangeReviewSkill` in `tests/test_skills.py` (two), with the
 names that the intent gives. The last step of the new workflow is run with `bash -e` and a fake `gh`. A
 test that lists the files that the setup step writes takes the new workflow.

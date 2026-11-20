@@ -5,8 +5,7 @@ Work item: #95. Status: done. Approval: a person merges the change request that 
 ## Goal
 
 Each change request that changes a file outside `intents/` and `plans/` gets a report from an agent that
-is not its author, under the rules of the review loop, and the contract says whether an open finding of
-that report makes the change request not ready.
+is not its author, under the rules of the review loop.
 
 ## In scope
 
@@ -49,7 +48,8 @@ that report makes the change request not ready.
 - A command `charter-gate tier --contract C --changed FILE`: it prints the tier of a list of changed
   paths and the depth of its review. The workflow gives the reviewer the depth with it.
 - The lines `Dropped finding: <reason>` and `False finding: <reason>` hold for the reviewer of the code
-  too. The evidence record holds the reports and the round of the code review.
+  too. The evidence record holds the reports and the round of the code review; the dropped and the false
+  findings of both reviewers stay in the two lists that the record has, with their reasons.
 - The verdict workflow, template and this repo: it runs again after a run of `review-code`, and it tells
   the facts collector that the repo has the reviewer of the code.
 - The setup step writes the workflow. `AGENTS.md` and its template name the reviewer of the code in the
@@ -84,8 +84,9 @@ result.
 3. The workflow of this repo follows the template, but for the place of the skill and the address of
    Charter.
    test: `tests/test_workflows.py::CodeReviewer.test_the_workflow_of_this_repo_follows_the_template`
-4. The skill `change-review` holds the checklist of the scope, the two depths, the four severities, and
-   the form of the report with the marker, the line `Commit:`, and the last line.
+4. The skill `change-review` holds the checklist of the scope, the two depths, the four severities, the
+   two lines that close a finding, the diff since the report before for a later report, and the form of
+   the report with the marker, the line `Commit:`, and the last line.
    test: `tests/test_skills.py::ChangeReviewSkill.test_size_and_description`
    test: `tests/test_skills.py::ChangeReviewSkill.test_the_skill_holds_the_checklist_and_the_form`
 5. The facts collector gives the severity of each report of the code review, oldest first, and keeps the
@@ -123,11 +124,18 @@ result.
 15. `charter-gate tier` prints the tier of a list of changed paths and the depth of its review.
     test: `tests/test_charter_gate.py::CodeReview.test_the_tier_command_prints_the_tier_and_the_depth`
 
+16. The workflow reads the depth from the contract of the base branch, not from the head: a change
+    request that edits its own tiers gets the depth of the base. The step runs in a git repo.
+    test: `tests/test_workflows.py::CodeReviewer.test_the_depth_comes_from_the_base_contract`
+17. `docs/contract.md` holds the section "The reviewer of the code", with the workflow, the facts, the
+    command `tier`, the flag, and the review of Claude Code beside it.
+    test: `tests/test_charter_gate.py::CodeReview.test_the_contract_document_holds_the_section`
+
 ## Manual checks
 
-16. On a change request of this repo that changes code, the workflow posts one report in the form of the
+18. On a change request of this repo that changes code, the workflow posts one report in the form of the
     skill, and the verdict prints the line of the code review. who: the leader. Not automatic: the check
     needs a model call and a runner.
-17. The reading of the first three reports: are the findings real, and is the severity right.
+19. The reading of the first three reports: are the findings real, and is the severity right.
     drafted by the agent, reviewed by an agent that is not the author, confirmed by the leader. Not
     automatic: a judgment on evidence, and it decides the end of the shadow period.

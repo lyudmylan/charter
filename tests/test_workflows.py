@@ -302,6 +302,38 @@ class CodeReviewer(unittest.TestCase):
         finally:
             shutil.rmtree(folder, ignore_errors=True)
 
+    def test_the_depth_comes_from_the_base_contract(self):
+        """code-reviewer, check 16: a change request that edits its own tiers gets the depth of the base. The
+        step runs in a git repo whose base says `deep` for `scripts/**` and whose head says `light`."""
+        base = (ROOT / "tests" / "samples" / "repo.toml").read_text()
+        self.assertIn('review = "deep"', base)
+        for name, text in self.files.items():
+            with self.subTest(file=name):
+                folder = Path(tempfile.mkdtemp()).resolve()
+                try:
+                    repo, runner, output = folder / "repo", folder / "runner", folder / "output"
+                    repo.mkdir()
+                    runner.mkdir()
+                    (runner / "charter").symlink_to(ROOT)       # the scripts of Charter, as the step before leaves them
+                    git = ["git", "-C", str(repo), "-c", "user.name=test", "-c", "user.email=test@example.invalid"]
+                    subprocess.run([*git, "init", "-q", "-b", "main"], check=True)
+                    (repo / "charter.toml").write_text(base)
+                    subprocess.run([*git, "add", "-A"], check=True)
+                    subprocess.run([*git, "commit", "-q", "-m", "base"], check=True)
+                    subprocess.run([*git, "update-ref", "refs/remotes/origin/main", "HEAD"], check=True)
+                    (repo / "charter.toml").write_text(base.replace('review = "deep"', 'review = "light"'))
+                    (repo / "scripts").mkdir()
+                    (repo / "scripts" / "x.py").write_text("pass\n")
+                    subprocess.run([*git, "add", "-A"], check=True)
+                    subprocess.run([*git, "commit", "-q", "-m", "head"], check=True)
+                    env = {**os.environ, "BASE_REF": "main", "RUNNER_TEMP": str(runner), "GITHUB_OUTPUT": str(output)}
+                    done = subprocess.run(["bash", "-e", "-c", run_block(text, "Read the tier of the change and the depth of its review")],
+                                          cwd=repo, env=env, capture_output=True, text=True)
+                    self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
+                    self.assertEqual(output.read_text().splitlines(), ["tier=high", "depth=deep"])
+                finally:
+                    shutil.rmtree(folder, ignore_errors=True)
+
     def test_the_workflow_runs_on_code_and_not_on_intents_alone(self):
         """code-reviewer, check 1: the trigger, read as the code host reads it, and no review for a fork."""
         for name, text in self.files.items():

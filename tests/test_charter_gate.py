@@ -555,6 +555,15 @@ class CodeReview(Temp):
     """The sample repo: review_loop 3, threshold medium. The facts change `src/app.py`, a file of code."""
     HEAD, OLDER = "1111111111111111111111111111111111111111", "2222222222222222222222222222222222222222"
 
+    def test_the_contract_document_holds_the_section(self):
+        """code-reviewer, check 17: the workflow, the facts, the command `tier`, and the built-in review beside it."""
+        text = (ROOT / "docs" / "contract.md").read_text()
+        section = " ".join(text.split("## The reviewer of the code")[1].split("\n## ")[0].split())
+        for part in ("review-code", "`code_review_reports`", "`charter-gate tier --contract", "`review.code_blocks`",
+                     "read from the contract of the base branch", "A repo can run them beside the reviewer of Charter"):
+            with self.subTest(part=part):
+                self.assertIn(part, section)
+
     def contract(self, blocks: bool | None) -> list[str]:
         """The sample contract, with `review.code_blocks` set to the value, or without the field for None."""
         text = REPO.read_text()
