@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """Set a repo up for Charter: one command writes the contract, the rules, the intents folder, the
-workflows, and the two documents. Python 3.11 or later, standard library only.
+plans folder, the workflows, and the two documents. Python 3.11 or later, standard library only.
 
 Run it in the root of the repo, from the installed plugin (`charter-setup`, on the path of the shell
 while the plugin is enabled) or from a clone of the Charter repo at the version:
@@ -12,7 +12,7 @@ It writes no file when any file that it would write exists; it names the files. 
 `docs/product.md` and `docs/architecture.md` only when they are missing. At the end it prints the steps
 that a person does by hand.
 
-Exit codes: 0 done, 1 refused (a file exists, or a value is missing), 2 the setup could not run.
+Exit codes: 0 done, 1 refused (a file exists, a value is missing, or the toolchain file is refused), 2 the setup could not run.
 """
 
 from __future__ import annotations
@@ -43,6 +43,7 @@ PRODUCT_FILE = "docs/product.md"
 README_FILE = "README.md"
 CLAUDE_FILE = "CLAUDE.md"          # when it exists, Claude Code reads it and not AGENTS.md
 INTENT_TEMPLATE = "intents/_template.md"
+PLAN_TEMPLATE = "plans/_template.md"
 WORKFLOWS = ".github/workflows"
 
 # template name -> written path. The order is the order of writing.
@@ -50,15 +51,26 @@ WRITTEN = {
     "charter.toml": CONTRACT_FILE,
     "AGENTS.md": INSTRUCTIONS_FILE,
     "intent.md": INTENT_TEMPLATE,
+    "plan.md": PLAN_TEMPLATE,
     "tests.yml": f"{WORKFLOWS}/tests.yml",
     "verdict.yml": f"{WORKFLOWS}/verdict.yml",
     "review-intents.yml": f"{WORKFLOWS}/review-intents.yml",
+    "review-code.yml": f"{WORKFLOWS}/review-code.yml",
+    "run.yml": f"{WORKFLOWS}/run.yml",
 }
 # template name -> written path, only when the file is missing.
 WRITTEN_IF_MISSING = {
     "architecture.md": "docs/architecture.md",
     "product.md": PRODUCT_FILE,
 }
+# The block of the toolchain in `tests.yml`: the steps of the repo that install its tools. The workflow `run`
+# has the same block, with the same steps.
+TOOLCHAIN_TEMPLATE = "tests.yml"
+TOOLCHAIN_TEMPLATES = (TOOLCHAIN_TEMPLATE, "run.yml")
+TOOLCHAIN_VALUE = "toolchain"
+TOOLCHAIN_START = "# charter:toolchain:start"
+TOOLCHAIN_END = "# charter:toolchain:end"
+STEP_INDENT = "      "
 HIGH_TIER_PATHS = [CONTRACT_FILE, INSTRUCTIONS_FILE, "intents/**", ".github/**"]
 
 DEFAULTS = {
@@ -87,11 +99,15 @@ MSG = {
     "missing": "refused: no value for --{flag}; give it as a flag, or run the setup in a terminal",
     "written": "written: {path}",
     "kept": "kept: {path}",
+    "toolchain_missing": "refused: the toolchain file is missing: {path}",
+    "toolchain_marker": "refused: the toolchain file holds a marker line: {path}: {line}",
     "manifest": "the version of Charter cannot be read: {path}",
     "template": "the template is missing: {path}",
     "steps_title": "\nSteps that a person does by hand:",
     "step": "  {number}. {step}",
-    "step_secret": "Set the secret CHARTER_ORG_TOKEN on the repo: a fine-grained token with read access to the organization source only. For the intent reviewer, set CLAUDE_CODE_OAUTH_TOKEN from `claude setup-token`.",
+    "step_secret": "Set the secret CHARTER_ORG_TOKEN on the repo: a fine-grained token with read access to the organization source only. For the intent reviewer and the reviewer of the code, set CLAUDE_CODE_OAUTH_TOKEN from `claude setup-token`.",
+    "step_merge": "Optional, for a repo that gives a tier the approver `agent`: set the secret CHARTER_MERGE_TOKEN, a fine-grained token with write access to the contents and the pull requests of this repo only. The verdict merges such a tier with it; a merge with the token of the workflow starts no workflow on the main branch.",
+    "step_run": "For the workflow `run`: create the label charter-run, which starts a run on an issue. Set the secret CHARTER_RUN_TOKEN, a fine-grained token with write access to the contents and the pull requests of this repo only; the run publishes its change request with it, because a change request that the token of the workflow opens starts no workflow. The variable CHARTER_RUNS of the repo with the value off stops the start of every run.",
     "step_ruleset": "Protect the main branch with a ruleset: a change request is required, and the check \"verdict\" is required.",
     "step_cache": "On each computer, put the organization source in the cache of the checker: git clone {address} {cache}",
     "step_quality": "Put the test command of this repo in checks.quality of {contract}; the gate fails without one.",
@@ -149,6 +165,32 @@ def values_of(args: argparse.Namespace, target: Path, version: str) -> dict[str,
     }
 
 
+def toolchain_block(path: Path | None) -> tuple[str, str | None]:
+    """The steps of the toolchain file with the indent of a step, and the refusal or None. An empty line
+    stays empty. No file gives no step. The text of the file is data: it is not substituted."""
+    if path is None:
+        return "", None
+    if not path.is_file():
+        return "", msg("toolchain_missing", path=path)
+    lines = path.read_text().splitlines()
+    for line in lines:
+        if line.strip() in (TOOLCHAIN_START, TOOLCHAIN_END):
+            return "", msg("toolchain_marker", path=path, line=line.strip())
+    return "".join(f"{STEP_INDENT}{line}\n" if line else "\n" for line in lines), None
+
+
+def toolchain_of(text: str) -> str:
+    """The steps between the two marker lines of a written workflow, without the indent of a step, as the
+    toolchain file gave them. No block or an empty block gives an empty text."""
+    lines = text.splitlines()
+    try:
+        start = lines.index(STEP_INDENT + TOOLCHAIN_START)
+        end = lines.index(STEP_INDENT + TOOLCHAIN_END, start + 1)
+    except ValueError:
+        return ""
+    return "".join(f"{line.removeprefix(STEP_INDENT)}\n" for line in lines[start + 1:end])
+
+
 def render(name: str, values: dict[str, str]) -> str:
     path = TEMPLATES / name
     if not path.is_file():
@@ -167,7 +209,7 @@ def existing(target: Path) -> list[str]:
 
 def manual_steps(target: Path, args: argparse.Namespace, cache_dir: Path) -> list[str]:
     """The steps that a person does by hand, numbered in sequence; a step that does not apply is left out."""
-    steps = [msg("step_secret"), msg("step_ruleset"),
+    steps = [msg("step_secret"), msg("step_merge"), msg("step_run"), msg("step_ruleset"),
              msg("step_cache", address=args.source, cache=cc.cache_path(args.source, cache_dir))]
     if not args.quality:
         steps.append(msg("step_quality", contract=CONTRACT_FILE))
@@ -183,8 +225,13 @@ def setup(args: argparse.Namespace, target: Path, cache_dir: Path, out) -> int:
         for path in found:
             print(msg("exists", path=path), file=out)
         return cc.FAIL
+    toolchain, refusal = toolchain_block(args.toolchain)
+    if refusal:
+        print(refusal, file=out)
+        return cc.FAIL
     values = values_of(args, target, charter_version())
-    rendered = {written: render(name, values) for name, written in WRITTEN.items()}
+    rendered = {written: render(name, {**values, TOOLCHAIN_VALUE: toolchain} if name in TOOLCHAIN_TEMPLATES else values)
+                for name, written in WRITTEN.items()}
     rendered_if_missing = {written: render(name, values) for name, written in WRITTEN_IF_MISSING.items()}
     for written, text in rendered.items():
         path = target / written
@@ -238,6 +285,8 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--high-path", dest="high_path", action="append", default=[],
                         help="a path pattern added to the high risk tier; repeatable")
     parser.add_argument("--quality", action="append", default=[], help="a command that must pass before a push; repeatable")
+    parser.add_argument("--toolchain", type=Path, metavar="FILE",
+                        help="the steps that install the tools of the repo, for the block of the tests workflow")
     parser.add_argument("--target", type=Path, default=Path("."), help="the root of the repo; default: here")
     parser.add_argument(f"--{cc.ARG_CACHE_DIR.replace('_', '-')}", dest=cc.ARG_CACHE_DIR, type=Path,
                         default=Path(cc.os.environ.get(cc.ENV_CACHE_DIR, cc.DEFAULT_CACHE_DIR)))
