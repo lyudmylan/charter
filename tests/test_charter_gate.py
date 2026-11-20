@@ -529,7 +529,8 @@ class ReviewRounds(Temp):
         self.assertEqual(code, cc.PASS, out)
         data = json.loads(record.read_text())
         self.assertEqual(data[cg.FACT_REVIEW_REPORTS], reports)
-        self.assertEqual(data[cg.FACT_REVIEW_ROUNDS], 2)
+        self.assertEqual(data[cg.FACT_REVIEW_ROUNDS], 4)
+        self.assertEqual(data[cg.RECORD_REVIEW_ROUND], 2)
         self.assertEqual(data[cg.FACT_REVIEW_SEVERITY], "medium")
 
     def test_the_contract_document_says_what_a_round_is(self):
@@ -648,10 +649,10 @@ class CodeReview(Temp):
         self.assertEqual(code, cc.PASS, out)
         data = json.loads(record.read_text())
         self.assertEqual(data[cg.FACT_CODE_REVIEW_REPORTS], reports)
-        self.assertEqual(data[cg.CODE_REVIEW_ROUNDS], 1)
+        self.assertEqual(data[cg.CODE_REVIEW_ROUND], 1)
         self.assertEqual(data[cg.CODE_REVIEW_SEVERITY], "medium")
         self.assertEqual(data[cg.FACT_REVIEW_REPORTS], ["low"])
-        for key in (cg.FACT_CODE_REVIEW_REPORTS, cg.CODE_REVIEW_ROUNDS, cg.CODE_REVIEW_SEVERITY):
+        for key in (cg.FACT_CODE_REVIEW_REPORTS, cg.CODE_REVIEW_ROUND, cg.CODE_REVIEW_SEVERITY):
             self.assertIn(key, cg.RECORD_KEYS)
 
     def test_both_manifests_name_the_version(self):

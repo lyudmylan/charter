@@ -20,7 +20,9 @@ milestone reach her in one change request; her merge is the acceptance of the th
      before the newest one, whose severity is below the threshold. A report with no value counts as open.
    - `review_loop_state` takes the round from `current_round` when the fact is there, and from
      `review_rounds` when it is not. Its messages stay.
-   - The evidence record holds `review_reports` and the round under `review_rounds`.
+   - The evidence record holds `review_reports`, the number of the reports under `review_rounds`, as the
+     fact does, and the round of the current loop under `review_round`. The gate reads the round from
+     `current_round`; it reads `review_rounds` only in a facts file of an older collector.
 3. `charter/templates/review-intents.yml` and `.github/workflows/review-intents.yml`:
    - The instructions: the report is a new comment at each run, posted with `gh pr comment`; the reviewer
      changes no earlier comment.
