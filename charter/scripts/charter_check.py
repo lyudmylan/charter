@@ -10,6 +10,9 @@ Commands:
   all CONTRACT                       Run check, then instructions on the declared instruction file, then text
                                      on each declared text-checked file, then look for a file under a path
                                      that the contract forbids. The files are relative to the contract.
+  boundary CONTRACT                  Print the settings of Claude Code for a run without a person, as JSON,
+                                     from the boundary of the effective contract. The paths are absolute,
+                                     from the folder of the contract: the settings are for this checkout.
 
 Options:
   --schema PATH      The schema. Default: schema/contract.toml next to this script.
@@ -44,6 +47,7 @@ PASS, FAIL, CANNOT_RUN = 0, 1, 2
 
 # Commands.
 CMD_VALIDATE, CMD_CHECK, CMD_INSTRUCTIONS, CMD_TEXT, CMD_SOURCE, CMD_ALL = "validate", "check", "instructions", "text", "source", "all"
+CMD_BOUNDARY = "boundary"
 
 # Reserved tables and keys of a contract file.
 TABLE_SCHEMA = "schema"
@@ -91,6 +95,29 @@ FIELD_ABSENT = "documents.absent"
 PATH_WILDCARDS = "*?"
 SEGMENT_SEPARATOR = "/"
 GIT_DIR = ".git"
+FOLDER_PATTERN_END = "/**"            # `dir/**`: all that is under one folder
+
+# The boundary of a run without a person.
+FIELD_NO_WRITE = "boundary.no_write"
+FIELD_NO_READ = "boundary.no_read"
+
+# An intent, `intents/<part>.md`, and its plan, `plans/<part>.md`. The plan lives outside `intents/`, so a
+# change with its plan takes the tier of its code. A plan at the old place, `intents/<part>.plan.md`, counts too.
+INTENTS_DIR, PLANS_DIR = "intents/", "plans/"
+INTENT_SUFFIX, OLD_PLAN_SUFFIX = ".md", ".plan.md"
+
+# The settings of Claude Code for a run. The key names are the ones of its documentation: the pages on the
+# sandbox, the permissions, and the settings reference, read on 2026-11-20.
+SET_PERMISSIONS, SET_DENY, SET_DENY_INSTEAD_OF_PROMPTING = "permissions", "deny", "denyInsteadOfPrompting"
+SET_SANDBOX, SET_ENABLED, SET_FAIL_IF_UNAVAILABLE = "sandbox", "enabled", "failIfUnavailable"
+SET_ALLOW_UNSANDBOXED = "allowUnsandboxedCommands"
+SET_FILESYSTEM, SET_DENY_WRITE, SET_DENY_READ = "filesystem", "denyWrite", "denyRead"
+SET_NETWORK, SET_ALLOWED_DOMAINS, SET_STRICT_ALLOWLIST = "network", "allowedDomains", "strictAllowlist"
+SET_CREDENTIALS, SET_ENV_VARS, SET_NAME, SET_MODE, SET_MODE_DENY = "credentials", "envVars", "name", "mode", "deny"
+RULE_EDIT, RULE_READ = "Edit(/{path})", "Read(/{path})"     # `//` and the path: absolute, from the root of the disk
+# The tokens that no shell command of a run sees: the tokens of the model, then the tokens of the code host.
+RUN_TOKENS = ("ANTHROPIC_API_KEY", "ANTHROPIC_AUTH_TOKEN", "CLAUDE_CODE_OAUTH_TOKEN",
+              "GITHUB_TOKEN", "GH_TOKEN", "ACTIONS_RUNTIME_TOKEN", "ACTIONS_ID_TOKEN_REQUEST_TOKEN", "CHARTER_ORG_TOKEN")
 
 # Identifiers in an instruction file: [a.b] or [a.b.c]. Only a mark whose first segment is a
 # field group of the schema counts; other bracketed text, such as a file name, is ignored.
@@ -545,7 +572,8 @@ def glob_to_regex(pattern: str) -> str:
 
 
 def matches(file: str, patterns: list[str]) -> bool:
-    return any(re.match(glob_to_regex(p), file) for p in patterns)
+    """A file name can hold a line break, so `**` crosses it too."""
+    return any(re.match(glob_to_regex(p), file, re.DOTALL) for p in patterns)
 
 
 def has_wildcard(text: str) -> bool:
@@ -562,22 +590,75 @@ def fixed_start(pattern: str) -> str:
     return SEGMENT_SEPARATOR.join(folders)
 
 
-def absent_hits(e: Effective, root: Path) -> list[str]:
-    """The files of the repo that are under a pattern of documents.absent. The folder of the contract is
-    read, not the index of git: a file that is not committed counts, and a repo without git is checked."""
+def files_under(root: Path, pattern: str) -> list[str]:
+    """The files of the repo that match one pattern, as paths from the root. The folder is read, not the
+    index of git: a file that is not committed counts, and a repo without git is read too."""
+    if not has_wildcard(pattern):
+        return [pattern] if (root / pattern).is_file() else []
     found: set[str] = set()
-    for pattern in e.values.get(FIELD_ABSENT, []) or []:
-        if not has_wildcard(pattern):
-            if (root / pattern).is_file():
-                found.add(pattern)
-            continue
-        for folder, folders, files in os.walk(root / fixed_start(pattern)):
-            folders[:] = [name for name in folders if name != GIT_DIR]
-            for name in files:
-                relative = (Path(folder) / name).relative_to(root).as_posix()
-                if matches(relative, [pattern]):
-                    found.add(relative)
+    for folder, folders, files in os.walk(root / fixed_start(pattern)):
+        folders[:] = [name for name in folders if name != GIT_DIR]
+        for name in files:
+            relative = (Path(folder) / name).relative_to(root).as_posix()
+            if matches(relative, [pattern]):
+                found.add(relative)
+    return sorted(found)
+
+
+def absent_hits(e: Effective, root: Path) -> list[str]:
+    """The files of the repo that are under a pattern of documents.absent."""
+    found = {path for pattern in e.values.get(FIELD_ABSENT, []) or [] for path in files_under(root, pattern)}
     return [msg("absent_hit", path=path, field=FIELD_ABSENT) for path in sorted(found)]
+
+
+def is_folder_pattern(pattern: str) -> bool:
+    """`dir/**` with no other wildcard: the one form that the write lists of the sandbox honour on Linux."""
+    return pattern.endswith(FOLDER_PATTERN_END) and not has_wildcard(pattern[:-len(FOLDER_PATTERN_END)])
+
+
+def closed_paths(pattern: str, root: Path, for_sandbox: bool) -> list[str]:
+    """One pattern of boundary.no_write as the entries of the settings, from the root of the repo.
+    For the sandbox, a pattern with a wildcard that is not a trailing `/**` becomes the files that match
+    it now. Each other pattern stays as it is."""
+    if for_sandbox and has_wildcard(pattern) and not is_folder_pattern(pattern):
+        return files_under(root, pattern)
+    return [pattern]
+
+
+def boundary_settings(e: Effective, root: Path) -> dict:
+    """The settings of Claude Code for a run without a person. Each path is absolute: a relative path in
+    settings from the command line has no stated base."""
+    base = root.resolve().as_posix()
+
+    def absolute(paths: list[str]) -> list[str]:
+        return [f"{base}{SEGMENT_SEPARATOR}{path}" for path in dict.fromkeys(paths)]
+
+    no_write = e.values.get(FIELD_NO_WRITE, []) or []
+    no_read = absolute(e.values.get(FIELD_NO_READ, []) or [])
+    edit = absolute([path for pattern in no_write for path in closed_paths(pattern, root, for_sandbox=False)])
+    shell = absolute([path for pattern in no_write for path in closed_paths(pattern, root, for_sandbox=True)])
+    return {
+        SET_PERMISSIONS: {
+            SET_DENY_INSTEAD_OF_PROMPTING: True,
+            SET_DENY: [RULE_EDIT.format(path=path) for path in edit] + [RULE_READ.format(path=path) for path in no_read],
+        },
+        SET_SANDBOX: {
+            SET_ENABLED: True,
+            SET_FAIL_IF_UNAVAILABLE: True,
+            SET_ALLOW_UNSANDBOXED: False,
+            SET_FILESYSTEM: {SET_DENY_WRITE: shell, SET_DENY_READ: no_read},
+            SET_NETWORK: {SET_ALLOWED_DOMAINS: [], SET_STRICT_ALLOWLIST: True},
+            SET_CREDENTIALS: {SET_ENV_VARS: [{SET_NAME: name, SET_MODE: SET_MODE_DENY} for name in RUN_TOKENS]},
+        },
+    }
+
+
+def cmd_boundary(args) -> int:
+    e = effective_contract(args.contract, args.schema, args.source, args.cache_dir)
+    if report_failures(e.failures) == FAIL:
+        return FAIL
+    print(json.dumps(boundary_settings(e, args.contract.resolve().parent), indent=2))
+    return PASS
 
 
 def cmd_instructions(args) -> int:
@@ -681,10 +762,12 @@ def main(argv: list[str] | None = None) -> int:
         p.add_argument(f"--{ARG_SOURCE}", type=Path, default=None)
         p.add_argument(f"--{ARG_CACHE_DIR.replace('_', '-')}", dest=ARG_CACHE_DIR, type=Path, default=default_cache)
 
-    p = sub.add_parser(CMD_ALL, help="run all contract checks on the declared files")
-    p.add_argument(ARG_CONTRACT, type=Path)
-    p.add_argument(f"--{ARG_SOURCE}", type=Path, default=None)
-    p.add_argument(f"--{ARG_CACHE_DIR.replace('_', '-')}", dest=ARG_CACHE_DIR, type=Path, default=default_cache)
+    for command, help_text in ((CMD_ALL, "run all contract checks on the declared files"),
+                               (CMD_BOUNDARY, "print the settings of Claude Code for a run without a person")):
+        p = sub.add_parser(command, help=help_text)
+        p.add_argument(ARG_CONTRACT, type=Path)
+        p.add_argument(f"--{ARG_SOURCE}", type=Path, default=None)
+        p.add_argument(f"--{ARG_CACHE_DIR.replace('_', '-')}", dest=ARG_CACHE_DIR, type=Path, default=default_cache)
 
     p = sub.add_parser(CMD_SOURCE, help="print the source of a repo contract and its cache path")
     p.add_argument(ARG_CONTRACT, type=Path)
@@ -692,7 +775,7 @@ def main(argv: list[str] | None = None) -> int:
 
     args = parser.parse_args(argv)
     commands = {CMD_VALIDATE: cmd_validate, CMD_CHECK: cmd_check, CMD_INSTRUCTIONS: cmd_instructions,
-                CMD_TEXT: cmd_text, CMD_SOURCE: cmd_source, CMD_ALL: cmd_all}
+                CMD_TEXT: cmd_text, CMD_SOURCE: cmd_source, CMD_ALL: cmd_all, CMD_BOUNDARY: cmd_boundary}
     try:
         return commands[args.command](args)
     except CannotRun as e:

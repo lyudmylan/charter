@@ -8,7 +8,7 @@ name: review-intents
 on:
   pull_request:
     types: [opened, synchronize, reopened, ready_for_review]
-    paths: ["intents/**"]
+    paths: ["intents/**", "plans/**"]
 
 permissions:
   contents: read
@@ -45,7 +45,7 @@ jobs:
           prompt: |
             Review the intents that change request #${{ github.event.pull_request.number }} changes.
             Follow ${{ runner.temp }}/charter/charter-practices/skills/intent-review/SKILL.md exactly: it is the checklist and the form of the report.
-            The changed intents: run `git diff --name-only origin/${{ github.base_ref }}...HEAD -- intents/`.
+            The changed intents and plans: run `git diff --name-only origin/${{ github.base_ref }}...HEAD -- intents/ plans/`.
             Read files with the Read tool, list them with Glob, search with Grep. The shell allows only `git diff`,
             `git log`, `gh issue view`, `gh issue list`, `gh pr view`, `gh pr comment`, and `gh api` on the comments
             of the change request. A denied command is no reason to stop: use one of these.

@@ -10,6 +10,11 @@ Commands:
                                        or the change request records a reason.
   quality   --contract C [--repo-only]  The quality checks of the contract run and pass. With --repo-only
                                        the repo contract is read alone, without its organization source.
+  boundary  --contract C --changed F   No path that a run without a person changed is under a pattern of
+                                       boundary.no_write. F lists the changed paths: each added, changed,
+                                       or deleted path, and both names of a rename. With a NUL character
+                                       between the paths (`-z` of git) any name is read; else one path
+                                       on each line, and a line in the quotes of git fails.
   verdict   --facts F --contract C     One verdict: ready or not ready, with the reasons.
             [--record FILE] [--scripts-version V]   Also write the evidence record, as JSON.
 
@@ -25,6 +30,7 @@ from __future__ import annotations
 import argparse
 import datetime
 import json
+import posixpath
 import shlex
 import subprocess
 import sys
@@ -40,7 +46,12 @@ import charter_check as cc  # noqa: E402
 
 CMD_LINK, CMD_DOCUMENTS, CMD_QUALITY, CMD_VERDICT = "link", "documents", "quality", "verdict"
 CMD_PLAN = "plan"      # a part of the verdict, not a command of its own
+CMD_BOUNDARY = cc.CMD_BOUNDARY
 ARG_FACTS = "facts"
+ARG_CHANGED = "changed"
+PARENT_SEGMENT = ".."
+NUL = "\0"                 # between the paths of a list that git wrote with `-z`: no quotes, no escapes
+GIT_QUOTE = '"'            # git starts a path that holds a special character with it, in a list of lines
 ARG_REPO_ONLY = "repo_only"
 
 # Keys of the facts file.
@@ -63,10 +74,10 @@ INTENT_PATH, INTENT_PLAN, INTENT_REMOVED = "path", "plan", "removed"   # removed
 STATE_OPEN = "open"
 CHECK_PASS = "pass"
 
-# The plan of a work item: next to its intent, accepted before the code.
+# The plan of a work item: `plans/<part>.md` for the intent `intents/<part>.md`, accepted before the code.
 FIELD_PLAN_BEFORE_CODE = "build.plan_before_code"
-INTENTS_DIR = "intents/"
-INTENT_SUFFIX, PLAN_SUFFIX = ".md", ".plan.md"
+INTENTS_DIR, PLANS_DIR = cc.INTENTS_DIR, cc.PLANS_DIR
+INTENT_SUFFIX, OLD_PLAN_SUFFIX = cc.INTENT_SUFFIX, cc.OLD_PLAN_SUFFIX
 
 # The review loop. A finding at the threshold or above keeps the loop open; the loop ends below it,
 # or when the rounds reach the limit. Then a person decides. Shadow mode: the loop blocks nothing yet.
@@ -134,9 +145,15 @@ MSG = {
     "review_closed": "review loop: {where}, highest open severity {severity}: the loop is closed",
     "plan_intents_only": "not needed, the change is the Plan phase (only files under {dir})",
     "plan_no_intent": "no linked issue names an intent (a line `Intent: {dir}<part>{suffix}` in the issue)",
-    "plan_missing": "{plan} is missing",
+    "plan_missing": "`{plan}` is missing. A plan at the old place, `{old}`, counts too.",
     "plan_ok": "{plan} exists",
     "plan_removed": "{intent} is removed by the change request, no plan needed",
+    "boundary_closed": "{path}: a run without a person cannot change this path, a pattern of {field}. "
+                       "A person makes this change, in its own change request.",
+    "boundary_outside": "{path}: the path leaves the repo",
+    "boundary_quoted": "{line}: git wrote this path in quotes, and the gate cannot read it. Write the list with "
+                       "a NUL character between the paths: the option `-z` of git.",
+    "boundary_ok": "no changed path is under a pattern of {field} ({count} paths)",
 }
 
 
@@ -220,8 +237,15 @@ def _is_intent(value: object) -> bool:
 
 
 def plan_of(intent: str) -> str:
-    """The plan of an intent: `intents/<part>.plan.md` next to `intents/<part>.md`."""
-    return intent[:-len(INTENT_SUFFIX)] + PLAN_SUFFIX if intent.endswith(INTENT_SUFFIX) else intent + PLAN_SUFFIX
+    """The plan of an intent: `plans/<part>.md` for `intents/<part>.md`, also for a part with folders in it."""
+    part = intent[len(INTENTS_DIR):] if intent.startswith(INTENTS_DIR) else intent
+    return PLANS_DIR + (part if part.endswith(INTENT_SUFFIX) else part + INTENT_SUFFIX)
+
+
+def old_plan_of(intent: str) -> str:
+    """The old place of the plan of an intent: `intents/<part>.plan.md` next to `intents/<part>.md`."""
+    stem = intent[:-len(INTENT_SUFFIX)] if intent.endswith(INTENT_SUFFIX) else intent
+    return stem + OLD_PLAN_SUFFIX
 
 
 def effective(args) -> cc.Effective:
@@ -244,6 +268,32 @@ def gate_link(facts: dict) -> GateResult:
     if not open_issues:
         return GateResult(CMD_LINK, False, [msg("no_open_issue", issues=[i[ISSUE_NUMBER] for i in issues])])
     return GateResult(CMD_LINK, True, [msg("link_ok", issues=open_issues)])
+
+
+def changed_paths(text: str) -> tuple[list[str], bool]:
+    """The paths of a list, and whether it is a list of lines. A list with a NUL character holds each
+    name as it is. A list of lines is read without the blanks around a line."""
+    if NUL in text:
+        return [path for path in text.split(NUL) if path], False
+    return [line.strip() for line in text.splitlines() if line.strip()], True
+
+
+def gate_boundary(changed: list[str], e: cc.Effective, lines: bool = True) -> GateResult:
+    """The paths that a run changed, against boundary.no_write. A path is read without its dot segments.
+    In a list of lines, a line in the quotes of git fails: its path cannot be read."""
+    closed = e.values.get(cc.FIELD_NO_WRITE, []) or []
+    reasons: list[str] = []
+    for line in changed:
+        path = posixpath.normpath(line)
+        if lines and line.startswith(GIT_QUOTE):
+            reasons.append(msg("boundary_quoted", line=line))
+        elif line.startswith(cc.SEGMENT_SEPARATOR) or path == PARENT_SEGMENT or path.startswith(PARENT_SEGMENT + cc.SEGMENT_SEPARATOR):
+            reasons.append(msg("boundary_outside", path=line))
+        elif cc.matches(path, closed):
+            reasons.append(msg("boundary_closed", path=path, field=cc.FIELD_NO_WRITE))
+    if reasons:
+        return GateResult(CMD_BOUNDARY, False, reasons)
+    return GateResult(CMD_BOUNDARY, True, [msg("boundary_ok", field=cc.FIELD_NO_WRITE, count=len(changed))])
 
 
 def gate_documents(facts: dict, e: cc.Effective) -> GateResult:
@@ -361,10 +411,11 @@ def gate_plan(facts: dict, e: cc.Effective) -> GateResult | None:
         return GateResult(CMD_PLAN, False, [msg("plan_no_intent", dir=INTENTS_DIR, suffix=INTENT_SUFFIX)])
     removed = [i[INTENT_PATH] for i in intents if i.get(INTENT_REMOVED)]
     kept = [i for i in intents if not i.get(INTENT_REMOVED)]
-    missing = [plan_of(i[INTENT_PATH]) for i in kept if not i[INTENT_PLAN]]
+    missing = [i[INTENT_PATH] for i in kept if not i[INTENT_PLAN]]
     present = [plan_of(i[INTENT_PATH]) for i in kept if i[INTENT_PLAN]]
     return GateResult(CMD_PLAN, not missing,
-                      [msg("plan_missing", plan=p) for p in missing] + [msg("plan_ok", plan=p) for p in present]
+                      [msg("plan_missing", plan=plan_of(i), old=old_plan_of(i)) for i in missing]
+                      + [msg("plan_ok", plan=p) for p in present]
                       + [msg("plan_removed", intent=i) for i in removed])
 
 
@@ -444,6 +495,15 @@ def repo_only(args) -> cc.Effective:
     return cc.Effective(dict(repo.values), fields, [], "", dict(repo.values))
 
 
+def cmd_boundary(args) -> int:
+    try:
+        text = args.changed.read_text()
+    except OSError as error:
+        raise cc.CannotRun(cc.msg("no_file", path=args.changed)) from error
+    changed, lines = changed_paths(text)
+    return report(gate_boundary(changed, effective(args), lines), args.json)
+
+
 def cmd_quality(args) -> int:
     e = repo_only(args) if args.repo_only else effective(args)
     return report(gate_quality(e, args.contract.resolve().parent), args.json)
@@ -498,6 +558,7 @@ def main(argv: list[str] | None = None) -> int:
         CMD_LINK: (cmd_link, True, False),
         CMD_DOCUMENTS: (cmd_documents, True, True),
         CMD_QUALITY: (cmd_quality, False, True),
+        CMD_BOUNDARY: (cmd_boundary, False, True),
         CMD_VERDICT: (cmd_verdict, True, True),
     }
     for name, (_, needs_facts, needs_contract) in specs.items():
@@ -514,6 +575,9 @@ def main(argv: list[str] | None = None) -> int:
             p.add_argument(f"--{ARG_RECORD}", type=Path, default=None, help="write the evidence record to this file")
             p.add_argument(f"--{ARG_SCRIPTS_VERSION.replace('_', '-')}", dest=ARG_SCRIPTS_VERSION, default="",
                            help="the version of the scripts that make the record, for example a commit")
+        if name == CMD_BOUNDARY:
+            p.add_argument(f"--{ARG_CHANGED}", type=Path, required=True,
+                           help="a file with the paths that the run changed: with NUL between them, or one on each line")
         if name == CMD_QUALITY:
             p.add_argument(f"--{ARG_REPO_ONLY.replace('_', '-')}", dest=ARG_REPO_ONLY, action="store_true",
                            help="read the repo contract alone, without its organization source")

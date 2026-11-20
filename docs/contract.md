@@ -45,7 +45,7 @@ any of its patterns. The `instructions` and `text` commands read this from the s
 | `limits.review_loop` | limit | Rounds between author and reviewer before a person decides |
 | `limits.refusals` | limit | Refusals in sequence before the agent stops |
 | `review.threshold` | choice | `blocker`, `high`, `medium`, or `low`: the lowest severity of a finding that keeps the review loop open. Without a value: `medium` |
-| `build.plan_before_code` | flag | Each work item has its plan, `intents/<part>.plan.md`, before the code; the verdict checks that it exists |
+| `build.plan_before_code` | flag | Each work item has its plan, `plans/<part>.md`, before the code; the verdict checks that it exists |
 | `tiers.<tier>.paths` | set | Path patterns of the files in the tier |
 | `tiers.<tier>.review` | choice | `light` or `deep` |
 | `tiers.<tier>.approver` | choice | `agent`, `engineer`, `team_lead`, or `leader` |
@@ -55,6 +55,8 @@ any of its patterns. The `instructions` and `text` commands read this from the s
 | `documents.text_checked` | set | Files that must contain none of the text-checked patterns |
 | `documents.absent` | set | Path patterns that the repo must not hold: the contract checks fail when a file is under one of them. The setup step writes the folders of decision files. Needs the version 0.3.5 of the core |
 | `instructions.file` | text | The instruction file of the repo |
+| `boundary.no_write` | set | Path patterns that a run of an agent without a person never changes, adds, or deletes. The plan of a work item passes. Needs the version 0.3.6 of the core |
+| `boundary.no_read` | set | Path patterns that a run without a person never reads. Needs the version 0.3.6 of the core |
 | `checks.quality` | set | Commands that must pass before a push. They run on the code of the change. |
 | `charter.version` | text | The version of the core plugin of Charter that the repo uses; the workflows fetch Charter at the tag `charter--v<version>` |
 | `tools.issue_tracker`, `tools.code_host`, `tools.ci` | text | The tools of the repo |
@@ -125,9 +127,14 @@ A change request records a reason for a missing document change with one line in
 `No document change: <reason>`. The collecting step copies it into the facts file. The two review
 fields are optional: the collecting step writes them when it is given the reviewer workflow. The field
 `intents` lists the intents that the linked issues name with a line `Intent: intents/<part>.md`, and
-whether the plan `intents/<part>.plan.md` of each exists at the head commit. The linked issues are those
-that the text of the change request closes with a keyword or names with `Part of #N`; an issue that the
-text only mentions is not linked, so the verdict does not ask for its plan.
+whether the plan `plans/<part>.md` of each exists at the head commit. A plan at the old place,
+`intents/<part>.plan.md`, counts too. The linked issues are those that the text of the change request
+closes with a keyword or names with `Part of #N`; an issue that the text only mentions is not linked, so
+the verdict does not ask for its plan.
+
+The plan lives in `plans/`, outside `intents/` (decision D18): a change request with code and its plan
+takes the tier of its code, because the high tier holds `intents/**` and not `plans/**`. A repo moves each
+plan with `git mv intents/<part>.plan.md plans/<part>.md`. A plan at the old place stays in the high tier.
 
 Three rules of the gates:
 
@@ -139,6 +146,38 @@ Three rules of the gates:
   command is shown.
 - **Approvals** are not checked in this version. The merge by the approver of the tier is the approval,
   and the verdict says so. The field `approvals` of the facts file is optional.
+
+## The boundary of a run
+
+A run of an agent with no person present works inside the boundary of the contract. Two parts enforce it.
+
+```
+python3 charter/scripts/charter_check.py boundary charter.toml > settings.json
+python3 charter/scripts/charter_gate.py boundary --contract charter.toml --changed changed.txt
+```
+
+`charter-check boundary` prints the settings of Claude Code for the run, as JSON. The workflow of the run
+writes them at the start of each run and passes them on the command line; they are not a file of the repo.
+They turn the sandbox of the shell on, let no command run outside it, and stop the run when the sandbox
+cannot start. The shell has no network. The tokens of the model and of the code host leave the
+environment of each shell command. A call that would need a question to a person is refused. Each pattern
+of `boundary.no_write` is a deny rule for the edit tools and a write denial of the sandbox; each pattern
+of `boundary.no_read` is a deny rule for the read tool and a read denial of the sandbox. Each path is
+absolute, from the folder of the contract, so the settings are for one checkout.
+
+One limit comes from Claude Code. On Linux the write lists of the sandbox honour a wildcard only as a
+trailing `/**`, so another pattern enters the sandbox as the files that match it at that time. A new file
+is then not closed by the sandbox. The gate catches it. A pattern has no exception: `intents/**` is one
+folder entry in both layers, and the plan of a work item, `plans/<part>.md`, is under no pattern.
+
+`charter-gate boundary` reads the paths that a run changed: each added, changed, or deleted path, and
+both names of a rename. The list has one of two forms. With a NUL character between the paths, as git
+writes them with `-z`, each name is read as it is; the workflow of a run writes this form. Else the list
+has one path on each line, and a line in the quotes of git fails, because git quotes a path with a
+special character and the gate cannot read it. It fails when a path is under a pattern of `boundary.no_write`,
+and it names the path. A path with dot segments is read as the path it points to, and a path that leaves
+the repo fails. The plan of a work item, `plans/<part>.md`, passes, and each file under `intents/` fails.
+The gate runs between the run and the push: a failure publishes nothing.
 
 ## On the code host
 
@@ -162,7 +201,7 @@ contract change: a person reviews it, and the new source applies after the merge
 
 ## The intent reviewer
 
-The workflow `.github/workflows/review-intents.yml` runs on each change request that changes `intents/**`.
+The workflow `.github/workflows/review-intents.yml` runs on each change request that changes `intents/**` or `plans/**`.
 An agent that is not the author follows the skill `charter-practices/skills/intent-review/SKILL.md` and
 posts one comment: a table with one row per intent, and the findings. Shadow mode: it approves nothing and
 blocks nothing; a person merges. It runs with a token of the owner's subscription, the secret
@@ -229,7 +268,7 @@ charter-setup --repo NAME --source ADDRESS --source-version TAG --leader LOGIN \
               [--quality CMD]... [--code-path PATTERN]... [--high-path PATTERN]...
 ```
 
-It writes `charter.toml`, `AGENTS.md`, `intents/_template.md`, and the three workflows from
+It writes `charter.toml`, `AGENTS.md`, `intents/_template.md`, `plans/_template.md`, and the three workflows from
 `charter/templates/`; `docs/product.md` and `docs/architecture.md` only when they are missing. It writes
 nothing when one of its files exists, and names the file. At the end it prints the steps that a person
 does by hand: the secrets, the ruleset, the cache command, and the first intent.
@@ -247,6 +286,7 @@ python3 charter/scripts/charter_check.py instructions AGENTS.md --contract chart
 python3 charter/scripts/charter_check.py text README.md --contract charter.toml
 python3 charter/scripts/charter_check.py source charter.toml
 python3 charter/scripts/charter_check.py all charter.toml
+python3 charter/scripts/charter_check.py boundary charter.toml [--source PATH]
 ```
 
 `all` runs `check`, then `instructions` on `instructions.file`, then `text` on each file in

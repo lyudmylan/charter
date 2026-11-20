@@ -6,6 +6,7 @@ Each test names the intent and the check that it implements, in its docstring.
 import contextlib
 import io
 import json
+import re
 import shutil
 import sys
 import tempfile
@@ -16,6 +17,7 @@ ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / "charter" / "scripts"))
 import charter_check as cc  # noqa: E402
 import charter_gate as cg  # noqa: E402
+import charter_setup as cs  # noqa: E402
 
 SAMPLES = ROOT / "tests" / "samples"
 ORG = SAMPLES / "organization.toml"
@@ -255,11 +257,11 @@ class Verdict(Temp):
 
         code, out = run(cg.CMD_VERDICT, f"--{cg.ARG_FACTS}", str(self.facts(**{cg.FACT_INTENTS: [intent]})), *args)
         self.assertEqual(code, cc.FAIL)
-        self.assertIn("plan: intents/app.plan.md is missing", out)
+        self.assertIn("plan: `plans/app.md` is missing", out)
 
         code, out = run(cg.CMD_VERDICT, f"--{cg.ARG_FACTS}", str(self.facts(**{cg.FACT_INTENTS: [{**intent, cg.INTENT_PLAN: True}]})), *args)
         self.assertEqual(code, cc.PASS, out)
-        self.assertIn("plan: intents/app.plan.md exists", out)
+        self.assertIn("plan: plans/app.md exists", out)
 
         code, out = run(cg.CMD_VERDICT, f"--{cg.ARG_FACTS}", str(self.facts()), *args)
         self.assertEqual(code, cc.FAIL)
@@ -287,7 +289,7 @@ class Verdict(Temp):
 
         code, out = run(cg.CMD_VERDICT, f"--{cg.ARG_FACTS}", str(self.facts(**{cg.FACT_INTENTS: [old, new]})), *args)
         self.assertEqual(code, cc.PASS, out)
-        self.assertIn("plan: intents/b.plan.md exists", out)
+        self.assertIn("plan: plans/b.md exists", out)
         self.assertIn("plan: intents/a.md is removed by the change request, no plan needed", out)
 
         code, out = run(cg.CMD_VERDICT, f"--{cg.ARG_FACTS}", str(self.facts(**{cg.FACT_INTENTS: [old]})), *args)
@@ -295,7 +297,7 @@ class Verdict(Temp):
 
         code, out = run(cg.CMD_VERDICT, f"--{cg.ARG_FACTS}", str(self.facts(**{cg.FACT_INTENTS: [old, wrong]})), *args)
         self.assertEqual(code, cc.FAIL)
-        self.assertIn("plan: intents/gatez.plan.md is missing", out)
+        self.assertIn("plan: `plans/gatez.md` is missing", out)
 
 
 class ReviewLoop(Temp):
@@ -395,6 +397,54 @@ class NoModel(unittest.TestCase):
         for name in ("anthropic", "openai", "urllib", "http.client", "requests", "socket"):
             self.assertNotIn(f"import {name}", text)
             self.assertNotIn(f"from {name}", text)
+
+
+class PlanPlace(Temp):
+    SETUP_FLAGS = ["--repo", "sample", "--source", "https://example.com/org/rules", "--source-version", "v1",
+                   "--leader", "alice", "--quality", "python3 -m unittest discover -s tests"]
+
+    def test_the_plan_of_an_intent_is_in_the_plans_folder(self):
+        """plan-tier, check 1."""
+        self.assertEqual(cg.plan_of("intents/app.md"), "plans/app.md")
+        self.assertEqual(cg.plan_of("intents/sub/app.md"), "plans/sub/app.md")
+        self.assertEqual(cg.old_plan_of("intents/app.md"), "intents/app.plan.md")
+        self.assertEqual(cg.old_plan_of("intents/sub/app.md"), "intents/sub/app.plan.md")
+
+    def test_the_missing_plan_names_the_new_place(self):
+        """plan-tier, check 2: the message names the new place, and the old place that counts too."""
+        with_flag = self.dir / "repo-with-plan-flag.toml"
+        with_flag.write_text(REPO.read_text() + f"\n[build]\n{cg.FIELD_PLAN_BEFORE_CODE.split('.')[1]} = true\n")
+        args = [f"--{cc.ARG_CONTRACT}", str(with_flag), f"--{cc.ARG_SOURCE}", str(ORG)]
+        intent = {cg.INTENT_PATH: "intents/app.md", cg.INTENT_PLAN: False}
+        code, out = run(cg.CMD_VERDICT, f"--{cg.ARG_FACTS}", str(self.facts(**{cg.FACT_INTENTS: [intent]})), *args)
+        self.assertEqual(code, cc.FAIL)
+        self.assertIn("plan: `plans/app.md` is missing. A plan at the old place, `intents/app.plan.md`, counts too.", out)
+
+    def test_a_change_with_its_plan_takes_the_tier_of_its_code(self):
+        """plan-tier, check 3: the tiers of the contract that the setup step writes."""
+        with contextlib.redirect_stdout(io.StringIO()):
+            self.assertEqual(cs.main([*self.SETUP_FLAGS, "--target", str(self.dir)]), cc.PASS)
+        e = cc.effective_contract(self.dir / cs.CONTRACT_FILE, cc.DEFAULT_SCHEMA, ORG, self.dir / "cache")
+        self.assertEqual(e.failures, [])
+        self.assertEqual(cg.tier_of(["src/app.py", "plans/app.md"], e)[0], "low")
+        self.assertEqual(cg.tier_of(["src/app.py", "intents/app.plan.md"], e)[0], "high")
+
+    def test_the_decision_is_recorded(self):
+        """plan-tier, check 9: the row D18 with its reason, and the row E10 names it."""
+        text = (ROOT / "docs" / "decisions.md").read_text()
+        d18 = re.search(r"^\| D18 \| (.+?) \| (.+?) \| 2026-11-20 \|$", text, re.M)
+        self.assertIsNotNone(d18, "no row D18")
+        self.assertIn("`plans/<part>.md`", d18.group(1))
+        self.assertIn("no exclusion", d18.group(2))
+        e10 = re.search(r"^\| E10 \| (.+?) \|", text, re.M)
+        self.assertIn("Replaced by D18", e10.group(1))
+
+    def test_both_manifests_name_the_version(self):
+        """plan-tier, check 10."""
+        versions = [json.loads((ROOT / plugin / ".claude-plugin" / "plugin.json").read_text())["version"]
+                    for plugin in ("charter", "charter-practices")]
+        self.assertEqual(versions[0], versions[1])
+        self.assertGreaterEqual(tuple(int(part) for part in versions[0].split(".")), (0, 3, 8))
 
 
 if __name__ == "__main__":
