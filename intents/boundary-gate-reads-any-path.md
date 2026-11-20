@@ -1,6 +1,6 @@
 # Intent: the boundary gate reads a changed path with any character in its name
 
-Work item: #101. Status: planned. Approval: a person merges the change request that adds this file.
+Work item: #101. Status: done. Approval: a person merges the change request that adds this file.
 
 ## Goal
 

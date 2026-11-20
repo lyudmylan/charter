@@ -166,8 +166,11 @@ rule for a folder cannot be opened again for one file, so a pattern that covers 
 `intents/**`, is written as the files under it that are no plan. In both cases a new file is not closed
 by the settings. The gate catches it.
 
-`charter-gate boundary` reads the paths that a run changed, one on each line: each added, changed, or
-deleted path, and both names of a rename. It fails when a path is under a pattern of `boundary.no_write`,
+`charter-gate boundary` reads the paths that a run changed: each added, changed, or deleted path, and
+both names of a rename. The list has one of two forms. With a NUL character between the paths, as git
+writes them with `-z`, each name is read as it is; the workflow of a run writes this form. Else the list
+has one path on each line, and a line in the quotes of git fails, because git quotes a path with a
+special character and the gate cannot read it. It fails when a path is under a pattern of `boundary.no_write`,
 and it names the path. A path with dot segments is read as the path it points to, and a path that leaves
 the repo fails. The plan of a work item, `intents/<part>.plan.md`, passes. The gate runs between the run
 and the push: a failure publishes nothing.
