@@ -46,5 +46,5 @@ This plan builds on #92: the result of the agent and the publishing step.
 ## Tests
 
 A class `RunRecord` in `tests/test_run.py` (two tests), `tests/test_charter_facts_github.py` (two), and
-`tests/test_charter_gate.py` (seven), with the names that the intent gives. The publishing step runs
+`tests/test_charter_gate.py` (eight), with the names that the intent gives. The publishing step runs
 with the fakes of `gh` and `git` that `tests/test_run.py` has.

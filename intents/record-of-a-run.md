@@ -22,10 +22,16 @@ The evidence record of a change request that an agent run built says how the run
   its factory, with four outcomes; three of them fit a change request:
   - `success`: the head commit is the commit of the run, the verdict is ready, and no reviewer has an
     open finding at the threshold;
-  - `flawed`: the head commit is the commit of the run, and the verdict is not ready or a reviewer has an
-    open finding at the threshold, also in the shadow period of that reviewer;
+  - `flawed`: the head commit is the commit of the run, and the verdict is not ready, or the newest
+    report of a reviewer has a finding at the threshold or above, or it has no severity line; this holds
+    also in the shadow period of that reviewer;
   - `manual`: the head commit is not the commit of the run: a later push changed what the run built.
-  The fourth, `blocked`, is a run that opened no change request; it stays on the issue (#92).
+  The fourth, `blocked`, is a run that opened no change request. The run of #92 writes that record on
+  the issue, with the reason and the same three numbers; this intent adds nothing there.
+- The three numbers are the fields `num_turns`, `duration_ms`, and `total_cost_usd` of the result of
+  Claude Code. A real result of Claude Code 2.1.329, of 2026-11-20, holds the three. The tokens, which
+  the issue names, are not recorded: the result holds them for each model in a form of its own, and the
+  cost sums them up. A later issue of #83 can add them.
 - The verdict prints one line, `run: <outcome>, <turns> turns, <duration>, cost <cost> (an estimate of
   Claude Code)`, or `run: none, no agent run built this change request`. The evidence record holds the
   outcome and the three numbers under `run`, or no value.
@@ -54,9 +60,13 @@ request.
    block with a wrong form as no run.
    test: `tests/test_charter_facts_github.py::RunRecord.test_the_block_is_read_from_the_text`
    test: `tests/test_charter_facts_github.py::RunRecord.test_no_block_and_a_wrong_block_give_no_run`
-3. The gate gives `success`, `flawed`, and `manual` by the rules of the scope, and prints the line.
+3. The gate gives `success`, `flawed`, and `manual` by the rules of the scope, and prints the line. The
+   cases of `flawed`: a verdict that is not ready; an open finding of the intent review; an open finding
+   of the code review; and, in a test of its own, a finding or a report without a severity line of a
+   reviewer in its shadow period, where the verdict is ready.
    test: `tests/test_charter_gate.py::RunRecord.test_a_ready_change_at_the_commit_of_the_run_is_a_success`
    test: `tests/test_charter_gate.py::RunRecord.test_a_change_that_is_not_ready_or_has_an_open_finding_is_flawed`
+   test: `tests/test_charter_gate.py::RunRecord.test_an_open_finding_in_a_shadow_period_is_flawed`
    test: `tests/test_charter_gate.py::RunRecord.test_a_later_push_makes_the_outcome_manual`
 4. A change request without a run prints the line for none, and its record holds no value under `run`.
    test: `tests/test_charter_gate.py::RunRecord.test_no_run_is_none`
@@ -71,4 +81,5 @@ request.
 ## Manual checks
 
 8. The evidence record of the first change request of a run, in an adopter repo, holds the outcome and
-   the numbers. who: the leader. Not automatic: it needs the first run (#92).
+   the numbers. who: the leader. Not automatic: it needs the first run (#92). When a field of that result
+   differs from the block, a change request corrects this intent first.
