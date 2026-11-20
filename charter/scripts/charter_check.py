@@ -109,6 +109,13 @@ INTENT_SUFFIX, OLD_PLAN_SUFFIX = ".md", ".plan.md"
 # The settings of Claude Code for a run. The key names are the ones of its documentation: the pages on the
 # sandbox, the permissions, and the settings reference, read on 2026-11-20.
 SET_PERMISSIONS, SET_DENY, SET_DENY_INSTEAD_OF_PROMPTING = "permissions", "deny", "denyInsteadOfPrompting"
+# The file tools stay inside the folder of the repo. The mode lets them change a file of that folder with no
+# question, and a call on a path outside it would need a question, which is refused. The block of writes
+# holds in every mode. A run passes no list of allowed tools: such a list opens a tool for every path.
+SET_DEFAULT_MODE, SET_MODE_ACCEPT_EDITS = "defaultMode", "acceptEdits"
+SET_BLOCK_WRITES_OUTSIDE = "blockWritesOutsideWorkingDirectories"
+# No shell command reads the environment of another process: the process of the agent holds the token of the model.
+PROCESS_ENVIRONMENTS = "/proc/*/environ"
 SET_SANDBOX, SET_ENABLED, SET_FAIL_IF_UNAVAILABLE = "sandbox", "enabled", "failIfUnavailable"
 SET_ALLOW_UNSANDBOXED = "allowUnsandboxedCommands"
 SET_FILESYSTEM, SET_DENY_WRITE, SET_DENY_READ = "filesystem", "denyWrite", "denyRead"
@@ -640,13 +647,15 @@ def boundary_settings(e: Effective, root: Path) -> dict:
     return {
         SET_PERMISSIONS: {
             SET_DENY_INSTEAD_OF_PROMPTING: True,
+            SET_DEFAULT_MODE: SET_MODE_ACCEPT_EDITS,
+            SET_BLOCK_WRITES_OUTSIDE: True,
             SET_DENY: [RULE_EDIT.format(path=path) for path in edit] + [RULE_READ.format(path=path) for path in no_read],
         },
         SET_SANDBOX: {
             SET_ENABLED: True,
             SET_FAIL_IF_UNAVAILABLE: True,
             SET_ALLOW_UNSANDBOXED: False,
-            SET_FILESYSTEM: {SET_DENY_WRITE: shell, SET_DENY_READ: no_read},
+            SET_FILESYSTEM: {SET_DENY_WRITE: shell, SET_DENY_READ: no_read + [PROCESS_ENVIRONMENTS]},
             SET_NETWORK: {SET_ALLOWED_DOMAINS: [], SET_STRICT_ALLOWLIST: True},
             SET_CREDENTIALS: {SET_ENV_VARS: [{SET_NAME: name, SET_MODE: SET_MODE_DENY} for name in RUN_TOKENS]},
         },

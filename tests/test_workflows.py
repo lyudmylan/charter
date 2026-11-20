@@ -647,7 +647,7 @@ class Toolchain(unittest.TestCase):
     def test_the_checkout_action_of_each_workflow(self):
         """toolchain-in-the-tests-workflow, check 5."""
         for name, version in (("tests.yml", "v7"), ("review-intents.yml", "v7"), ("review-code.yml", "v7"),
-                              ("verdict.yml", "v4")):
+                              ("verdict.yml", "v4"), ("run.yml", "v4")):
             for folder in (TEMPLATES, WORKFLOWS):
                 with self.subTest(workflow=name, folder=folder.name):
                     versions = re.findall(r"uses: actions/checkout@(\S+)", (folder / name).read_text())

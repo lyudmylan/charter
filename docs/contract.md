@@ -164,7 +164,12 @@ python3 charter/scripts/charter_gate.py boundary --contract charter.toml --chang
 writes them at the start of each run and passes them on the command line; they are not a file of the repo.
 They turn the sandbox of the shell on, let no command run outside it, and stop the run when the sandbox
 cannot start. The shell has no network. The tokens of the model and of the code host leave the
-environment of each shell command. A call that would need a question to a person is refused. Each pattern
+environment of each shell command. A call that would need a question to a person is refused. The file tools
+stay inside the folder of the repo: the mode `acceptEdits` lets them change a file of that folder with no
+question, a read or a write on a path outside it would need a question and is refused, and
+`blockWritesOutsideWorkingDirectories` refuses such a write in every mode. A run passes no list of allowed
+tools: such a list opens a tool for every path. No shell command reads the environment of another process.
+Each pattern
 of `boundary.no_write` is a deny rule for the edit tools and a write denial of the sandbox; each pattern
 of `boundary.no_read` is a deny rule for the read tool and a read denial of the sandbox. Each path is
 absolute, from the folder of the contract, so the settings are for one checkout.
@@ -182,6 +187,55 @@ special character and the gate cannot read it. It fails when a path is under a p
 and it names the path. A path with dot segments is read as the path it points to, and a path that leaves
 the repo fails. The plan of a work item, `plans/<part>.md`, passes, and each file under `intents/` fails.
 The gate runs between the run and the push: a failure publishes nothing.
+
+## The run
+
+The workflow `run` takes a ready issue and runs an agent on it, with no person present. It always runs
+from the main branch. A person starts it: the label `charter-run` on an issue, or a start by hand with the
+number of an issue. Only a person with write access can do either. The variable `CHARTER_RUNS` of the repo
+with the value `off` stops the start of every run; the cancel of the code host stops a run that works. One
+run works at a time, and a second one waits.
+
+```
+charter-run ready   --issue issue.json --root .
+charter-run brief   --issue issue.json --intent intents/<part>.md --out brief.md
+charter-run result  --agent agent.json --root . --base <commit> --issue issue.json --git-dir <copy> --out <folder>
+charter-run outcome --state published|blocked --reason TEXT --agent agent.json [--url URL]
+```
+
+The steps, in this order:
+
+1. The checkout of the main branch, with no credential left in the folder. The scripts of Charter and the
+   contract of the main branch are copied outside the folder.
+2. `ready`: the issue is open, it names exactly one intent with the line `Intent: intents/<part>.md`, and
+   that intent is a file of the main branch. Else the run ends as blocked, with the reason on the issue.
+3. The toolchain block of the repo, with the steps of the block of `tests`.
+4. The sandbox of Linux and Claude Code, at the version that the workflow names.
+5. The settings of `charter-check boundary`, from the contract of the main branch with its organization
+   source. The clone of the source is removed before the agent starts: the shell of the agent can read most
+   of the disk, and the source of an organization can be private.
+6. `brief`: the fixed text, then the text of the issue under a line that marks it as data.
+7. The agent: `claude -p` with the settings as text on the command line, with no list of allowed tools, a
+   limit of turns, and a time limit of the step. Its one secret is the token of the model. It writes the plan, the code, and the tests, runs
+   the quality commands in its sandbox, and commits nothing. It writes the text of the change request to
+   `.charter-run/change-request.md`, or the reason of a stop to `.charter-run/blocked.md`.
+8. `result`: a copy of `.git`, made before the agent, replaces the `.git` of the folder, so no
+   configuration and no hook of the agent runs. The folder `.charter-run/` moves out and is never committed.
+   The script commits what the agent left and lists the changed paths with a NUL character between them.
+   An agent that ended in an error or wrote a reason, or a branch with no change, ends the run as blocked.
+9. `charter-gate boundary` on that list, with the contract of the main branch. The step fetches the
+   organization source again, with its token.
+10. The publishing, only when the two steps before passed: a script pushes the branch `run/<number>` with
+    no hook and opens the change request, with `Closes #<number>` as its first line. It uses the secret
+    `CHARTER_RUN_TOKEN`, a token that a person creates, because a change request that the token of the
+    workflow opens starts no workflow. Without the secret nothing is published.
+11. `outcome`, in each case: one comment on the issue with the change request or the reason, and the turns,
+    the duration, and the cost that Claude Code reports.
+
+No step after the agent runs a file of the folder that the agent wrote in: the scripts come from the copy,
+and the quality commands run in the workflow `tests` of the change request. The change request then goes
+through `tests`, the reviewers, and `verdict` as any other, and the merge follows the tier. A finding of a
+reviewer on it is for a person in this version.
 
 ## On the code host
 
@@ -336,7 +390,7 @@ change requests, one line each, for a sample review.
 ## The setup step
 
 `charter-setup` sets a repo up in one command. The plugin `charter` ships it in `bin/`, with
-`charter-check`, `charter-gate`, and `charter-facts-github`; Claude Code puts that folder on the path of
+`charter-check`, `charter-gate`, `charter-facts-github`, and `charter-run`; Claude Code puts that folder on the path of
 the shell while the plugin is enabled (the plugin documentation, "Executables"; claude.ai and Cowork do
 not install a plugin with a `bin/` folder, so that way of distribution is not open to Charter). From a
 clone of the Charter repo, the same scripts are `charter/scripts/charter_*.py`.
@@ -346,10 +400,12 @@ charter-setup --repo NAME --source ADDRESS --source-version TAG --leader LOGIN \
               [--quality CMD]... [--code-path PATTERN]... [--high-path PATTERN]... [--toolchain FILE]
 ```
 
-It writes `charter.toml`, `AGENTS.md`, `intents/_template.md`, `plans/_template.md`, and the four workflows from
+It writes `charter.toml`, `AGENTS.md`, `intents/_template.md`, `plans/_template.md`, and the five workflows from
 `charter/templates/`; `docs/product.md` and `docs/architecture.md` only when they are missing. It writes
 nothing when one of its files exists, and names the file. At the end it prints the steps that a person
-does by hand: the secrets, the ruleset, the cache command, and the first intent.
+does by hand: the secrets, the ruleset, the cache command, and the first intent. For the workflow `run`
+they name the label `charter-run`, the variable `CHARTER_RUNS`, and the secret `CHARTER_RUN_TOKEN`; the
+setup step creates nothing on the code host.
 
 The written workflows fetch Charter at the tag `charter--v<charter.version>` outside the checkout, and
 run the scripts from there: `tests` with the version of the change request, `verdict` with the version in
@@ -360,7 +416,8 @@ the checkout and before the quality step, between the line `# charter:toolchain:
 `# charter:toolchain:end`. The flag `--toolchain FILE` fills the block. The file holds steps as they stand
 in a workflow, with no indent before the first `- `; the setup step gives them the indent of a step and
 does not substitute their text. A file that holds a marker line is refused, and so is a missing file.
-Without the flag the block is empty. The steps run in the `tests` workflow, which holds no secret.
+Without the flag the block is empty. The steps run in the `tests` workflow, which holds no secret. The
+workflow `run` has the same block with the same steps, before the agent starts.
 An update of the repo keeps the block.
 
 ## The checker

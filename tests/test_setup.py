@@ -140,7 +140,7 @@ class Templates(Temp):
     def test_workflow_templates_fetch_charter_at_the_version(self):
         """charter-version-in-ci, check 2."""
         self.assertEqual(self.setup()[0], cc.PASS)
-        for name in ("tests.yml", "verdict.yml", "review-intents.yml", "review-code.yml"):
+        for name in ("tests.yml", "verdict.yml", "review-intents.yml", "review-code.yml", "run.yml"):
             text = (self.dir / cs.WORKFLOWS / name).read_text()
             with self.subTest(workflow=name):
                 self.assertIn('tomllib.load(open("charter.toml", "rb"))["charter"]["version"]', text)
@@ -155,7 +155,7 @@ class Templates(Temp):
         """setup-step, check 6 (#58): GitHub refuses the `runner` context in a job-level env; the file then
         does not parse, and the run has no job and no log."""
         self.assertEqual(self.setup()[0], cc.PASS)
-        for name in ("tests.yml", "verdict.yml", "review-intents.yml", "review-code.yml"):
+        for name in ("tests.yml", "verdict.yml", "review-intents.yml", "review-code.yml", "run.yml"):
             text = (self.dir / cs.WORKFLOWS / name).read_text()
             with self.subTest(workflow=name):
                 self.assertIsNone(re.search(r"^    env:\n(?:      .*\n)*?      \w+: \$\{\{ runner\.", text, re.M),
@@ -285,7 +285,7 @@ class DecisionFiles(Temp):
 class Commands(unittest.TestCase):
     def test_the_four_commands_exist_and_the_manifests_agree(self):
         """setup-step, check 5."""
-        for name in ("charter-setup", "charter-check", "charter-gate", "charter-facts-github"):
+        for name in ("charter-setup", "charter-check", "charter-gate", "charter-facts-github", "charter-run"):
             path = ROOT / "charter" / "bin" / name
             with self.subTest(command=name):
                 self.assertTrue(path.is_file(), name)
