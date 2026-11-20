@@ -51,6 +51,10 @@ contract holds one table of roles and rights for all actors; the code host and C
 Code enforce it. Separation of duties holds at every size: the author of a change is not
 its reviewer. A larger organization changes who holds a role, not the rules.
 
+An agent that works with no person present cannot change the contract, the instructions, an approved
+intent, or the workflows, and it holds no credential of the code host. A script publishes its result
+after a check of what it changed.
+
 ## The lifecycle map
 
 The phases are the six of the AI-native SDLC playbook of Anthropic (2026-08-21). The map says what
