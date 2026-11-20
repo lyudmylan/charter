@@ -927,15 +927,28 @@ class RunRecord(Temp):
         cases = {
             "not ready": ({cg.FACT_UNRESOLVED_THREADS: 1}, cc.FAIL),
             "a failed check": ({cg.FACT_CHECKS: {"tests": "fail"}}, cc.FAIL),
-            "an open code review in its shadow period": ({cg.FACT_CODE_REVIEW_REPORTS: ["low", "high"]}, cc.PASS),
             "an open intent review": ({cg.FACT_REVIEW_REPORTS: ["medium"]}, cc.PASS),
-            "a report without a severity line": ({cg.FACT_CODE_REVIEW_REPORTS: ["low", None]}, cc.PASS),
+            "an open code review": ({cg.FACT_CODE_REVIEW_REPORTS: ["low", "high"]}, cc.PASS),
         }
         for name, (changes, expected) in cases.items():
             with self.subTest(case=name):
                 code, lines = self.verdict(**self.ran(**changes))
                 self.assertEqual(code, expected, lines)
                 self.assertEqual(self.run_lines(lines), [self.LINE.format(outcome=cg.RUN_FLAWED)])
+
+    def test_an_open_finding_in_a_shadow_period_is_flawed(self):
+        """record-of-a-run, check 3: the verdict is ready, because the reviewer blocks nothing in its shadow
+        period, and the run is flawed all the same. A newest report without a severity line counts as open."""
+        for name, changes in {"the code review at the threshold": {cg.FACT_CODE_REVIEW_REPORTS: ["medium"]},
+                              "the code review above it": {cg.FACT_CODE_REVIEW_REPORTS: ["low", "blocker"]},
+                              "the code review without a severity line": {cg.FACT_CODE_REVIEW_REPORTS: ["low", None]},
+                              "the intent review without a severity line": {cg.FACT_REVIEW_REPORTS: ["low", None]}}.items():
+            with self.subTest(case=name):
+                code, lines = self.verdict(**self.ran(**changes))
+                self.assertEqual(code, cc.PASS, lines)
+                self.assertEqual(self.run_lines(lines), [self.LINE.format(outcome=cg.RUN_FLAWED)])
+        code, lines = self.verdict(**self.ran(**{cg.FACT_CODE_REVIEW_REPORTS: ["high", "low"], cg.FACT_REVIEW_REPORTS: ["medium", "none"]}))
+        self.assertEqual(self.run_lines(lines), [self.LINE.format(outcome=cg.RUN_SUCCESS)], "a closed newest report is no finding")
 
     def test_a_later_push_makes_the_outcome_manual(self):
         """record-of-a-run, check 3: another head commit, or none, gives `manual`, ready or not."""
