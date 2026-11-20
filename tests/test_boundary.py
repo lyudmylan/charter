@@ -191,17 +191,16 @@ class Settings(Temp):
                 self.assertIs(settings["permissions"]["denyInsteadOfPrompting"], True)
 
     def test_the_plan_file_is_not_denied(self):
-        """boundary-of-a-run, check 9: a deny rule for a folder cannot be opened again for one file, so
-        `intents/**` is written as the files under it that are no plan, in both layers."""
+        """boundary-of-a-run, check 9, and plan-tier, check 6: the plan lives in `plans/`, so `intents/**`
+        is one folder entry in both layers, and no entry names a plan or a single file under `intents/`."""
         settings = self.full()
         deny, shell = settings["permissions"]["deny"], settings["sandbox"]["filesystem"]["denyWrite"]
-        for path in ("intents/a.md", "intents/sub/b.md"):
-            with self.subTest(file=path):
-                self.assertIn(self.edit(path), deny)
-                self.assertIn(self.here(path), shell)
+        self.assertIn(self.edit("intents/**"), deny)
+        self.assertIn(self.here("intents/**"), shell)
         for entry in deny + shell:
-            self.assertNotIn(".plan.md", entry)
-            self.assertFalse(entry.rstrip(")").endswith(("intents", "intents/**")), entry)
+            with self.subTest(entry=entry):
+                self.assertNotIn("plans", entry)
+                self.assertFalse(entry.rstrip(")").endswith(("intents/a.md", "intents/a.plan.md", "intents/sub/b.md")), entry)
 
 
 class Gate(Temp):
@@ -251,14 +250,16 @@ class Gate(Temp):
                 self.assertEqual(code, cc.FAIL, out)
 
     def test_the_plan_file_passes_and_the_intent_fails(self):
-        """boundary-of-a-run, check 9 (decision E10)."""
+        """boundary-of-a-run, check 9, and plan-tier, check 6 (decision D18 replaces E10)."""
         contract = self.closed()
-        code, out = self.gate(contract, "intents/core-state.plan.md", "src/core.py")
+        code, out = self.gate(contract, "plans/core-state.md", "src/core.py")
         self.assertEqual(code, cc.PASS, out)
-        code, out = self.gate(contract, "intents/core-state.plan.md", "intents/core-state.md")
-        self.assertEqual(code, cc.FAIL, out)
-        self.assertIn("intents/core-state.md: a run without a person", out)
-        self.assertNotIn("core-state.plan.md", out)
+        for path in ("intents/core-state.md", "intents/core-state.plan.md"):
+            with self.subTest(path=path):
+                code, out = self.gate(contract, "plans/core-state.md", path)
+                self.assertEqual(code, cc.FAIL, out)
+                self.assertIn(f"{path}: a run without a person", out)
+                self.assertNotIn("plans/core-state.md", out)
 
 
     SPECIAL = ("caf\u00e9.md", "a b.md", "a\nb.md", '"q".md', "a\\b.md")

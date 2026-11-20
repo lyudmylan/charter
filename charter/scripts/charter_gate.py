@@ -74,9 +74,10 @@ INTENT_PATH, INTENT_PLAN, INTENT_REMOVED = "path", "plan", "removed"   # removed
 STATE_OPEN = "open"
 CHECK_PASS = "pass"
 
-# The plan of a work item: next to its intent, accepted before the code.
+# The plan of a work item: `plans/<part>.md` for the intent `intents/<part>.md`, accepted before the code.
 FIELD_PLAN_BEFORE_CODE = "build.plan_before_code"
-INTENTS_DIR, INTENT_SUFFIX, PLAN_SUFFIX = cc.INTENTS_DIR, cc.INTENT_SUFFIX, cc.PLAN_SUFFIX
+INTENTS_DIR, PLANS_DIR = cc.INTENTS_DIR, cc.PLANS_DIR
+INTENT_SUFFIX, OLD_PLAN_SUFFIX = cc.INTENT_SUFFIX, cc.OLD_PLAN_SUFFIX
 
 # The review loop. A finding at the threshold or above keeps the loop open; the loop ends below it,
 # or when the rounds reach the limit. Then a person decides. Shadow mode: the loop blocks nothing yet.
@@ -144,7 +145,7 @@ MSG = {
     "review_closed": "review loop: {where}, highest open severity {severity}: the loop is closed",
     "plan_intents_only": "not needed, the change is the Plan phase (only files under {dir})",
     "plan_no_intent": "no linked issue names an intent (a line `Intent: {dir}<part>{suffix}` in the issue)",
-    "plan_missing": "{plan} is missing",
+    "plan_missing": "`{plan}` is missing. A plan at the old place, `{old}`, counts too.",
     "plan_ok": "{plan} exists",
     "plan_removed": "{intent} is removed by the change request, no plan needed",
     "boundary_closed": "{path}: a run without a person cannot change this path, a pattern of {field}. "
@@ -236,8 +237,15 @@ def _is_intent(value: object) -> bool:
 
 
 def plan_of(intent: str) -> str:
-    """The plan of an intent: `intents/<part>.plan.md` next to `intents/<part>.md`."""
-    return intent[:-len(INTENT_SUFFIX)] + PLAN_SUFFIX if intent.endswith(INTENT_SUFFIX) else intent + PLAN_SUFFIX
+    """The plan of an intent: `plans/<part>.md` for `intents/<part>.md`, also for a part with folders in it."""
+    part = intent[len(INTENTS_DIR):] if intent.startswith(INTENTS_DIR) else intent
+    return PLANS_DIR + (part if part.endswith(INTENT_SUFFIX) else part + INTENT_SUFFIX)
+
+
+def old_plan_of(intent: str) -> str:
+    """The old place of the plan of an intent: `intents/<part>.plan.md` next to `intents/<part>.md`."""
+    stem = intent[:-len(INTENT_SUFFIX)] if intent.endswith(INTENT_SUFFIX) else intent
+    return stem + OLD_PLAN_SUFFIX
 
 
 def effective(args) -> cc.Effective:
@@ -272,8 +280,7 @@ def changed_paths(text: str) -> tuple[list[str], bool]:
 
 def gate_boundary(changed: list[str], e: cc.Effective, lines: bool = True) -> GateResult:
     """The paths that a run changed, against boundary.no_write. A path is read without its dot segments.
-    A plan of a work item passes: the run is its author. In a list of lines, a line in the quotes of git
-    fails: its path cannot be read."""
+    In a list of lines, a line in the quotes of git fails: its path cannot be read."""
     closed = e.values.get(cc.FIELD_NO_WRITE, []) or []
     reasons: list[str] = []
     for line in changed:
@@ -282,7 +289,7 @@ def gate_boundary(changed: list[str], e: cc.Effective, lines: bool = True) -> Ga
             reasons.append(msg("boundary_quoted", line=line))
         elif line.startswith(cc.SEGMENT_SEPARATOR) or path == PARENT_SEGMENT or path.startswith(PARENT_SEGMENT + cc.SEGMENT_SEPARATOR):
             reasons.append(msg("boundary_outside", path=line))
-        elif not cc.is_plan(path) and cc.matches(path, closed):
+        elif cc.matches(path, closed):
             reasons.append(msg("boundary_closed", path=path, field=cc.FIELD_NO_WRITE))
     if reasons:
         return GateResult(CMD_BOUNDARY, False, reasons)
@@ -404,10 +411,11 @@ def gate_plan(facts: dict, e: cc.Effective) -> GateResult | None:
         return GateResult(CMD_PLAN, False, [msg("plan_no_intent", dir=INTENTS_DIR, suffix=INTENT_SUFFIX)])
     removed = [i[INTENT_PATH] for i in intents if i.get(INTENT_REMOVED)]
     kept = [i for i in intents if not i.get(INTENT_REMOVED)]
-    missing = [plan_of(i[INTENT_PATH]) for i in kept if not i[INTENT_PLAN]]
+    missing = [i[INTENT_PATH] for i in kept if not i[INTENT_PLAN]]
     present = [plan_of(i[INTENT_PATH]) for i in kept if i[INTENT_PLAN]]
     return GateResult(CMD_PLAN, not missing,
-                      [msg("plan_missing", plan=p) for p in missing] + [msg("plan_ok", plan=p) for p in present]
+                      [msg("plan_missing", plan=plan_of(i), old=old_plan_of(i)) for i in missing]
+                      + [msg("plan_ok", plan=p) for p in present]
                       + [msg("plan_removed", intent=i) for i in removed])
 
 

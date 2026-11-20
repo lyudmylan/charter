@@ -36,9 +36,10 @@ and checked in #92.
   fails when a path is under a pattern of `boundary.no_write`. The failure names the path and the field,
   and says what to do: a person makes this change, in its own change request. The gate reads a path with
   dot segments as the path it points to, and refuses a path that leaves the repo.
-- The plan of a work item, `intents/<part>.plan.md`: a run writes it, so the gate and the deny rules let
-  it pass also when `intents/**` is in `boundary.no_write`. Each other file under `intents/` stays refused.
-  This is decided here, because the gate needs the answer. How a person accepts the plan stays in #92.
+- The plan of a work item, `plans/<part>.md`: a run writes it, and it is under no pattern of
+  `boundary.no_write`, so it passes. Each file under `intents/` stays refused, a file
+  `intents/<part>.plan.md` among them. The intent `intents/plan-tier.md` (#65) moved the plan out of
+  `intents/`. How a person accepts the plan stays in #92.
 - Four decisions, in `docs/decisions.md`, section E:
   - A run holds no credential of the code host. A step that is a script pushes the branch and opens the
     change request, after the gate passed. So "a run never pushes to the main branch and never merges"
@@ -114,8 +115,9 @@ decision E4: the second decision above replaces it for a run.
    folder pattern, a deleted file, a rename from a path under a pattern, a rename to one, and a path that
    leaves the repo.
    test: `tests/test_boundary.py::Gate.test_the_forms_that_go_around_a_pattern_fail`
-9. With `intents/**` in `boundary.no_write`, the gate passes a changed `intents/<part>.plan.md` and fails
-   a changed `intents/<part>.md`; the deny rules of the settings make the same difference.
+9. With `intents/**` in `boundary.no_write`, the gate passes a changed `plans/<part>.md` and fails each
+   changed file under `intents/`, a file `intents/<part>.plan.md` among them; the deny rules of the
+   settings close `intents/**` as one folder. The place of the plan comes from `intents/plan-tier.md`.
    test: `tests/test_boundary.py::Gate.test_the_plan_file_passes_and_the_intent_fails`
    test: `tests/test_boundary.py::Settings.test_the_plan_file_is_not_denied`
 10. The contract that the setup step writes carries the default patterns, and in a repo that the setup

@@ -28,7 +28,7 @@ A manual check whose result the agent drafts, a reading of evidence, carries the
 agent, reviewed by an agent that is not the author, confirmed by <the role>`; the skill `evidence-review`
 runs that review. A person approves the intent through a change request; that merge is the approval, and
 the work starts after it. Each test cites the intent and the number of its check. Before the code: the
-agent writes the plan `intents/<part>.plan.md` (the steps, the files, the tests), then stops and asks the
+agent writes the plan `plans/<part>.md` (the steps, the files, the tests), then stops and asks the
 person who holds the work item to accept it, in the conversation; the code starts after the acceptance.
 
 ## Changes and closing

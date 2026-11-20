@@ -55,7 +55,7 @@ class ReviewIntents(unittest.TestCase):
 
     def test_paths_and_tools(self):
         """intent-reviewer, check 1."""
-        self.assertIn('paths: ["intents/**"]', self.text)
+        self.assertIn('paths: ["intents/**", "plans/**"]', self.text)
         self.assertIn("on:\n  pull_request:", self.text)
         self.assertNotIn("pull_request_target", self.text)
         tools = re.search(r'--allowedTools "([^"]+)"', self.text)
@@ -121,6 +121,17 @@ class ReviewIntents(unittest.TestCase):
                              "gh pr comment ${{ github.event.pull_request.number }} --body-file - <<'REPORT'",
                              "gh api -X PATCH repos/${{ github.repository }}/issues/comments/<id> -F body=@- <<'REPORT'"):
                     self.assertIn(part, prompt.group(1))
+
+
+class PlanPlace(unittest.TestCase):
+    def test_the_reviewer_runs_on_a_change_of_a_plan(self):
+        """plan-tier, check 5: in the template and in this repo."""
+        for name, path in (("this workflow", WORKFLOWS), ("the template", TEMPLATES)):
+            with self.subTest(file=name):
+                text = (path / "review-intents.yml").read_text()
+                self.assertIn('paths: ["intents/**", "plans/**"]', text)
+                prompt = re.search(r"prompt: \|\n((?:            .*\n)+)", text).group(1)
+                self.assertIn("git diff --name-only origin/${{ github.base_ref }}...HEAD -- intents/ plans/", prompt)
 
 
 class Verdict(unittest.TestCase):
