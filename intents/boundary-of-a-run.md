@@ -43,7 +43,9 @@ refuses the result of a run that crossed it, before anything is published.
   - The settings of a run are written from the contract at the start of each run. They are not a file of
     the repo. A file can differ from the contract, and a change request can change it. The documentation
     of Claude Code gives settings from the command line the precedence over the files of a repo, and a
-    sandbox that is set there ignores a file of the repo that loosens it.
+    sandbox that is set there ignores a file of the repo that loosens it. This replaces the conformance
+    check of decision E4 for a run: the settings cannot differ from the contract, and the workflow of
+    #92 checks that the run used them. The row E4 in the record says so.
   - For `boundary.no_write` there are two layers. The sandbox and the deny rules stop the agent
     (decision E5). The gate reads the result, whatever wrote it, and runs between the run and the push; a
     gate that fails or does not run publishes nothing. The gate is the layer for a writer that the
@@ -119,7 +121,8 @@ from it; the check that a run used them is in #92.
 11. The instruction template and the `AGENTS.md` of this repo carry the rule line with the identifier
     `boundary.no_write`.
     test: `tests/test_boundary.py::Defaults.test_the_instructions_carry_the_rule`
-12. The decision record holds the four decisions in section E, each with its reason.
+12. The decision record holds the four decisions in section E, each with its reason, and the row E4
+    names the decision that replaces its conformance check for a run.
     test: `tests/test_boundary.py::Defaults.test_the_decisions_are_recorded`
 13. The contract of this repo carries the section, and its contract checks pass.
     command: `python3 charter/scripts/charter_check.py all charter.toml`
