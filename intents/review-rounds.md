@@ -4,8 +4,8 @@ Work item: #61. Status: done. Approval: a person merges the change request that 
 
 ## Goal
 
-The count of the review rounds follows the reports of the reviewer, a new loop starts after a report
-with no finding at the threshold, and each report stays readable on the change request.
+The count of the review rounds follows the reports of the reviewer, and each report stays readable on
+the change request.
 
 ## In scope
 
@@ -24,7 +24,8 @@ with no finding at the threshold, and each report stays readable on the change r
   current loop. A report without a severity line counts as open. The line of the verdict and its three
   states stay as they are: open, closed, or at the limit.
 - A facts file without `review_reports`, from an older collector, is read as before, by `review_rounds`.
-- The evidence record holds the reports and the round.
+- The evidence record holds the reports, their number under `review_rounds`, as the fact does, and the
+  round of the current loop under its own name, `review_round`.
 - The skill `review-loop`: the author reads the newest report; right after a push the checks are not
   listed yet, so the skill says to ask again; and the author reads the evidence record only after the
   verdict that follows the run of the reviewer, which the time in the record shows.
@@ -66,7 +67,8 @@ changes no verdict in this version. The reviewer of the code: #95; it takes this
    grow. The step is run with a fake of the code host for both results.
    test: `tests/test_workflows.py::ReviewRounds.test_the_reviewer_posts_a_new_comment_and_updates_none`
    test: `tests/test_workflows.py::ReviewRounds.test_the_run_fails_when_no_report_was_added`
-7. The evidence record holds the reports and the round.
+7. The evidence record holds the reports, their number, and the round of the current loop under
+   `review_round`.
    test: `tests/test_charter_gate.py::ReviewRounds.test_the_record_holds_the_reports_and_the_round`
 8. The skill `review-loop` names the newest report, the wait after a push, and the verdict that follows
    the reviewer. The template of an intent names no file of one language in its test line.

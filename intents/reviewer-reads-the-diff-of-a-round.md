@@ -23,7 +23,7 @@ what changed since the report before it, from the diff of the commits.
   of the two folders changed. The findings of the round start from that diff.
 - The skill `intent-review` holds the two rules and the place of the section in the report. The workflow
   `review-intents`, in the template and in this repo, gives the command and allows it.
-- Both manifests: the version of the change request that carries this intent.
+- Both manifests: the version of #61 (see `intents/review-rounds.md`).
 
 ## Out of scope
 

@@ -65,7 +65,7 @@ FACT_CHECKS = "checks"                      # {"tests": "pass"}
 FACT_FALSE_FAILURES = "false_failures"    # optional: [{"gate": "documents", "reason": "..."}], recorded by a person
 FACT_DROPPED_FINDINGS = "dropped_findings"   # optional: ["reason"], the findings of the reviewer that the author dropped
 FACT_FALSE_FINDINGS = "false_findings"       # optional: ["reason"], the findings of the reviewer that the leader marked as false
-FACT_REVIEW_ROUNDS = "review_rounds"         # optional: whole number, the reports of the reviewer; an older collector counted its runs
+FACT_REVIEW_ROUNDS = "review_rounds"         # optional: whole number, the number of the reports of the reviewer; an older collector counted its runs
 FACT_REVIEW_REPORTS = "review_reports"       # optional: [severity or null], the severity line of each report, oldest first
 FACT_REVIEW_SEVERITY = "review_highest_severity"   # optional: the last reported severity, or null before the first report
 FACT_INTENTS = "intents"                     # optional: [{"path": "intents/x.md", "plan": true, "removed": false}], from the linked issues
@@ -111,7 +111,8 @@ ARG_RECORD, ARG_SCRIPTS_VERSION = "record", "scripts_version"
 # The evidence record: the verdict, plus these fields.
 RECORD_FORM = 1
 RECORD_KEYS = ("record_form", "change_request", "time", "scripts_version", "false_failures", "dropped_findings", "false_findings",
-               FACT_REVIEW_ROUNDS, FACT_REVIEW_SEVERITY, FACT_INTENTS, FACT_REVIEW_REPORTS)
+               FACT_REVIEW_ROUNDS, FACT_REVIEW_SEVERITY, FACT_INTENTS, FACT_REVIEW_REPORTS, "review_round")
+RECORD_REVIEW_ROUND = RECORD_KEYS[11]        # the round of the current loop; `review_rounds` is the number of all reports
 
 MSG = {
     "facts_not_json": "not JSON: {path}, {error}",
@@ -473,7 +474,7 @@ def gate_verdict(facts: dict, e: cc.Effective) -> tuple[bool, list[str], dict]:
 
     tier, spec = tier_of(facts[FACT_CHANGED_FILES], e)
     detail: dict = {JSON_KEY_TIER: tier, JSON_KEY_APPROVER: spec.get(TIER_APPROVER), JSON_KEY_MERGES: [],
-                    FACT_REVIEW_ROUNDS: review_round(facts, e)}
+                    RECORD_REVIEW_ROUND: review_round(facts, e)}
     if tier is None:
         passed = False
         reasons.append(msg("no_tier"))
@@ -549,10 +550,11 @@ def build_record(facts: dict, verdict: str, origin: str, reasons: list[str], det
         RECORD_KEYS[4]: facts.get(FACT_FALSE_FAILURES, []),
         RECORD_KEYS[5]: facts.get(FACT_DROPPED_FINDINGS, []),
         RECORD_KEYS[6]: facts.get(FACT_FALSE_FINDINGS, []),
-        RECORD_KEYS[7]: detail.get(FACT_REVIEW_ROUNDS, facts.get(FACT_REVIEW_ROUNDS, 0)),
+        RECORD_KEYS[7]: facts.get(FACT_REVIEW_ROUNDS, 0),
         RECORD_KEYS[8]: facts.get(FACT_REVIEW_SEVERITY),
         RECORD_KEYS[9]: facts.get(FACT_INTENTS, []),
         RECORD_KEYS[10]: facts.get(FACT_REVIEW_REPORTS, []),
+        RECORD_REVIEW_ROUND: detail.get(RECORD_REVIEW_ROUND, 0),
     }
 
 

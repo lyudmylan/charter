@@ -256,7 +256,8 @@ else does not count. The check "verdict" keeps the short text.
 | `false_failures` | What a person recorded with a line `False failure: <gate>: <reason>` in the change request |
 | `dropped_findings` | The findings of the intent reviewer that the author dropped, from lines `Dropped finding: <reason>` |
 | `false_findings` | The findings of the intent reviewer that the leader marked as false, from lines `False finding: <reason>` |
-| `review_rounds`, `review_highest_severity` | The round of the current review loop (0 before the first report), and the severity line of the newest report (`null` before the first, or when the report has no such line) |
+| `review_rounds`, `review_highest_severity` | The number of the reports of the intent reviewer (0 before the first), and the severity line of the newest report (`null` before the first, or when the report has no such line) |
+| `review_round` | The round of the current review loop: the reports since the loop started (0 before the first report) |
 | `review_reports` | The severity line of each report of the intent reviewer, oldest first (`null` for a report without the line) |
 | `intents` | The intents that the linked issues name, each with whether its plan exists and whether the change request removes or renames it away |
 

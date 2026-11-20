@@ -529,7 +529,8 @@ class ReviewRounds(Temp):
         self.assertEqual(code, cc.PASS, out)
         data = json.loads(record.read_text())
         self.assertEqual(data[cg.FACT_REVIEW_REPORTS], reports)
-        self.assertEqual(data[cg.FACT_REVIEW_ROUNDS], 2)
+        self.assertEqual(data[cg.FACT_REVIEW_ROUNDS], 4)
+        self.assertEqual(data[cg.RECORD_REVIEW_ROUND], 2)
         self.assertEqual(data[cg.FACT_REVIEW_SEVERITY], "medium")
 
     def test_the_contract_document_says_what_a_round_is(self):
