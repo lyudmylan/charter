@@ -140,7 +140,7 @@ class Templates(Temp):
     def test_workflow_templates_fetch_charter_at_the_version(self):
         """charter-version-in-ci, check 2."""
         self.assertEqual(self.setup()[0], cc.PASS)
-        for name in ("tests.yml", "verdict.yml", "review-intents.yml"):
+        for name in ("tests.yml", "verdict.yml", "review-intents.yml", "review-code.yml"):
             text = (self.dir / cs.WORKFLOWS / name).read_text()
             with self.subTest(workflow=name):
                 self.assertIn('tomllib.load(open("charter.toml", "rb"))["charter"]["version"]', text)
@@ -155,12 +155,12 @@ class Templates(Temp):
         """setup-step, check 6 (#58): GitHub refuses the `runner` context in a job-level env; the file then
         does not parse, and the run has no job and no log."""
         self.assertEqual(self.setup()[0], cc.PASS)
-        for name in ("tests.yml", "verdict.yml", "review-intents.yml"):
+        for name in ("tests.yml", "verdict.yml", "review-intents.yml", "review-code.yml"):
             text = (self.dir / cs.WORKFLOWS / name).read_text()
             with self.subTest(workflow=name):
                 self.assertIsNone(re.search(r"^    env:\n(?:      .*\n)*?      \w+: \$\{\{ runner\.", text, re.M),
                                   "a job-level env uses the runner context")
-                self.assertIn('>> "$GITHUB_ENV"', text) if name != "review-intents.yml" else None
+                self.assertIn('>> "$GITHUB_ENV"', text) if name not in ("review-intents.yml", "review-code.yml") else None
 
     def test_verdict_template_declares_actions_read(self):
         """setup-step, check 7 (#63): the facts step lists the runs of the review workflow to count the
@@ -334,6 +334,26 @@ class ReviewRounds(unittest.TestCase):
         for language in (".py", ".ts", ".js", ".go", ".rb", "::"):
             with self.subTest(language=language):
                 self.assertNotIn(language, " ".join(test_lines))
+
+
+class CodeReviewer(unittest.TestCase):
+    def test_the_instructions_and_the_product_document_name_the_reviewer(self):
+        """code-reviewer, check 12: the instruction template and the instructions of this repo name the reviewer of
+        the code with its rule, and the Test row of the lifecycle map names it."""
+        for path in (ROOT / "charter" / "templates" / cs.INSTRUCTIONS_FILE, ROOT / cs.INSTRUCTIONS_FILE):
+            with self.subTest(file=str(path.relative_to(ROOT))):
+                section = " ".join(path.read_text().split("## Review and limits", 1)[1].split())
+                self.assertIn("The reviewer of the code, the workflow `review-code`", section)
+                self.assertIn("with the skill `change-review`", section)
+                self.assertIn("[review.code_blocks]", section)
+        row = re.search(r"^\| Test \| (.*)$", (ROOT / "docs" / "product.md").read_text(), re.M)
+        self.assertIsNotNone(row, "no Test row")
+        self.assertIn("An agent that is not the author reviews the code.", row.group(1))
+        for name in ("charter.toml", "charter/templates/charter.toml"):
+            with self.subTest(contract=name):
+                table = (ROOT / name).read_text().split("\n[review]\n", 1)[1].split("\n[", 1)[0]
+                self.assertIn("\ncode_blocks = false\n", "\n" + table + "\n")
+
 
 if __name__ == "__main__":
     unittest.main()

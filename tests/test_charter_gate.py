@@ -550,5 +550,147 @@ class ReviewRounds(Temp):
         self.assertGreaterEqual(tuple(int(part) for part in versions[0].split(".")), (0, 3, 9))
 
 
+class CodeReview(Temp):
+    """The sample repo: review_loop 3, threshold medium. The facts change `src/app.py`, a file of code."""
+    HEAD, OLDER = "1111111111111111111111111111111111111111", "2222222222222222222222222222222222222222"
+
+    def contract(self, blocks: bool | None) -> list[str]:
+        """The sample contract, with `review.code_blocks` set to the value, or without the field for None."""
+        text = REPO.read_text()
+        if blocks is not None:
+            text = text.replace('[review]\nthreshold = "medium"\n',
+                                f'[review]\nthreshold = "medium"\ncode_blocks = {str(blocks).lower()}\n')
+        path = self.dir / "repo-code.toml"
+        path.write_text(text)
+        return [f"--{cc.ARG_CONTRACT}", str(path), f"--{cc.ARG_SOURCE}", str(ORG)]
+
+    def reviewed(self, reports: list, commit: str | None = HEAD) -> dict:
+        return {cg.FACT_CODE_REVIEW_REPORTS: reports, cg.FACT_CODE_REVIEW_COMMIT: commit, cg.FACT_HEAD_COMMIT: self.HEAD}
+
+    def verdict(self, blocks: bool | None, **changes) -> tuple[int, str]:
+        return run(cg.CMD_VERDICT, f"--{cg.ARG_FACTS}", str(self.facts(**changes)), *self.contract(blocks))
+
+    def test_the_field_is_in_the_schema_and_in_the_contract_document(self):
+        """code-reviewer, check 6."""
+        fields = cc.load_schema(cc.DEFAULT_SCHEMA)
+        self.assertEqual(fields[cg.FIELD_CODE_BLOCKS][cc.ATTR_KIND], "flag")
+        self.assertIn(f"| `{cg.FIELD_CODE_BLOCKS}` | flag |", (ROOT / "docs" / "contract.md").read_text())
+        code, out = self.verdict(True, **self.reviewed(["low"]))
+        self.assertEqual(code, cc.PASS, out)
+
+    def test_the_shadow_period_blocks_nothing(self):
+        """code-reviewer, check 7: without the field, and with false."""
+        for blocks in (None, False):
+            for changes in (self.reviewed(["high"]), self.reviewed(["medium", "blocker"]), self.reviewed([]), {}):
+                with self.subTest(blocks=blocks, changes=changes):
+                    code, out = self.verdict(blocks, **changes)
+                    self.assertEqual(code, cc.PASS, out)
+                    self.assertIn("code review: ", out)
+                    self.assertIn("the code review blocks nothing", out)
+        code, out = self.verdict(None, **self.reviewed(["high"]))
+        self.assertIn("code review: round 1 of 3, highest open severity high: a finding at medium or above keeps the loop open", out)
+
+    def test_an_open_finding_at_the_threshold_blocks(self):
+        """code-reviewer, check 8."""
+        for severity in ("medium", "high", "blocker"):
+            with self.subTest(severity=severity):
+                code, out = self.verdict(True, **self.reviewed([severity]))
+                self.assertEqual(code, cc.FAIL, out)
+                self.assertTrue(out.startswith(cg.VERDICT_NOT_READY + "\n"))
+                self.assertIn(f"code review: round 1 of 3, highest open severity {severity}: a finding at medium", out)
+        code, out = self.verdict(True, **self.reviewed(["low", None]))
+        self.assertEqual(code, cc.FAIL, out)
+        self.assertIn("code review: round 1 of 3, no severity line in the report", out)
+
+    def test_a_change_of_code_without_a_report_blocks(self):
+        """code-reviewer, check 8: no report yet, and facts without the code review."""
+        code, out = self.verdict(True, **self.reviewed([], None))
+        self.assertEqual(code, cc.FAIL, out)
+        self.assertIn("code review: no review yet", out)
+        code, out = self.verdict(True)
+        self.assertEqual(code, cc.FAIL, out)
+        self.assertIn("code review: the facts hold no code review", out)
+
+    def test_a_finding_below_the_threshold_does_not_block(self):
+        """code-reviewer, check 8."""
+        for reports in (["low"], ["none"], ["high", "medium", "low"]):
+            with self.subTest(reports=reports):
+                code, out = self.verdict(True, **self.reviewed(reports))
+                self.assertEqual(code, cc.PASS, out)
+                self.assertIn(f"highest open severity {reports[-1]}: the loop is closed", out)
+                self.assertNotIn("blocks nothing", out)
+
+    def test_the_limit_of_the_rounds_goes_to_a_person(self):
+        """code-reviewer, check 8: with the flag the verdict stays not ready; without it, the line says the same and blocks nothing."""
+        code, out = self.verdict(True, **self.reviewed(["high", "medium", "high"]))
+        self.assertEqual(code, cc.FAIL, out)
+        self.assertIn("code review: round 3 of 3, highest open severity high: the limit is reached, a person decides", out)
+        code, out = self.verdict(False, **self.reviewed(["high", "medium", "high"]))
+        self.assertEqual(code, cc.PASS, out)
+        self.assertIn("the limit is reached, a person decides", out)
+
+    def test_a_change_of_intents_alone_needs_no_code_review(self):
+        """code-reviewer, check 9: with the flag too, and with no facts of the code review."""
+        for files in (["intents/app.md"], ["intents/app.md", "plans/app.md"], ["plans/sub/app.md"]):
+            with self.subTest(files=files):
+                code, out = self.verdict(True, **{cg.FACT_CHANGED_FILES: files})
+                self.assertEqual(code, cc.PASS, out)
+                self.assertIn(cg.msg("code_review_not_needed", intents=cg.INTENTS_DIR, plans=cg.PLANS_DIR), out)
+        self.assertTrue(cg.is_code("docs/intents/x.md"))
+        self.assertFalse(cg.is_code("plans/app.md"))
+
+    def test_the_record_holds_the_code_review(self):
+        """code-reviewer, check 10."""
+        reports = ["high", "low", "medium"]
+        record = self.dir / "record.json"
+        facts = self.facts(**self.reviewed(reports), **{cg.FACT_REVIEW_REPORTS: ["low"]})
+        code, out = run(cg.CMD_VERDICT, f"--{cg.ARG_FACTS}", str(facts), *self.contract(None), f"--{cg.ARG_RECORD}", str(record))
+        self.assertEqual(code, cc.PASS, out)
+        data = json.loads(record.read_text())
+        self.assertEqual(data[cg.FACT_CODE_REVIEW_REPORTS], reports)
+        self.assertEqual(data[cg.CODE_REVIEW_ROUNDS], 1)
+        self.assertEqual(data[cg.CODE_REVIEW_SEVERITY], "medium")
+        self.assertEqual(data[cg.FACT_REVIEW_REPORTS], ["low"])
+        for key in (cg.FACT_CODE_REVIEW_REPORTS, cg.CODE_REVIEW_ROUNDS, cg.CODE_REVIEW_SEVERITY):
+            self.assertIn(key, cg.RECORD_KEYS)
+
+    def test_both_manifests_name_the_version(self):
+        """code-reviewer, check 13."""
+        versions = [json.loads((ROOT / plugin / ".claude-plugin" / "plugin.json").read_text())["version"]
+                    for plugin in ("charter", "charter-practices")]
+        self.assertEqual(versions[0], versions[1])
+        self.assertGreaterEqual(tuple(int(part) for part in versions[0].split(".")), (0, 3, 10))
+
+    def test_a_report_of_an_older_commit_blocks(self):
+        """code-reviewer, check 14: a push after the last report is not reviewed yet, also after a closed loop."""
+        for commit in (self.OLDER, None):
+            with self.subTest(commit=commit):
+                code, out = self.verdict(True, **self.reviewed(["low"], commit))
+                self.assertEqual(code, cc.FAIL, out)
+                self.assertIn(f"not the head commit {self.HEAD}: a push after the last report is not reviewed yet", out)
+        code, out = self.verdict(False, **self.reviewed(["low"], self.OLDER))
+        self.assertEqual(code, cc.PASS, out)
+
+    def test_the_tier_command_prints_the_tier_and_the_depth(self):
+        """code-reviewer, check 15: a list with NUL between the paths and a list of lines, with the source and
+        with --repo-only; no tier fails."""
+        changed = self.dir / "changed"
+        cases = (("scripts/x.py\0README.md\0", ["high", "deep"]), ("README.md\n", ["low", "light"]),
+                 ("docs/a b.md\0src/app.py\0", ["low", "light"]))
+        for text, expected in cases:
+            for extra in (self.contract(None), [f"--{cc.ARG_CONTRACT}", str(REPO), "--repo-only"]):
+                with self.subTest(text=text, repo_only="--repo-only" in extra):
+                    changed.write_text(text)
+                    code, out = run(cg.CMD_TIER, *extra, f"--{cg.ARG_CHANGED}", str(changed))
+                    self.assertEqual(code, cc.PASS, out)
+                    self.assertEqual(out.splitlines(), expected)
+        narrow = self.dir / "narrow.toml"
+        narrow.write_text(REPO.read_text().replace('paths = ["**"]', 'paths = ["src/**"]'))
+        changed.write_text("README.md\n")
+        code, out = run(cg.CMD_TIER, f"--{cc.ARG_CONTRACT}", str(narrow), "--repo-only", f"--{cg.ARG_CHANGED}", str(changed))
+        self.assertEqual(code, cc.FAIL, out)
+        self.assertIn(cg.msg("no_tier"), out)
+
+
 if __name__ == "__main__":
     unittest.main()

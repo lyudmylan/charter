@@ -45,6 +45,8 @@ refusals = 3
 # The review loop: a finding at this severity or above keeps the loop open.
 [review]
 threshold = "medium"
+# The reviewer of the code is in its shadow period: its open findings block nothing yet.
+code_blocks = false
 
 # The Build phase: each work item has its plan, plans/<part>.md, before the code.
 [build]

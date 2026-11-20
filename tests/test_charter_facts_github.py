@@ -273,5 +273,50 @@ class PlanPlace(unittest.TestCase):
                          [{cg.INTENT_PATH: "intents/app.md", cg.INTENT_PLAN: False, cg.INTENT_REMOVED: False}])
 
 
+class CodeReview(unittest.TestCase):
+    bot = {cf.COMMENT_USER: {cf.USER_LOGIN: cf.RECORD_AUTHOR}}
+
+    def report(self, marker: str, commit: str, line: str) -> dict:
+        return {**self.bot, cf.COMMENT_BODY: f"{marker}\nCommit: {commit}\n\n| item | finding |\n{line}\n"}
+
+    def test_each_report_gives_its_severity_in_order(self):
+        """code-reviewer, check 5: the severity of each report, oldest first, and the commit of the newest."""
+        person = {cf.COMMENT_USER: {cf.USER_LOGIN: "alice"},
+                  cf.COMMENT_BODY: f"{cf.CODE_REVIEW_MARKER}\nCommit: fff\nHighest open severity: blocker\n"}
+        comments = [self.report(cf.CODE_REVIEW_MARKER, "aaa", "Highest open severity: High"), person,
+                    self.report(cf.CODE_REVIEW_MARKER, "bbb", "no line"),
+                    self.report(cf.CODE_REVIEW_MARKER, "ccc", "Highest open severity: low")]
+        self.assertEqual(cf.review_reports(comments, cf.RECORD_AUTHOR, cf.CODE_REVIEW_MARKER), ["high", None, "low"])
+        self.assertEqual(cf.report_commit(comments, cf.RECORD_AUTHOR, cf.CODE_REVIEW_MARKER), "ccc")
+        self.assertIsNone(cf.report_commit([person], cf.RECORD_AUTHOR, cf.CODE_REVIEW_MARKER))
+        pr = {cf.PR_NUMBER: 7, cf.PR_TITLE: "t", cf.PR_BODY: ""}
+        facts = cf.build_facts(pr, [], {}, 0, {}, code_review=["high", None, "low"], code_commit="ccc", head="ccc")
+        self.assertEqual((facts[cg.FACT_CODE_REVIEW_REPORTS], facts[cg.FACT_CODE_REVIEW_COMMIT], facts[cg.FACT_HEAD_COMMIT]),
+                         (["high", None, "low"], "ccc", "ccc"))
+        self.assertNotIn(cg.FACT_CODE_REVIEW_REPORTS, cf.build_facts(pr, [], {}, 0, {}))
+
+    def test_the_two_reviews_stay_apart(self):
+        """code-reviewer, check 5: one list of comments holds the reports of both reviewers."""
+        comments = [self.report(cf.REVIEW_MARKER, "aaa", "Highest open severity: blocker"),
+                    self.report(cf.CODE_REVIEW_MARKER, "bbb", "Highest open severity: medium"),
+                    self.report(cf.REVIEW_MARKER, "ccc", "Highest open severity: none")]
+
+        class Host(FakeHost):
+            def pages(self, path: str) -> list:
+                return comments if path.endswith("/comments") else super().pages(path)
+
+        facts = cf.collect(FakeHost.REPO, FakeHost.NUMBER, {}, [], Host(set()), review_workflow="review-intents.yml",
+                           code_review_workflow="review-code.yml")
+        self.assertEqual(facts[cg.FACT_REVIEW_REPORTS], ["blocker", "none"])
+        self.assertEqual(facts[cg.FACT_CODE_REVIEW_REPORTS], ["medium"])
+        self.assertEqual(facts[cg.FACT_CODE_REVIEW_COMMIT], "bbb")
+        self.assertEqual(facts[cg.FACT_HEAD_COMMIT], FakeHost.COMMIT)
+        only_intents = cf.collect(FakeHost.REPO, FakeHost.NUMBER, {}, [], Host(set()), review_workflow="review-intents.yml")
+        self.assertNotIn(cg.FACT_CODE_REVIEW_REPORTS, only_intents)
+        only_code = cf.collect(FakeHost.REPO, FakeHost.NUMBER, {}, [], Host(set()), code_review_workflow="review-code.yml")
+        self.assertNotIn(cg.FACT_REVIEW_REPORTS, only_code)
+        self.assertEqual(only_code[cg.FACT_CODE_REVIEW_REPORTS], ["medium"])
+
+
 if __name__ == "__main__":
     unittest.main()

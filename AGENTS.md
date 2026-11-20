@@ -55,3 +55,6 @@ sequence. [limits.acceptance_loop] [limits.review_loop] [limits.refusals]
 The intent reviewer gives each finding a severity. A finding at the threshold (medium) or above keeps the
 author-reviewer loop open; below it, or at the limit, the loop ends and a person decides. The author side
 is the skill `review-loop`. [review.threshold] [limits.review_loop]
+The reviewer of the code, the workflow `review-code`, reviews each change of a file outside `intents/` and
+`plans/` with the skill `change-review`, under the same loop; while the contract leaves the flag false,
+its findings block nothing. [review.code_blocks]

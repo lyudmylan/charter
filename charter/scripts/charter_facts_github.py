@@ -14,6 +14,8 @@ Commands:
           [--check-run name]...                         A check read from the check runs of the head commit.
           [--review-workflow FILE]                      The repo has this reviewer workflow: read the severity line
                                                         of each report of the reviewer on the change request.
+          [--code-review-workflow FILE]                 The repo has this reviewer of the code: read the severity
+                                                        line of each of its reports, and the commit of the newest.
 
 The token comes from the environment variable GITHUB_TOKEN. The workflow of GitHub sets it.
 
@@ -83,6 +85,9 @@ ISSUE_BODY = "body"
 # A report of the intent reviewer: a comment by the workflow account, with the marker of the skill. Each run
 # posts a new comment, so each report stays on the change request.
 REVIEW_MARKER = "<!-- charter-intent-review -->"
+# A report of the reviewer of the code: the same form, with its own marker, so that the two reviews stay apart.
+CODE_REVIEW_MARKER = "<!-- charter-code-review -->"
+COMMIT_LINE = re.compile(r"^Commit:\s*([0-9a-fA-F]+)\s*$", re.MULTILINE)
 SEVERITY_LINE = re.compile(r"^Highest open severity:\s*(" + "|".join(cg.SEVERITIES) + r")\b", re.IGNORECASE | re.MULTILINE)
 
 # The record comment on a change request.
@@ -186,16 +191,27 @@ def highest_severity(comments: list[dict], author: str) -> str | None:
     return None
 
 
-def review_reports(comments: list[dict], author: str) -> list[str | None]:
-    """The severity line of each report of the reviewer, oldest first, as the API lists the comments. A report
+def review_reports(comments: list[dict], author: str, marker: str = REVIEW_MARKER) -> list[str | None]:
+    """The severity line of each report with the marker, oldest first, as the API lists the comments. A report
     without the line gives None for its place. A comment of another author is no report."""
     out: list[str | None] = []
     for comment in comments:
         body = comment.get(COMMENT_BODY) or ""
-        if (comment.get(COMMENT_USER) or {}).get(USER_LOGIN) == author and REVIEW_MARKER in body:
+        if (comment.get(COMMENT_USER) or {}).get(USER_LOGIN) == author and marker in body:
             match = SEVERITY_LINE.search(body)
             out.append(match.group(1).lower() if match else None)
     return out
+
+
+def report_commit(comments: list[dict], author: str, marker: str) -> str | None:
+    """The line `Commit:` of the newest report with the marker; None before the first report, or when the
+    newest report has no such line."""
+    for comment in reversed(comments):
+        body = comment.get(COMMENT_BODY) or ""
+        if (comment.get(COMMENT_USER) or {}).get(USER_LOGIN) == author and marker in body:
+            match = COMMIT_LINE.search(body)
+            return match.group(1).lower() if match else None
+    return None
 
 
 def comment_body(record: dict) -> str:
@@ -253,12 +269,17 @@ def conclusions(runs: list[dict], names: list[str]) -> dict[str, str | None]:
 
 def build_facts(pr: dict, files: list[dict], issues: dict[int, dict | None], unresolved: int,
                 checks: dict[str, str | None], review: list[str | None] | None = None,
-                plans: dict[str, bool] | None = None, removed: set[str] | None = None) -> dict:
+                plans: dict[str, bool] | None = None, removed: set[str] | None = None,
+                code_review: list[str | None] | None = None, code_commit: str | None = None,
+                head: str | None = None) -> dict:
     """The facts file, from the API data. Numbers that are not issues are left out. The review loop
     facts are written only when the caller named a reviewer workflow: `review` holds the severity line of each
     report, oldest first; the round count and the newest severity come from it. `plans` says, for each intent that
     a linked issue names, whether its plan exists at the commit; `removed` holds the paths that the change
-    request removes or renames away, and an intent among them is marked, so that the gate asks no plan for it."""
+    request removes or renames away, and an intent among them is marked, so that the gate asks no plan for it.
+    The facts of the code review are written only when the caller named the reviewer of the code: `code_review`
+    holds the severity line of each of its reports, oldest first, and `code_commit` the commit of the newest.
+    `head` is the commit that the facts describe."""
     linked = [
         {cg.ISSUE_NUMBER: number, cg.ISSUE_STATE: issue[ISSUE_STATE]}
         for number, issue in issues.items()
@@ -267,6 +288,7 @@ def build_facts(pr: dict, files: list[dict], issues: dict[int, dict | None], unr
     text = f"{pr.get(PR_TITLE) or ''}\n{pr.get(PR_BODY) or ''}"
     loop = {} if review is None else {cg.FACT_REVIEW_REPORTS: review, cg.FACT_REVIEW_ROUNDS: len(review),
                                       cg.FACT_REVIEW_SEVERITY: review[-1] if review else None}
+    code = {} if code_review is None else {cg.FACT_CODE_REVIEW_REPORTS: code_review, cg.FACT_CODE_REVIEW_COMMIT: code_commit}
     return {
         cg.FACT_CHANGE_REQUEST: pr[PR_NUMBER],
         cg.FACT_LINKED_ISSUES: linked,
@@ -279,7 +301,9 @@ def build_facts(pr: dict, files: list[dict], issues: dict[int, dict | None], unr
         cg.FACT_FALSE_FINDINGS: finding_lines(text)[1],
         cg.FACT_INTENTS: [{cg.INTENT_PATH: path, cg.INTENT_PLAN: bool(exists), cg.INTENT_REMOVED: path in (removed or set())}
                           for path, exists in (plans or {}).items()],
+        cg.FACT_HEAD_COMMIT: head,
         **loop,
+        **code,
     }
 
 
@@ -359,7 +383,8 @@ def find(repo: str, github: GitHub, number: int | None, sha: str | None) -> tupl
 
 
 def collect(repo: str, number: int, given: dict[str, str], run_names: list[str], github: GitHub,
-            sha: str | None = None, review_workflow: str | None = None, author: str = RECORD_AUTHOR) -> dict:
+            sha: str | None = None, review_workflow: str | None = None, author: str = RECORD_AUTHOR,
+            code_review_workflow: str | None = None) -> dict:
     """The facts of a change request. With a commit, the files and the check runs are those of that commit,
     so that they agree with the check that is published on it."""
     owner, name = repo.split("/", 1)
@@ -376,14 +401,20 @@ def collect(repo: str, number: int, given: dict[str, str], run_names: list[str],
     if run_names:
         runs = github.get(f"/repos/{repo}/commits/{commit}/check-runs?per_page={PAGE_SIZE}")
         checks.update(conclusions(runs.get(RUNS, []), run_names))
-    review = None
-    if review_workflow:
-        review = review_reports(github.pages(f"/repos/{repo}/issues/{number}/comments"), author)
+    review, code_review, code_commit = None, None, None
+    if review_workflow or code_review_workflow:
+        comments = github.pages(f"/repos/{repo}/issues/{number}/comments")
+        if review_workflow:
+            review = review_reports(comments, author)
+        if code_review_workflow:
+            code_review = review_reports(comments, author, CODE_REVIEW_MARKER)
+            code_commit = report_commit(comments, author, CODE_REVIEW_MARKER)
     # The plan exists at `plans/<part>.md`, or at the old place `intents/<part>.plan.md`.
     plans = {intent: any(github.get(f"/repos/{repo}/contents/{place(intent)}?ref={commit}", optional=True) is not None
                          for place in (cg.plan_of, cg.old_plan_of))
              for intent in intent_paths(issues)}
-    return build_facts(pr, files, issues, unresolved, checks, review, plans, removed_paths(files))
+    return build_facts(pr, files, issues, unresolved, checks, review, plans, removed_paths(files),
+                       code_review, code_commit, commit)
 
 
 def put_record(repo: str, number: int, record: dict, github: GitHub, author: str) -> str:
@@ -456,6 +487,7 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--check-run", action="append", default=[], help="name of a check run to read")
     p.add_argument("--sha", help="the commit that the facts describe; default: the current head")
     p.add_argument("--review-workflow", help="the file name of the reviewer workflow: the repo has a reviewer")
+    p.add_argument("--code-review-workflow", help="the file name of the workflow of the reviewer of the code")
     p.add_argument("--author", default=RECORD_AUTHOR, help="the account whose comment carries the review")
     p.add_argument("--out", type=Path, required=True)
     args = parser.parse_args(argv)
@@ -484,7 +516,7 @@ def main(argv: list[str] | None = None) -> int:
                           false=len(record.get(cg.RECORD_KEYS[4]) or [])))
             return cc.PASS
         facts = collect(args.repo, args.pr, parse_checks(args.check), args.check_run, github, args.sha,
-                        args.review_workflow, args.author)
+                        args.review_workflow, args.author, args.code_review_workflow)
         args.out.write_text(json.dumps(facts, indent=2))
         print(msg("written", path=args.out, files=len(facts[cg.FACT_CHANGED_FILES]),
                   issues=len(facts[cg.FACT_LINKED_ISSUES]), threads=facts[cg.FACT_UNRESOLVED_THREADS],

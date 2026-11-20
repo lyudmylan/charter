@@ -71,6 +71,10 @@ kind = "choice"
 order = ["blocker", "high", "medium", "low"]
 note = "The lowest severity of a finding that keeps the review loop open. Below it, the loop ends."
 
+[fields."review.code_blocks"]
+kind = "flag"
+note = "An open finding of the reviewer of the code makes the change request not ready. Without it, or with false, the reviewer of the code is in its shadow period: the verdict prints its state and blocks nothing."
+
 # --- The Build phase ---
 
 [fields."build.plan_before_code"]

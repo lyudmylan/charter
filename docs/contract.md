@@ -45,6 +45,7 @@ any of its patterns. The `instructions` and `text` commands read this from the s
 | `limits.review_loop` | limit | Rounds between author and reviewer before a person decides |
 | `limits.refusals` | limit | Refusals in sequence before the agent stops |
 | `review.threshold` | choice | `blocker`, `high`, `medium`, or `low`: the lowest severity of a finding that keeps the review loop open. Without a value: `medium` |
+| `review.code_blocks` | flag | An open finding of the reviewer of the code makes the change request not ready. Without it, or with `false`: the shadow period, the verdict prints the state of the code review and blocks nothing. Needs the version 0.3.10 of the core |
 | `build.plan_before_code` | flag | Each work item has its plan, `plans/<part>.md`, before the code; the verdict checks that it exists |
 | `tiers.<tier>.paths` | set | Path patterns of the files in the tier |
 | `tiers.<tier>.review` | choice | `light` or `deep` |
@@ -192,8 +193,8 @@ Two workflows run on each change request of this repo. They and the collecting s
 | `tests` | Runs the code of the change request. It gets no secret. | Runs the quality checks of the contract with `--repo-only`. |
 | `verdict` | Runs from the main branch, with the scripts of the main branch. It never runs the code of the change request. | Reads the files of the change request as data, fetches the organization source from the address in main, runs the contract checks on those files with the schema of the change request (a data file, so that a change request can add a field and use it), collects the facts, runs the verdict, and publishes the check "verdict" on the change request, also when the verdict could not run: the check then says so, and the log of the job holds the cause. |
 
-The ruleset on `main` demands the check "verdict". The workflow `verdict` starts when `tests` or
-`review-intents` completes, so that the record carries the last round of the review, and it can also
+The ruleset on `main` demands the check "verdict". The workflow `verdict` starts when `tests`,
+`review-intents`, or `review-code` completes, so that the record carries the last round of the review, and it can also
 start by hand for one change request. When a reviewer resolves the last
 review thread, run it by hand, or push a commit: a resolved thread starts no run.
 
@@ -235,6 +236,41 @@ commands of the agent in its log. The collecting step reads the severity line of
 prints `review loop: round <n> of <limit>, highest open severity <level>: ...`. In shadow mode, this line
 changes no verdict.
 
+## The reviewer of the code
+
+The workflow `.github/workflows/review-code.yml` runs on each change request that changes a file outside
+`intents/` and `plans/`; a change of those two folders alone needs no review of the code. An agent that is
+not the author follows the skill `charter-practices/skills/change-review/SKILL.md`: it reads the diff, the
+intent and the plan of the linked issue, and the results of the checks, and posts a new comment at each
+run. The report begins with `<!-- charter-code-review -->`, holds the line `Commit: <identifier>`, and ends
+with `Highest open severity: <level>`. The reviewer reads files and runs no code of the change request; the
+workflow `tests` runs the tests. It has the same secrets, the same tools, the same last step, and the same
+rules of the loop as the intent reviewer: the lines `Dropped finding: <reason>` and `False finding: <reason>`
+close its findings too. A change request from a fork gets no secret and no review.
+
+The depth of the review follows `tiers.<tier>.review` of the tier of the change, read from the contract of
+the base branch: `light`, the changed lines and their tests; `deep`, also the code that calls them and the
+security of the change. The workflow reads it with
+`charter-gate tier --contract charter.toml --changed FILE [--repo-only]`, which prints the name of the tier
+and the depth, one on each line, and fails when no tier matches.
+
+The collecting step, given `--code-review-workflow review-code.yml`, writes `code_review_reports`, the
+severity line of each report of the code review, oldest first, apart from the reports of the intent
+review; `code_review_commit`, the line `Commit:` of the newest one; and `head_commit`, the commit that the
+facts describe. The verdict counts the round as for the intents and prints one line,
+`code review: round <n> of <limit>, highest open severity <level>: ...`.
+
+The flag `review.code_blocks` ends the shadow period; the leader sets it with a change of the contract.
+Without it, or with `false`, the line blocks nothing. With `true`, the change request is not ready in four
+cases: the facts hold no code review; no report exists; the newest report is open at `review.threshold` or
+above, or has no severity line; the newest report names another commit than the head commit, so a push
+after the last report is not reviewed yet. At the limit of the rounds the verdict stays not ready and says
+that a person decides.
+
+Claude Code has a review of its own: the plugin `code-review` of the official marketplace and the command
+`/security-review`. They report faults of correctness as inline comments, and know no intent, no plan, and
+no severity line that the verdict reads. A repo can run them beside the reviewer of Charter.
+
 ## The evidence record
 
 Each run of the verdict writes the evidence record of the change: the JSON form of the verdict, with
@@ -258,6 +294,7 @@ else does not count. The check "verdict" keeps the short text.
 | `false_findings` | The findings of the intent reviewer that the leader marked as false, from lines `False finding: <reason>` |
 | `review_rounds`, `review_highest_severity` | The round of the current review loop (0 before the first report), and the severity line of the newest report (`null` before the first, or when the report has no such line) |
 | `review_reports` | The severity line of each report of the intent reviewer, oldest first (`null` for a report without the line) |
+| `code_review_reports`, `code_review_rounds`, `code_review_highest_severity` | The same for the reviewer of the code: the severity line of each report, the round of the current loop, and the severity line of the newest report |
 | `intents` | The intents that the linked issues name, each with whether its plan exists and whether the change request removes or renames it away |
 
 `charter_facts_github.py records --repo owner/name --last N` prints the records of the last merged
@@ -276,7 +313,7 @@ charter-setup --repo NAME --source ADDRESS --source-version TAG --leader LOGIN \
               [--quality CMD]... [--code-path PATTERN]... [--high-path PATTERN]...
 ```
 
-It writes `charter.toml`, `AGENTS.md`, `intents/_template.md`, `plans/_template.md`, and the three workflows from
+It writes `charter.toml`, `AGENTS.md`, `intents/_template.md`, `plans/_template.md`, and the four workflows from
 `charter/templates/`; `docs/product.md` and `docs/architecture.md` only when they are missing. It writes
 nothing when one of its files exists, and names the file. At the end it prints the steps that a person
 does by hand: the secrets, the ruleset, the cache command, and the first intent.

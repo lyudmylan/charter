@@ -139,5 +139,29 @@ class DraftedReadingRule(unittest.TestCase):
         self.assertNotIn("C11", text.split("## P. Proposed", 1)[1])
 
 
+class ChangeReviewSkill(unittest.TestCase):
+    def test_size_and_description(self):
+        """code-reviewer, check 4."""
+        check_skill(self, "change-review")
+
+    def test_the_skill_holds_the_checklist_and_the_form(self):
+        """code-reviewer, check 4: the checklist of the scope, the two depths, the four severities, and the form."""
+        text = one_line((SKILLS / "change-review" / "SKILL.md").read_text())
+        for part in ("An acceptance check of the intent that the change does not meet", "A test that does not test its check",
+                     "A step of the plan that the change left out, and a changed file that the plan does not name",
+                     "A broken contract between parts of the system", "A document that the change made stale",
+                     "A fault of correctness in the changed lines", "the proposed correction",
+                     "`light`: the changed lines and their tests", "`deep`: also the code that calls the changed lines, and the security",
+                     "Line 1: `<!-- charter-code-review -->`; line 2: `Commit: <the full identifier of the head commit>`",
+                     'the section "Changed since the last report"', "Run no code of the change request",
+                     "`Dropped finding: <reason>` or `False finding: <reason>`",
+                     "The last line, exactly in this form, with the highest severity of the open findings: "
+                     "`Highest open severity: blocker|high|medium|low|none`"):
+            with self.subTest(part=part):
+                self.assertIn(part, text)
+        for level in ("blocker", "high", "medium", "low"):
+            self.assertIn(f"`{level}`:", text)
+
+
 if __name__ == "__main__":
     unittest.main()

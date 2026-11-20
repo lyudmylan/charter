@@ -17,6 +17,8 @@ Commands:
                                        on each line, and a line in the quotes of git fails.
   verdict   --facts F --contract C     One verdict: ready or not ready, with the reasons.
             [--record FILE] [--scripts-version V]   Also write the evidence record, as JSON.
+  tier      --contract C --changed F   The tier of the changed paths in F, and the depth of its review, one on
+            [--repo-only]              each line. F is read as for boundary.
 
 Options:
   --schema PATH, --source PATH, --cache-dir DIR   As in charter_check.
@@ -47,6 +49,7 @@ import charter_check as cc  # noqa: E402
 CMD_LINK, CMD_DOCUMENTS, CMD_QUALITY, CMD_VERDICT = "link", "documents", "quality", "verdict"
 CMD_PLAN = "plan"      # a part of the verdict, not a command of its own
 CMD_BOUNDARY = cc.CMD_BOUNDARY
+CMD_TIER = "tier"
 ARG_FACTS = "facts"
 ARG_CHANGED = "changed"
 PARENT_SEGMENT = ".."
@@ -69,6 +72,9 @@ FACT_REVIEW_ROUNDS = "review_rounds"         # optional: whole number, the repor
 FACT_REVIEW_REPORTS = "review_reports"       # optional: [severity or null], the severity line of each report, oldest first
 FACT_REVIEW_SEVERITY = "review_highest_severity"   # optional: the last reported severity, or null before the first report
 FACT_INTENTS = "intents"                     # optional: [{"path": "intents/x.md", "plan": true, "removed": false}], from the linked issues
+FACT_CODE_REVIEW_REPORTS = "code_review_reports"   # optional: [severity or null], each report of the reviewer of the code, oldest first
+FACT_CODE_REVIEW_COMMIT = "code_review_commit"     # optional: the line `Commit:` of the newest report of the code review, or null
+FACT_HEAD_COMMIT = "head_commit"                   # optional: the commit that the facts describe
 # FACT_APPROVALS is optional and not checked in this version: the merge by the approver is the approval.
 ISSUE_NUMBER, ISSUE_STATE = "number", "state"
 INTENT_PATH, INTENT_PLAN, INTENT_REMOVED = "path", "plan", "removed"   # removed: the change request removes or renames the intent away
@@ -88,6 +94,10 @@ SEVERITIES = ("none", "low", "medium", "high", "blocker")   # from the lowest
 FIELD_REVIEW_LOOP = "limits.review_loop"
 FIELD_REVIEW_THRESHOLD = "review.threshold"
 DEFAULT_REVIEW_THRESHOLD = "medium"
+
+# The reviewer of the code. It reviews a change of a file outside intents/ and plans/. Without the flag, or with
+# false, it is in its shadow period: the verdict prints its state and blocks nothing.
+FIELD_CODE_BLOCKS = "review.code_blocks"
 
 # Fields of the contract that the gates read.
 FIELD_CODE_PATHS = "documents.code_paths"
@@ -110,8 +120,10 @@ ARG_RECORD, ARG_SCRIPTS_VERSION = "record", "scripts_version"
 
 # The evidence record: the verdict, plus these fields.
 RECORD_FORM = 1
+CODE_REVIEW_ROUNDS, CODE_REVIEW_SEVERITY = "code_review_rounds", "code_review_highest_severity"
 RECORD_KEYS = ("record_form", "change_request", "time", "scripts_version", "false_failures", "dropped_findings", "false_findings",
-               FACT_REVIEW_ROUNDS, FACT_REVIEW_SEVERITY, FACT_INTENTS, FACT_REVIEW_REPORTS)
+               FACT_REVIEW_ROUNDS, FACT_REVIEW_SEVERITY, FACT_INTENTS, FACT_REVIEW_REPORTS,
+               FACT_CODE_REVIEW_REPORTS, CODE_REVIEW_ROUNDS, CODE_REVIEW_SEVERITY)
 
 MSG = {
     "facts_not_json": "not JSON: {path}, {error}",
@@ -146,6 +158,15 @@ MSG = {
     "review_open": "review loop: {where}, highest open severity {severity}: a finding at {threshold} or above keeps the loop open, the author answers",
     "review_limit": "review loop: {where}, highest open severity {severity}: the limit is reached, a person decides",
     "review_closed": "review loop: {where}, highest open severity {severity}: the loop is closed",
+    "code_review_not_needed": "code review: not needed, no file outside {intents} and {plans} changed",
+    "code_review_no_facts": "code review: the facts hold no code review, the collecting step names no reviewer of the code",
+    "code_review_none": "code review: no review yet",
+    "code_review_no_line": "code review: {where}, no severity line in the report",
+    "code_review_open": "code review: {where}, highest open severity {severity}: a finding at {threshold} or above keeps the loop open, the author answers",
+    "code_review_limit": "code review: {where}, highest open severity {severity}: the limit is reached, a person decides",
+    "code_review_closed": "code review: {where}, highest open severity {severity}: the loop is closed",
+    "code_review_stale": "{line}; the newest report names the commit {commit}, not the head commit {head}: a push after the last report is not reviewed yet",
+    "code_review_shadow": "{line} (shadow period: {field} is not true, so the code review blocks nothing)",
     "plan_intents_only": "not needed, the change is the Plan phase (only files under {dir})",
     "plan_no_intent": "no linked issue names an intent (a line `Intent: {dir}<part>{suffix}` in the issue)",
     "plan_missing": "`{plan}` is missing. A plan at the old place, `{old}`, counts too.",
@@ -234,6 +255,12 @@ def load_facts(path: Path) -> dict:
     intents = facts.get(FACT_INTENTS, [])
     if not (isinstance(intents, list) and all(_is_intent(i) for i in intents)):
         raise cc.CannotRun(msg("facts_bad_value", key=FACT_INTENTS, path=path))
+    code_reports = facts.get(FACT_CODE_REVIEW_REPORTS, [])
+    if not (isinstance(code_reports, list) and all(r in (None, *SEVERITIES) for r in code_reports)):
+        raise cc.CannotRun(msg("facts_bad_value", key=FACT_CODE_REVIEW_REPORTS, path=path))
+    for key in (FACT_CODE_REVIEW_COMMIT, FACT_HEAD_COMMIT):
+        if not (facts.get(key) is None or isinstance(facts.get(key), str)):
+            raise cc.CannotRun(msg("facts_bad_value", key=key, path=path))
     return facts
 
 
@@ -419,6 +446,50 @@ def review_loop_state(facts: dict, e: cc.Effective) -> str:
     return msg("review_open", **values)
 
 
+def is_code(path: str) -> bool:
+    """A changed path that the reviewer of the code reviews: a path outside intents/ and plans/."""
+    return not (path.startswith(INTENTS_DIR) or path.startswith(PLANS_DIR))
+
+
+def code_review_round(facts: dict, e: cc.Effective) -> int:
+    """The round of the current loop of the code review, from its reports."""
+    return current_round(facts.get(FACT_CODE_REVIEW_REPORTS, []), e.values.get(FIELD_REVIEW_THRESHOLD, DEFAULT_REVIEW_THRESHOLD))
+
+
+def code_review_state(facts: dict, e: cc.Effective) -> tuple[str, bool]:
+    """One line on the review of the code, and whether it blocks. It blocks only when the contract sets
+    review.code_blocks, and then in four cases: the facts hold no code review, no report exists, the newest
+    report is open at the threshold or has no severity line, or the newest report names another commit than
+    the head commit. The limit of the rounds changes the words of the line, not the readiness."""
+    if not any(is_code(f) for f in facts[FACT_CHANGED_FILES]):
+        return msg("code_review_not_needed", intents=INTENTS_DIR, plans=PLANS_DIR), False
+    threshold = e.values.get(FIELD_REVIEW_THRESHOLD, DEFAULT_REVIEW_THRESHOLD)
+    if FACT_CODE_REVIEW_REPORTS not in facts:
+        line, blocks = msg("code_review_no_facts"), True
+    elif not facts[FACT_CODE_REVIEW_REPORTS]:
+        line, blocks = msg("code_review_none"), True
+    else:
+        reports = facts[FACT_CODE_REVIEW_REPORTS]
+        rounds, severity = code_review_round(facts, e), reports[-1]
+        limit = e.values.get(FIELD_REVIEW_LOOP)
+        where = msg("review_round", rounds=rounds, limit=limit) if limit is not None else msg("review_round_no_limit", rounds=rounds)
+        values = dict(where=where, severity=severity, threshold=threshold)
+        if severity is None:
+            line, blocks = msg("code_review_no_line", where=where), True
+        elif SEVERITIES.index(severity) < SEVERITIES.index(threshold):
+            line, blocks = msg("code_review_closed", **values), False
+        elif limit is not None and rounds >= limit:
+            line, blocks = msg("code_review_limit", **values), True
+        else:
+            line, blocks = msg("code_review_open", **values), True
+        commit, head = facts.get(FACT_CODE_REVIEW_COMMIT), facts.get(FACT_HEAD_COMMIT)
+        if commit != head:
+            line, blocks = msg("code_review_stale", line=line, commit=commit, head=head), True
+    if not e.values.get(FIELD_CODE_BLOCKS):
+        return msg("code_review_shadow", line=line, field=FIELD_CODE_BLOCKS), False
+    return line, blocks
+
+
 def gate_plan(facts: dict, e: cc.Effective) -> GateResult | None:
     """The plan of the work item exists before the code. None when the contract does not set the flag. A
     change of intents alone is the Plan phase and needs no plan. An intent that the change request removes or
@@ -470,10 +541,14 @@ def gate_verdict(facts: dict, e: cc.Effective) -> tuple[bool, list[str], dict]:
     else:
         reasons.append(msg("threads_ok"))
     reasons.append(review_loop_state(facts, e))
+    code_line, code_blocks = code_review_state(facts, e)
+    reasons.append(code_line)
+    if code_blocks:
+        passed = False
 
     tier, spec = tier_of(facts[FACT_CHANGED_FILES], e)
     detail: dict = {JSON_KEY_TIER: tier, JSON_KEY_APPROVER: spec.get(TIER_APPROVER), JSON_KEY_MERGES: [],
-                    FACT_REVIEW_ROUNDS: review_round(facts, e)}
+                    FACT_REVIEW_ROUNDS: review_round(facts, e), CODE_REVIEW_ROUNDS: code_review_round(facts, e)}
     if tier is None:
         passed = False
         reasons.append(msg("no_tier"))
@@ -528,6 +603,24 @@ def cmd_boundary(args) -> int:
     return report(gate_boundary(changed, effective(args), lines), args.json)
 
 
+def cmd_tier(args) -> int:
+    """The tier of the changed paths and the depth of its review, one on each line, for the reviewer of the code."""
+    try:
+        text = args.changed.read_text()
+    except OSError as error:
+        raise cc.CannotRun(cc.msg("no_file", path=args.changed)) from error
+    changed, _ = changed_paths(text)
+    tier, spec = tier_of(changed, repo_only(args) if args.repo_only else effective(args))
+    if tier is None:
+        return report(GateResult(CMD_TIER, False, [msg("no_tier")]), args.json)
+    if args.json:
+        print(json.dumps({JSON_KEY_TIER: tier, TIER_REVIEW: spec.get(TIER_REVIEW)}, indent=2))
+    else:
+        print(tier)
+        print(spec.get(TIER_REVIEW))
+    return cc.PASS
+
+
 def cmd_quality(args) -> int:
     e = repo_only(args) if args.repo_only else effective(args)
     return report(gate_quality(e, args.contract.resolve().parent), args.json)
@@ -553,6 +646,9 @@ def build_record(facts: dict, verdict: str, origin: str, reasons: list[str], det
         RECORD_KEYS[8]: facts.get(FACT_REVIEW_SEVERITY),
         RECORD_KEYS[9]: facts.get(FACT_INTENTS, []),
         RECORD_KEYS[10]: facts.get(FACT_REVIEW_REPORTS, []),
+        RECORD_KEYS[11]: facts.get(FACT_CODE_REVIEW_REPORTS, []),
+        RECORD_KEYS[12]: detail.get(CODE_REVIEW_ROUNDS, 0),
+        RECORD_KEYS[13]: (facts.get(FACT_CODE_REVIEW_REPORTS) or [None])[-1],
     }
 
 
@@ -585,6 +681,7 @@ def main(argv: list[str] | None = None) -> int:
         CMD_QUALITY: (cmd_quality, False, True),
         CMD_BOUNDARY: (cmd_boundary, False, True),
         CMD_VERDICT: (cmd_verdict, True, True),
+        CMD_TIER: (cmd_tier, False, True),
     }
     for name, (_, needs_facts, needs_contract) in specs.items():
         p = sub.add_parser(name)
@@ -600,10 +697,10 @@ def main(argv: list[str] | None = None) -> int:
             p.add_argument(f"--{ARG_RECORD}", type=Path, default=None, help="write the evidence record to this file")
             p.add_argument(f"--{ARG_SCRIPTS_VERSION.replace('_', '-')}", dest=ARG_SCRIPTS_VERSION, default="",
                            help="the version of the scripts that make the record, for example a commit")
-        if name == CMD_BOUNDARY:
+        if name in (CMD_BOUNDARY, CMD_TIER):
             p.add_argument(f"--{ARG_CHANGED}", type=Path, required=True,
                            help="a file with the paths that the run changed: with NUL between them, or one on each line")
-        if name == CMD_QUALITY:
+        if name in (CMD_QUALITY, CMD_TIER):
             p.add_argument(f"--{ARG_REPO_ONLY.replace('_', '-')}", dest=ARG_REPO_ONLY, action="store_true",
                            help="read the repo contract alone, without its organization source")
     args = parser.parse_args(argv)

@@ -1,16 +1,23 @@
 """Tests of the workflow files, read as text: the standard library has no YAML parser.
 Run: python3 -m unittest discover -s tests"""
 
+import contextlib
+import io
 import json
 import os
 import re
 import shutil
 import subprocess
+import sys
 import tempfile
 import unittest
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
+sys.path.insert(0, str(ROOT / "charter" / "scripts"))
+import charter_check as cc  # noqa: E402
+import charter_setup as cs  # noqa: E402
+
 WORKFLOWS = ROOT / ".github" / "workflows"
 TEMPLATES = ROOT / "charter" / "templates"
 BEFORE_STEP, GUARD_STEP = "Note the report before the review", "The run fails when the reviewer posted no report"
@@ -239,10 +246,164 @@ class Verdict(unittest.TestCase):
 
     def test_runs_after_the_tests_and_after_the_reviewer_and_counts_the_rounds(self):
         """review-loop, check 4."""
-        self.assertIn("workflows: [tests, review-intents]", self.text)
+        started_by = re.search(r"^    workflows: \[(.*)\]$", self.text, re.M).group(1).split(", ")
+        self.assertEqual(started_by[:2], ["tests", "review-intents"])
         self.assertIn("--review-workflow review-intents.yml", self.text)
         self.assertIn("concurrency:\n  group: verdict-", self.text)
         self.assertIn("--schema change/charter/schema/contract.toml all change/charter.toml", self.text)
+
+
+CODE_MARKER = "<!-- charter-code-review -->"
+CODE_SECRETS = {"GITHUB_TOKEN", "CLAUDE_CODE_OAUTH_TOKEN"}   # the two secrets of review-intents.yml
+# A command of a step that would run the code of the change request: an install, a test, or a build.
+RUNS_CODE = re.compile(r"\b(pip|npm|yarn|pnpm|make|pytest|unittest|tox|cargo|go|mvn|gradle|bundle|setup\.py)\b|\./|python3? -m\b|\bsh |\bbash ")
+
+
+def steps_with_run(text: str) -> dict[str, str]:
+    """Each named step of a workflow that has a `run: |` script, with the script."""
+    steps = {}
+    for name in re.findall(r"^      - name: (.*)$", text, re.M):
+        body = text.split(f"      - name: {name}\n", 1)[1].split("\n      - ", 1)[0]
+        if "\n        run: |" in "\n" + body:
+            steps[name] = run_block(text, name)
+    return steps
+
+
+def triggers(patterns: list[str], files: list[str]) -> bool:
+    """Whether a change of the files starts a workflow with these `paths`, as the code host reads them: for each
+    file the last pattern that matches decides, and a pattern with `!` in front excludes."""
+    started = False
+    for path in files:
+        included = False
+        for pattern in patterns:
+            if cc.matches(path, [pattern.lstrip("!")]):
+                included = not pattern.startswith("!")
+        started = started or included
+    return started
+
+
+class CodeReviewer(unittest.TestCase):
+    text = (WORKFLOWS / "review-code.yml").read_text()
+    template = (TEMPLATES / "review-code.yml").read_text()
+    files = {"this workflow": text, "the template": template}
+
+    def test_the_setup_writes_the_workflow(self):
+        """code-reviewer, check 1."""
+        folder = Path(tempfile.mkdtemp())
+        try:
+            flags = ["--repo", "sample", "--source", "https://example.com/org/rules", "--source-version", "v1",
+                     "--leader", "alice", "--target", str(folder)]
+            with contextlib.redirect_stdout(io.StringIO()):
+                self.assertEqual(cs.main(flags), 0)
+            self.assertEqual(cs.WRITTEN["review-code.yml"], ".github/workflows/review-code.yml")
+            written = (folder / cs.WORKFLOWS / "review-code.yml").read_text()
+            self.assertEqual(written, self.template.replace("%{charter_address}", cs.CHARTER_ADDRESS))
+            self.assertNotIn("%{", written)
+        finally:
+            shutil.rmtree(folder, ignore_errors=True)
+
+    def test_the_workflow_runs_on_code_and_not_on_intents_alone(self):
+        """code-reviewer, check 1: the trigger, read as the code host reads it, and no review for a fork."""
+        for name, text in self.files.items():
+            with self.subTest(file=name):
+                self.assertIn("on:\n  pull_request:\n", text)
+                self.assertNotIn("pull_request_target", text)
+                self.assertIn("    if: github.event.pull_request.head.repo.full_name == github.repository\n", text)
+                patterns = json.loads(re.search(r"^    paths: (\[.*\])$", text, re.M).group(1))
+                for files, starts in ((["src/app.py"], True), (["intents/a.md", "src/app.py"], True), ([".github/x.yml"], True),
+                                      (["README.md"], True), (["plans/a.md", "charter.toml"], True), (["intents/a.md"], False),
+                                      (["intents/a.md", "plans/a.md"], False), (["plans/sub/a.md"], False)):
+                    with self.subTest(files=files):
+                        self.assertEqual(triggers(patterns, files), starts, patterns)
+
+    def test_the_reviewer_reads_and_posts_and_runs_no_code(self):
+        """code-reviewer, check 1: the allowed tools read files and post one comment; no step runs the code of
+        the change request; a value of the code host comes to a script through `env:`; two secrets only."""
+        for name, text in self.files.items():
+            with self.subTest(file=name):
+                tools = re.search(r'--allowedTools "([^"]+)"', text).group(1).split(",")
+                for tool in tools:
+                    self.assertTrue(tool in READ_ONLY or ALLOWED_COMMANDS.match(tool), f"tool not read-only or comment: {tool}")
+                self.assertIn("Bash(gh pr comment:*)", tools)
+                self.assertIn("contents: read", text)
+                self.assertNotIn("PATCH", text)
+                self.assertEqual(set(re.findall(r"secrets\.(\w+)", text)), CODE_SECRETS)
+                steps = steps_with_run(text)
+                self.assertGreaterEqual(len(steps), 3, list(steps))
+                for step, script in steps.items():
+                    with self.subTest(step=step):
+                        self.assertNotIn("${{", script)
+                        self.assertIsNone(RUNS_CODE.search(script), script)
+                        for call in re.findall(r"python3 (\S+)", script):
+                            self.assertTrue(call == "-c" or call.startswith('"$RUNNER_TEMP/charter/'), call)
+                prompt = " ".join(prompt_of(text).split())
+                self.assertIn("Run no code of the change request: no install, no test, no build.", prompt)
+                self.assertIn("change-review/SKILL.md exactly", prompt)
+                self.assertIn("the depth of the review is ${{ steps.tier.outputs.depth }}", prompt)
+
+    def test_the_run_fails_without_a_new_report_of_the_head_commit(self):
+        """code-reviewer, check 2: the last step, run with `bash -e` and a fake of the code host."""
+        step = run_block(self.text, GUARD_STEP)
+        self.assertEqual(step, run_block(self.template, GUARD_STEP))
+        self.assertEqual(step, run_block((WORKFLOWS / "review-intents.yml").read_text(), GUARD_STEP).replace(MARKER, CODE_MARKER))
+        before = run_block(self.text, BEFORE_STEP)
+        self.assertIn(CODE_MARKER, before)
+        self.assertIn(CODE_MARKER, step)
+        self.assertNotIn(MARKER, step + before)
+        for text in (self.text, self.template):
+            self.assertLess(text.index(BEFORE_STEP), text.index("anthropics/claude-code-action"))
+            self.assertLess(text.index("anthropics/claude-code-action"), text.index(GUARD_STEP))
+            self.assertIn(f"      - name: {GUARD_STEP}\n        if: always()\n", text)
+
+        def report(count: int, commit: str | None) -> str:
+            return f"{count}\n{CODE_MARKER}\nCommit: {commit}\n\n| item | finding |\nHighest open severity: low\n"
+
+        folder = Path(tempfile.mkdtemp())
+        try:
+            cases = (("1", report(1, HEAD), False, True), ("0", "0\n", False, True), ("", "0\n", False, True),
+                     ("1", report(2, OTHER), False, False), ("1", report(2, None), False, False),
+                     ("1", report(2, HEAD[:12]), False, False), ("1", report(2, HEAD), True, False), ("", report(1, HEAD), True, False))
+            for before_count, gh_answer, passes, no_report in cases:
+                with self.subTest(before=before_count, answer=gh_answer):
+                    code, out = run_shell(step, folder, guard_env(before_count, gh_answer))
+                    self.assertEqual(code == 0, passes, out)
+                    self.assertEqual(NO_REPORT in out, no_report, out)
+        finally:
+            shutil.rmtree(folder, ignore_errors=True)
+
+    def test_the_workflow_of_this_repo_follows_the_template(self):
+        """code-reviewer, check 3: the two files differ only in the place of the skill and in the way to the
+        scripts of Charter, which this repo takes from its base branch."""
+        fetch = ("      - name: Fetch Charter at the version of the contract\n"
+                 "        run: |\n"
+                 "          VERSION=$(python3 -c 'import tomllib; print(tomllib.load(open(\"charter.toml\", \"rb\"))[\"charter\"][\"version\"])')\n"
+                 "          git clone --quiet --depth 1 --branch \"charter--v$VERSION\" %{charter_address} \"$RUNNER_TEMP/charter\"\n")
+        base = ("      - name: Take the scripts of Charter from the base branch\n"
+                "        env:\n"
+                "          BASE_REF: ${{ github.base_ref }}\n"
+                "        run: |\n"
+                "          git worktree add --quiet --detach \"$RUNNER_TEMP/charter\" \"origin/$BASE_REF\"\n")
+        header = ("# The skill and the scripts come from Charter, fetched at the version that the contract names.\n",
+                  "# The skill comes from the change request, and the scripts from the base branch: the run executes no script of the change.\n")
+        skill = ("Follow ${{ runner.temp }}/charter/charter-practices/skills/change-review/SKILL.md",
+                 "Follow charter-practices/skills/change-review/SKILL.md")
+        expected = self.template
+        for old, new in ((fetch, base), header, skill):
+            self.assertEqual(expected.count(old), 1, old)
+            expected = expected.replace(old, new)
+        self.assertEqual(self.text, expected)
+        self.assertTrue((ROOT / "charter-practices" / "skills" / "change-review" / "SKILL.md").is_file())
+        self.assertNotIn("%{", self.text)
+
+    def test_the_verdict_runs_after_the_code_review(self):
+        """code-reviewer, check 11: the template and this repo."""
+        for name, path in (("this workflow", WORKFLOWS), ("the template", TEMPLATES)):
+            with self.subTest(file=name):
+                text = (path / "verdict.yml").read_text()
+                started_by = re.search(r"^    workflows: \[(.*)\]$", text, re.M).group(1).split(", ")
+                self.assertEqual(set(started_by), {"tests", "review-intents", "review-code"})
+                self.assertIn("          --code-review-workflow review-code.yml\n", text)
+                self.assertIn("          --review-workflow review-intents.yml\n", text)
 
 
 if __name__ == "__main__":
