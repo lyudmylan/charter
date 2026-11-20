@@ -10,6 +10,11 @@ Commands:
                                        or the change request records a reason.
   quality   --contract C [--repo-only]  The quality checks of the contract run and pass. With --repo-only
                                        the repo contract is read alone, without its organization source.
+  boundary  --contract C --changed F   No path that a run without a person changed is under a pattern of
+                                       boundary.no_write. F lists the changed paths: each added, changed,
+                                       or deleted path, and both names of a rename. With a NUL character
+                                       between the paths (`-z` of git) any name is read; else one path
+                                       on each line, and a line in the quotes of git fails.
   verdict   --facts F --contract C     One verdict: ready or not ready, with the reasons.
             [--record FILE] [--scripts-version V]   Also write the evidence record, as JSON.
 
@@ -25,6 +30,7 @@ from __future__ import annotations
 import argparse
 import datetime
 import json
+import posixpath
 import shlex
 import subprocess
 import sys
@@ -40,7 +46,12 @@ import charter_check as cc  # noqa: E402
 
 CMD_LINK, CMD_DOCUMENTS, CMD_QUALITY, CMD_VERDICT = "link", "documents", "quality", "verdict"
 CMD_PLAN = "plan"      # a part of the verdict, not a command of its own
+CMD_BOUNDARY = cc.CMD_BOUNDARY
 ARG_FACTS = "facts"
+ARG_CHANGED = "changed"
+PARENT_SEGMENT = ".."
+NUL = "\0"                 # between the paths of a list that git wrote with `-z`: no quotes, no escapes
+GIT_QUOTE = '"'            # git starts a path that holds a special character with it, in a list of lines
 ARG_REPO_ONLY = "repo_only"
 
 # Keys of the facts file.
@@ -65,8 +76,7 @@ CHECK_PASS = "pass"
 
 # The plan of a work item: next to its intent, accepted before the code.
 FIELD_PLAN_BEFORE_CODE = "build.plan_before_code"
-INTENTS_DIR = "intents/"
-INTENT_SUFFIX, PLAN_SUFFIX = ".md", ".plan.md"
+INTENTS_DIR, INTENT_SUFFIX, PLAN_SUFFIX = cc.INTENTS_DIR, cc.INTENT_SUFFIX, cc.PLAN_SUFFIX
 
 # The review loop. A finding at the threshold or above keeps the loop open; the loop ends below it,
 # or when the rounds reach the limit. Then a person decides. Shadow mode: the loop blocks nothing yet.
@@ -137,6 +147,12 @@ MSG = {
     "plan_missing": "{plan} is missing",
     "plan_ok": "{plan} exists",
     "plan_removed": "{intent} is removed by the change request, no plan needed",
+    "boundary_closed": "{path}: a run without a person cannot change this path, a pattern of {field}. "
+                       "A person makes this change, in its own change request.",
+    "boundary_outside": "{path}: the path leaves the repo",
+    "boundary_quoted": "{line}: git wrote this path in quotes, and the gate cannot read it. Write the list with "
+                       "a NUL character between the paths: the option `-z` of git.",
+    "boundary_ok": "no changed path is under a pattern of {field} ({count} paths)",
 }
 
 
@@ -244,6 +260,33 @@ def gate_link(facts: dict) -> GateResult:
     if not open_issues:
         return GateResult(CMD_LINK, False, [msg("no_open_issue", issues=[i[ISSUE_NUMBER] for i in issues])])
     return GateResult(CMD_LINK, True, [msg("link_ok", issues=open_issues)])
+
+
+def changed_paths(text: str) -> tuple[list[str], bool]:
+    """The paths of a list, and whether it is a list of lines. A list with a NUL character holds each
+    name as it is. A list of lines is read without the blanks around a line."""
+    if NUL in text:
+        return [path for path in text.split(NUL) if path], False
+    return [line.strip() for line in text.splitlines() if line.strip()], True
+
+
+def gate_boundary(changed: list[str], e: cc.Effective, lines: bool = True) -> GateResult:
+    """The paths that a run changed, against boundary.no_write. A path is read without its dot segments.
+    A plan of a work item passes: the run is its author. In a list of lines, a line in the quotes of git
+    fails: its path cannot be read."""
+    closed = e.values.get(cc.FIELD_NO_WRITE, []) or []
+    reasons: list[str] = []
+    for line in changed:
+        path = posixpath.normpath(line)
+        if lines and line.startswith(GIT_QUOTE):
+            reasons.append(msg("boundary_quoted", line=line))
+        elif line.startswith(cc.SEGMENT_SEPARATOR) or path == PARENT_SEGMENT or path.startswith(PARENT_SEGMENT + cc.SEGMENT_SEPARATOR):
+            reasons.append(msg("boundary_outside", path=line))
+        elif not cc.is_plan(path) and cc.matches(path, closed):
+            reasons.append(msg("boundary_closed", path=path, field=cc.FIELD_NO_WRITE))
+    if reasons:
+        return GateResult(CMD_BOUNDARY, False, reasons)
+    return GateResult(CMD_BOUNDARY, True, [msg("boundary_ok", field=cc.FIELD_NO_WRITE, count=len(changed))])
 
 
 def gate_documents(facts: dict, e: cc.Effective) -> GateResult:
@@ -444,6 +487,15 @@ def repo_only(args) -> cc.Effective:
     return cc.Effective(dict(repo.values), fields, [], "", dict(repo.values))
 
 
+def cmd_boundary(args) -> int:
+    try:
+        text = args.changed.read_text()
+    except OSError as error:
+        raise cc.CannotRun(cc.msg("no_file", path=args.changed)) from error
+    changed, lines = changed_paths(text)
+    return report(gate_boundary(changed, effective(args), lines), args.json)
+
+
 def cmd_quality(args) -> int:
     e = repo_only(args) if args.repo_only else effective(args)
     return report(gate_quality(e, args.contract.resolve().parent), args.json)
@@ -498,6 +550,7 @@ def main(argv: list[str] | None = None) -> int:
         CMD_LINK: (cmd_link, True, False),
         CMD_DOCUMENTS: (cmd_documents, True, True),
         CMD_QUALITY: (cmd_quality, False, True),
+        CMD_BOUNDARY: (cmd_boundary, False, True),
         CMD_VERDICT: (cmd_verdict, True, True),
     }
     for name, (_, needs_facts, needs_contract) in specs.items():
@@ -514,6 +567,9 @@ def main(argv: list[str] | None = None) -> int:
             p.add_argument(f"--{ARG_RECORD}", type=Path, default=None, help="write the evidence record to this file")
             p.add_argument(f"--{ARG_SCRIPTS_VERSION.replace('_', '-')}", dest=ARG_SCRIPTS_VERSION, default="",
                            help="the version of the scripts that make the record, for example a commit")
+        if name == CMD_BOUNDARY:
+            p.add_argument(f"--{ARG_CHANGED}", type=Path, required=True,
+                           help="a file with the paths that the run changed: with NUL between them, or one on each line")
         if name == CMD_QUALITY:
             p.add_argument(f"--{ARG_REPO_ONLY.replace('_', '-')}", dest=ARG_REPO_ONLY, action="store_true",
                            help="read the repo contract alone, without its organization source")

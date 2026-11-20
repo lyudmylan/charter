@@ -1,11 +1,12 @@
 # Intent: the boundary of a run without a person
 
-Work item: #91. Status: planned. Approval: a person merges the change request that adds this file.
+Work item: #91. Status: done. Approval: a person merges the change request that adds this file.
 
 ## Goal
 
 A run of an agent with no person present works inside a boundary that the contract declares, and a script
-refuses the result of a run that crossed it, before anything is published.
+refuses the result of a run that crossed it. The order, the gate before the step that publishes, is built
+and checked in #92.
 
 ## In scope
 
@@ -19,8 +20,9 @@ refuses the result of a run that crossed it, before anything is published.
   - the sandbox of the shell, on; no command runs outside it; the run does not start when the sandbox
     cannot start;
   - no network for the shell: the list of allowed hosts is empty;
-  - for each pattern of `boundary.no_write`, a deny rule for the edit tools and a write denial of the
-    sandbox;
+  - for each pattern of `boundary.no_write`, a deny rule for the edit tools, and a write denial of the
+    sandbox for the paths that the pattern covers at the time of writing (the translation of the plan).
+    A path that does not exist yet is covered by the deny rule and by the gate;
   - for each pattern of `boundary.no_read`, a deny rule for the read tool and a read denial of the sandbox;
   - the removal of the token of the model and of the tokens of the code host from the environment of
     each shell command;
@@ -29,7 +31,8 @@ refuses the result of a run that crossed it, before anything is published.
   permissions, and the settings, read on 2026-11-20). With an empty or absent section the settings hold
   no path rule, and the sandbox, the empty network, and the refusal stay.
 - A gate, `charter-gate boundary --contract C --changed FILE`. The file lists the paths that a run
-  changed, one on each line: each added, changed, or deleted path, and both names of a rename. The gate
+  changed, one on each line, or with a NUL character between them (see
+  `intents/boundary-gate-reads-any-path.md`): each added, changed, or deleted path, and both names of a rename. The gate
   fails when a path is under a pattern of `boundary.no_write`. The failure names the path and the field,
   and says what to do: a person makes this change, in its own change request. The gate reads a path with
   dot segments as the path it points to, and refuses a path that leaves the repo.
@@ -57,7 +60,8 @@ refuses the result of a run that crossed it, before anything is published.
   contract, `AGENTS.md`, `CLAUDE.md`, `intents/**`, `.github/**`, `.claude/**`. `boundary.no_read`: `.env`
   and `.env.*`, at the root and in each folder. The contract of this repo carries the same section.
   The package files of a language, for example `package.json` and its lock file, are not in the default:
-  they differ from repo to repo, and a repo adds its own.
+  they differ from repo to repo, and a repo adds its own. This intent differs from the text of the issue
+  in two places, for the reasons above: the package files, and the setup step, which writes no settings.
 - The rule line with the identifier `boundary.no_write`, in `charter/templates/AGENTS.md` and in the
   `AGENTS.md` of this repo, so that an agent knows the boundary before it meets a refusal.
 - `docs/contract.md`: the two fields, the command, and the gate. `docs/product.md`, section "Who does the
@@ -73,8 +77,7 @@ that the shell can reach: when a run needs one. A platform without a sandbox. A 
 agent in a session: the sandbox is optional there (decision E3). The minimum of the organization in its
 source: a later change of that source, with its own version. A test of the sandbox and of the
 permission rules of Claude Code themselves, except the manual check below. The conformance check of
-decision E4: the settings are written from the contract at the start of each run, so no file can differ
-from it; the check that a run used them is in #92.
+decision E4: the second decision above replaces it for a run.
 
 ## Acceptance checks
 
@@ -89,9 +92,10 @@ from it; the check that a run used them is in #92.
    the shell no host.
    test: `tests/test_boundary.py::Settings.test_the_sandbox_is_on_and_the_run_fails_without_it`
    test: `tests/test_boundary.py::Settings.test_the_shell_has_no_network`
-4. The settings hold, for each pattern of `boundary.no_write`, a deny rule for the edit tools and a write
-   denial of the sandbox; for each pattern of `boundary.no_read`, a deny rule for the read tool and a
-   read denial of the sandbox.
+4. The settings hold, for each pattern of `boundary.no_write`, a deny rule for the edit tools, and a
+   write denial of the sandbox for the paths that the pattern covers at the time of writing: a path and
+   a folder as they are, another pattern as the files that match it. For each pattern of
+   `boundary.no_read` they hold a deny rule for the read tool and a read denial of the sandbox.
    test: `tests/test_boundary.py::Settings.test_each_no_write_pattern_is_denied_in_both_layers`
    test: `tests/test_boundary.py::Settings.test_each_no_read_pattern_is_denied_in_both_layers`
 5. The settings remove the token of the model and the tokens of the code host from the environment of a
@@ -135,6 +139,8 @@ from it; the check that a run used them is in #92.
 
 16. On a runner of the code host, in the first run of #92, with the settings that the command printed:
     the run starts with the sandbox, the edit tool refuses a write to the contract, a shell command
-    reaches no host, and the log of the run names both refusals. who: the leader. Not automatic: the
-    check needs a model call and a runner, and the workflow of the run comes with #92. The issue #92
-    carries a line for this check, and the leader closes it there.
+    reaches no host, and the log of the run names the refused write and the refused network access.
+    Also: a read of `.env` is refused, a shell command sees no token of the model or of the code host,
+    and a call that needs a question is refused, not asked.
+    who: the leader. Not automatic: the check needs a model call and a runner, and the workflow of the
+    run comes with #92. The issue #92 carries a line for this check, and the leader closes it there.
