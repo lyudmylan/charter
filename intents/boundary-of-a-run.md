@@ -55,8 +55,9 @@ and checked in #92.
     gate that fails or does not run publishes nothing. The gate is the layer for a writer that the
     sandbox and the permission rules do not cover: in Claude Code the sandbox covers the shell, and the
     permission rules cover the file tools.
-  - A run can write the plan of a work item, also under a pattern of `boundary.no_write`. The run is the
-    author of the plan. The approved intent holds the acceptance checks, and it stays closed to the run.
+  - A run can write the plan of a work item. This was decision E10, with the plan under `intents/`;
+    decision D18 (`intents/plan-tier.md`) replaced it: the plan is in `plans/`, under no pattern of
+    `boundary.no_write`, and the approved intent stays closed to the run.
 - The default, in `charter/templates/charter.toml`, which the setup step writes. `boundary.no_write`: the
   contract, `AGENTS.md`, `CLAUDE.md`, `intents/**`, `.github/**`, `.claude/**`. `boundary.no_read`: `.env`
   and `.env.*`, at the root and in each folder. The contract of this repo carries the same section.
@@ -127,8 +128,8 @@ decision E4: the second decision above replaces it for a run.
 11. The instruction template and the `AGENTS.md` of this repo carry the rule line with the identifier
     `boundary.no_write`.
     test: `tests/test_boundary.py::Defaults.test_the_instructions_carry_the_rule`
-12. The decision record holds the four decisions in section E, each with its reason, and the row E4
-    names the decision that replaces its conformance check for a run.
+12. The decision record holds the four decisions in section E, each with its reason, E10 marked as
+    replaced by D18, and the row E4 names the decision that replaces its conformance check for a run.
     test: `tests/test_boundary.py::Defaults.test_the_decisions_are_recorded`
 13. The contract of this repo carries the section, and its contract checks pass.
     command: `python3 charter/scripts/charter_check.py all charter.toml`

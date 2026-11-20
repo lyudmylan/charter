@@ -146,15 +146,17 @@ class PlannedIntents(unittest.TestCase):
 
 class PlanPlace(unittest.TestCase):
     def test_the_plans_of_this_repo_are_in_the_plans_folder(self):
-        """plan-tier, check 8: each plan in `plans/` belongs to an intent that is done, and `intents/` holds
-        no plan but the one of this work item."""
+        """plan-tier, check 8: the eight plans that moved are in `plans/`, each plan there belongs to an
+        intent, and `intents/` holds no plan but the one of this work item."""
         plans = sorted(PLANS.glob("**/*.md"))
-        self.assertEqual(len(plans), 8, plans)
+        names = {plan.name for plan in plans}
+        for moved in ("boundary-gate-reads-any-path.md", "boundary-of-a-run.md", "code-host.md",
+                      "drafted-reading-review.md", "intent-reviewer.md", "plan-before-the-code.md",
+                      "reason-next-to-the-part.md", "setup-step.md"):
+            self.assertIn(moved, names)
         for plan in plans:
             with self.subTest(plan=plan.name):
-                intent = INTENTS / plan.relative_to(PLANS)
-                self.assertTrue(intent.is_file(), intent)
-                self.assertEqual(status_of(intent.read_text()), STATUS_DONE)
+                self.assertTrue((INTENTS / plan.relative_to(PLANS)).is_file(), plan)
         self.assertEqual([p.name for p in INTENTS.glob("**/*" + PLAN_SUFFIX)], ["plan-tier.plan.md"])
 
 
