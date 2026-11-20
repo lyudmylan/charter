@@ -29,11 +29,11 @@ form. A finding that the change request text answers with `Dropped finding: <rea
 
 ## The report
 
-One table with one row per intent: the file, the verdict (approve, approve with a change, needs
-discussion), and the finding in one or two sentences. Then at most five findings in detail, by severity:
-the severity, the file, the exact sentence to change, the proposed text. Say "no finding" when an intent
-is fine. No praise. Under 700 words. The last line, exactly in this form, with the highest severity of
-the open findings: `Highest open severity: blocker|high|medium|low|none`.
-
-The report is the comment on the change request. Begin it with the line `<!-- charter-intent-review -->`.
-If a comment with that line exists, update it; else create it.
+One table with one row per intent: the file, the verdict (approve, approve with a change, needs discussion), and the finding in one or two
+sentences. Then at most five findings in detail, by severity: the severity, the file, the exact sentence to change, the proposed text. Say
+"no finding" when an intent is fine. No praise. Under 700 words. The last line, exactly in this form, with the highest severity of the open
+findings: `Highest open severity: blocker|high|medium|low|none`. The report is a new comment on the change request at each run; change no
+earlier comment. Line 1: `<!-- charter-intent-review -->`; line 2: `Commit: <the full identifier of the head commit>`. After the first
+report, read the line `Commit:` of the newest earlier report, run `git diff <that commit>..<the head commit> -- intents/ plans/`, and start the findings
+from that diff. Under the line `Commit:` comes the section "Changed since the last report": each changed file of `intents/` and `plans/`
+with its changed lines in a few words, or the sentence that no file of the two folders changed.

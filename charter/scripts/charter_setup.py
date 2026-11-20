@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """Set a repo up for Charter: one command writes the contract, the rules, the intents folder, the
-workflows, and the two documents. Python 3.11 or later, standard library only.
+plans folder, the workflows, and the two documents. Python 3.11 or later, standard library only.
 
 Run it in the root of the repo, from the installed plugin (`charter-setup`, on the path of the shell
 while the plugin is enabled) or from a clone of the Charter repo at the version:
@@ -43,6 +43,7 @@ PRODUCT_FILE = "docs/product.md"
 README_FILE = "README.md"
 CLAUDE_FILE = "CLAUDE.md"          # when it exists, Claude Code reads it and not AGENTS.md
 INTENT_TEMPLATE = "intents/_template.md"
+PLAN_TEMPLATE = "plans/_template.md"
 WORKFLOWS = ".github/workflows"
 
 # template name -> written path. The order is the order of writing.
@@ -50,9 +51,11 @@ WRITTEN = {
     "charter.toml": CONTRACT_FILE,
     "AGENTS.md": INSTRUCTIONS_FILE,
     "intent.md": INTENT_TEMPLATE,
+    "plan.md": PLAN_TEMPLATE,
     "tests.yml": f"{WORKFLOWS}/tests.yml",
     "verdict.yml": f"{WORKFLOWS}/verdict.yml",
     "review-intents.yml": f"{WORKFLOWS}/review-intents.yml",
+    "review-code.yml": f"{WORKFLOWS}/review-code.yml",
 }
 # template name -> written path, only when the file is missing.
 WRITTEN_IF_MISSING = {
@@ -91,7 +94,8 @@ MSG = {
     "template": "the template is missing: {path}",
     "steps_title": "\nSteps that a person does by hand:",
     "step": "  {number}. {step}",
-    "step_secret": "Set the secret CHARTER_ORG_TOKEN on the repo: a fine-grained token with read access to the organization source only. For the intent reviewer, set CLAUDE_CODE_OAUTH_TOKEN from `claude setup-token`.",
+    "step_secret": "Set the secret CHARTER_ORG_TOKEN on the repo: a fine-grained token with read access to the organization source only. For the intent reviewer and the reviewer of the code, set CLAUDE_CODE_OAUTH_TOKEN from `claude setup-token`.",
+    "step_merge": "Optional, for a repo that gives a tier the approver `agent`: set the secret CHARTER_MERGE_TOKEN, a fine-grained token with write access to the contents and the pull requests of this repo only. The verdict merges such a tier with it; a merge with the token of the workflow starts no workflow on the main branch.",
     "step_ruleset": "Protect the main branch with a ruleset: a change request is required, and the check \"verdict\" is required.",
     "step_cache": "On each computer, put the organization source in the cache of the checker: git clone {address} {cache}",
     "step_quality": "Put the test command of this repo in checks.quality of {contract}; the gate fails without one.",
@@ -167,7 +171,7 @@ def existing(target: Path) -> list[str]:
 
 def manual_steps(target: Path, args: argparse.Namespace, cache_dir: Path) -> list[str]:
     """The steps that a person does by hand, numbered in sequence; a step that does not apply is left out."""
-    steps = [msg("step_secret"), msg("step_ruleset"),
+    steps = [msg("step_secret"), msg("step_merge"), msg("step_ruleset"),
              msg("step_cache", address=args.source, cache=cc.cache_path(args.source, cache_dir))]
     if not args.quality:
         steps.append(msg("step_quality", contract=CONTRACT_FILE))

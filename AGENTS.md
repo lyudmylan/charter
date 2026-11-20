@@ -7,21 +7,25 @@ source. Each rule below ends with the identifier of its rule in the contract.
 
 - Each change to a source file (code, config, doc) has an issue in the tracker. [change.ticket_per_change]
 - Work on a branch. Open a change request that closes the issue, `Closes #N`, or that is a part of it,
-  `Part of #N`, for the intent of the Plan phase. A bare `#N` in the text is a mention, not a link. A person
-  merges. [tiers.high.approver]
+  `Part of #N`, for the intent of the Plan phase. A bare `#N` in the text is a mention, not a link. The
+  approver of the tier merges: a person, or the verdict for a tier whose approver is `agent`.
+  [tiers.high.approver]
 - The author of a change is not its reviewer. [change.author_not_reviewer]
 - The contract, the schema, the scripts, the tests, the workflows, and this file are in the high risk
   tier: a deep review, and the leader approves. [tiers.high.paths]
 - A person approves each change to a contract. [change.person_approves_contract]
+- A run of an agent without a person does not change the files that the contract closes to it. A person
+  makes such a change, in its own change request. [boundary.no_write]
 - On GitHub, the workflows `tests` and `verdict` run on each change request. A red check "verdict"
   blocks the merge; its reasons are in the check and in the job log. [checks.quality]
 
 ## Before the code
 
 A work item has an intent, `intents/<part>.md`, approved through a change request; its issue names it
-with one line, `Intent: intents/<part>.md`. Before the code, the plan `intents/<part>.plan.md`: the steps,
-the files to change, the tests to add, in the words of the author. The agent stops and asks the person
-who holds the work item to accept it; the code starts after the acceptance. The verdict checks that the
+with one line, `Intent: intents/<part>.md`. Before the code, the plan `plans/<part>.md`: the steps, the
+files to change, the tests to add, in the words of the author. The agent stops and asks the person
+who holds the work item to accept it; the code starts after the acceptance. In a tier whose approver is
+`agent`, the review of the plan by the intent reviewer is its acceptance. The verdict checks that the
 plan exists. A change request that changes only intents needs no
 plan: that is the Plan phase itself. [build.plan_before_code]
 
@@ -53,3 +57,6 @@ sequence. [limits.acceptance_loop] [limits.review_loop] [limits.refusals]
 The intent reviewer gives each finding a severity. A finding at the threshold (medium) or above keeps the
 author-reviewer loop open; below it, or at the limit, the loop ends and a person decides. The author side
 is the skill `review-loop`. [review.threshold] [limits.review_loop]
+The reviewer of the code, the workflow `review-code`, reviews each change of a file outside `intents/` and
+`plans/` with the skill `change-review`, under the same loop; while the contract leaves the flag false,
+its findings block nothing. [review.code_blocks]

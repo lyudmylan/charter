@@ -17,7 +17,8 @@ PYTHON = "python3"
 HEADING_AUTOMATIC = "## Automatic checks"
 HEADING_MANUAL = "## Manual checks"
 STATUS_LINE = re.compile(r"^Work item: #\d+\. Status: (planned|done)\.", re.M)
-PLAN_SUFFIX = ".plan.md"   # plan-before-the-code: the plan lives next to its intent and is not an intent
+PLAN_SUFFIX = ".plan.md"   # plan-tier: a plan at the old place, next to its intent, is not an intent
+PLANS = ROOT / "plans"
 
 
 def intent_files() -> list:
@@ -127,11 +128,12 @@ None.
 
 class PlannedIntents(unittest.TestCase):
     def test_a_plan_file_is_not_an_intent(self):
-        """plan-before-the-code, check 3: `intents/<part>.plan.md` lives next to its intent and is not read
-        as one."""
+        """plan-before-the-code, check 3: a plan is not read as an intent. plan-tier: the plans live in
+        `plans/`, and a plan at the old place, `intents/<part>.plan.md`, is skipped."""
         names = [p.name for p in intent_files()]
-        self.assertNotIn("setup-step.plan.md", names)
-        self.assertIn("setup-step.md", names)
+        self.assertNotIn("plan-tier.plan.md", names)
+        self.assertIn("plan-tier.md", names)
+        self.assertTrue((PLANS / "setup-step.md").is_file())
 
     def test_planned_intents_need_no_existing_test(self):
         """planned-intents, check 1: a planned intent with a test that does not exist yet passes; a done one fails."""
@@ -140,6 +142,22 @@ class PlannedIntents(unittest.TestCase):
         self.assertEqual(len(done), 1)
         self.assertIn("missing test file", done[0])
         self.assertEqual(status_of("# Intent: x\n\nWork item: #9. Approved by a person.\n"), STATUS_DONE)
+
+
+class PlanPlace(unittest.TestCase):
+    def test_the_plans_of_this_repo_are_in_the_plans_folder(self):
+        """plan-tier, check 8: the eight plans that moved are in `plans/`, each plan there belongs to an
+        intent, and `intents/` holds no plan but the one of this work item."""
+        plans = sorted(PLANS.glob("**/*.md"))
+        names = {plan.name for plan in plans}
+        for moved in ("boundary-gate-reads-any-path.md", "boundary-of-a-run.md", "code-host.md",
+                      "drafted-reading-review.md", "intent-reviewer.md", "plan-before-the-code.md",
+                      "reason-next-to-the-part.md", "setup-step.md"):
+            self.assertIn(moved, names)
+        for plan in plans:
+            with self.subTest(plan=plan.name):
+                self.assertTrue((INTENTS / plan.relative_to(PLANS)).is_file(), plan)
+        self.assertEqual([p.name for p in INTENTS.glob("**/*" + PLAN_SUFFIX)], ["plan-tier.plan.md"])
 
 
 if __name__ == "__main__":
