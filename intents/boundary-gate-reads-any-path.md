@@ -35,10 +35,11 @@ paths of files that exist, read from the folder, with no quotes.
 
 1. In a list with a NUL character between the paths, a path under a closed folder fails and the failure
    names it, for a name with a letter outside ASCII, a name with a space, and a name with a line break.
-   The same names outside the patterns pass.
+   The same names outside the patterns pass. A name that starts with a double quote and a name with a
+   backslash are read as they are: the rule for a quoted line holds for a list of lines only.
    test: `tests/test_boundary.py::Gate.test_a_list_with_nul_between_the_paths_is_read`
-2. In a list of lines, a line in the quotes of git fails, and the failure says to write the list with
-   `-z`.
+2. In a list of lines, a line in the quotes of git fails, and the failure names the line and holds the
+   text `-z`.
    test: `tests/test_boundary.py::Gate.test_a_path_in_the_quotes_of_git_fails`
 3. A list of lines without quotes gives the results of before.
    test: `tests/test_boundary.py::Gate.test_a_path_under_no_write_fails`
