@@ -35,6 +35,7 @@ refuses the result of a run that crossed it, before anything is published.
   dot segments as the path it points to, and refuses a path that leaves the repo.
 - The plan of a work item, `intents/<part>.plan.md`: a run writes it, so the gate and the deny rules let
   it pass also when `intents/**` is in `boundary.no_write`. Each other file under `intents/` stays refused.
+  This is decided here, because the gate needs the answer. How a person accepts the plan stays in #92.
 - Four decisions, in `docs/decisions.md`, section E:
   - A run holds no credential of the code host. A step that is a script pushes the branch and opens the
     change request, after the gate passed. So "a run never pushes to the main branch and never merges"
@@ -43,20 +44,23 @@ refuses the result of a run that crossed it, before anything is published.
     the repo. A file can differ from the contract, and a change request can change it. The documentation
     of Claude Code gives settings from the command line the precedence over the files of a repo, and a
     sandbox that is set there ignores a file of the repo that loosens it.
-  - For `boundary.no_write` the gate is the rule that must hold. In Claude Code the sandbox covers the
-    shell and the permission rules cover the file tools; the gate reads the result, whatever wrote it. It
-    runs between the run and the push, and a gate that fails or does not run publishes nothing, which is
-    the reason of decision E5. The deny rules and the sandbox stop the agent earlier, so that it does not
-    spend a run on a result that the gate refuses.
-  - The plan file passes, as above.
+  - For `boundary.no_write` there are two layers. The sandbox and the deny rules stop the agent
+    (decision E5). The gate reads the result, whatever wrote it, and runs between the run and the push; a
+    gate that fails or does not run publishes nothing. The gate is the layer for a writer that the
+    sandbox and the permission rules do not cover: in Claude Code the sandbox covers the shell, and the
+    permission rules cover the file tools.
+  - A run can write the plan of a work item, also under a pattern of `boundary.no_write`. The run is the
+    author of the plan. The approved intent holds the acceptance checks, and it stays closed to the run.
 - The default, in `charter/templates/charter.toml`, which the setup step writes. `boundary.no_write`: the
   contract, `AGENTS.md`, `CLAUDE.md`, `intents/**`, `.github/**`, `.claude/**`. `boundary.no_read`: `.env`
   and `.env.*`, at the root and in each folder. The contract of this repo carries the same section.
+  The package files of a language, for example `package.json` and its lock file, are not in the default:
+  they differ from repo to repo, and a repo adds its own.
 - The rule line with the identifier `boundary.no_write`, in `charter/templates/AGENTS.md` and in the
   `AGENTS.md` of this repo, so that an agent knows the boundary before it meets a refusal.
 - `docs/contract.md`: the two fields, the command, and the gate. `docs/product.md`, section "Who does the
   work": what the boundary of a run is, in two sentences.
-- Both manifests: 0.3.6.
+- Both manifests: the same version, 0.3.6 or later.
 
 ## Out of scope
 
@@ -66,7 +70,9 @@ of the code host. The stop switch and the count of the refusals: later issues of
 that the shell can reach: when a run needs one. A platform without a sandbox. A person who works with an
 agent in a session: the sandbox is optional there (decision E3). The minimum of the organization in its
 source: a later change of that source, with its own version. A test of the sandbox and of the
-permission rules of Claude Code themselves, except the manual check below.
+permission rules of Claude Code themselves, except the manual check below. The conformance check of
+decision E4: the settings are written from the contract at the start of each run, so no file can differ
+from it; the check that a run used them is in #92.
 
 ## Acceptance checks
 
@@ -127,4 +133,5 @@ permission rules of Claude Code themselves, except the manual check below.
 16. On a runner of the code host, in the first run of #92, with the settings that the command printed:
     the run starts with the sandbox, the edit tool refuses a write to the contract, a shell command
     reaches no host, and the log of the run names both refusals. who: the leader. Not automatic: the
-    check needs a model call and a runner, and the workflow of the run comes with #92.
+    check needs a model call and a runner, and the workflow of the run comes with #92. The issue #92
+    carries a line for this check, and the leader closes it there.
