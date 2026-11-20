@@ -30,7 +30,8 @@ the plan lives in a folder of its own, `plans/<part>.md`, outside the high tier.
   `plans/**`.
 - The boundary of a run (#91): the special rule for a plan leaves the gate and the settings. A plan in
   `plans/` is under no closed pattern, and `intents/**` is closed as one folder in both layers. The row
-  E10 of the decision record says that this decision replaces it.
+  E10 of the decision record says that this decision replaces it. The boundary changes here because the
+  special rule of E10 exists only while the plan is under `intents/`.
 - The texts that name the place: `AGENTS.md` and its template, the skill `tracker`, the notes of the
   schema, the comments of the two contracts, and `docs/contract.md`, which also says how a repo moves:
   `git mv intents/<part>.plan.md plans/<part>.md`.
@@ -44,7 +45,7 @@ the plan lives in a folder of its own, `plans/<part>.md`, outside the high tier.
 Who accepts a plan in each tier, and the merge by the verdict: #66. A check that fails when a plan is at
 the old place. The update of an adopter repo by a command: #97. The intents of work items that are done
 keep their text, with the old place in it; one line in `intents/plan-before-the-code.md` points to this
-intent.
+intent. The move of `intents/plan-tier.plan.md` to `plans/plan-tier.md`: the first change after this one.
 
 ## Acceptance checks
 
