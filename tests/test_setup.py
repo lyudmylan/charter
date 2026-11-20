@@ -140,7 +140,7 @@ class Templates(Temp):
     def test_workflow_templates_fetch_charter_at_the_version(self):
         """charter-version-in-ci, check 2."""
         self.assertEqual(self.setup()[0], cc.PASS)
-        for name in ("tests.yml", "verdict.yml", "review-intents.yml"):
+        for name in ("tests.yml", "verdict.yml", "review-intents.yml", "review-code.yml"):
             text = (self.dir / cs.WORKFLOWS / name).read_text()
             with self.subTest(workflow=name):
                 self.assertIn('tomllib.load(open("charter.toml", "rb"))["charter"]["version"]', text)
@@ -155,12 +155,12 @@ class Templates(Temp):
         """setup-step, check 6 (#58): GitHub refuses the `runner` context in a job-level env; the file then
         does not parse, and the run has no job and no log."""
         self.assertEqual(self.setup()[0], cc.PASS)
-        for name in ("tests.yml", "verdict.yml", "review-intents.yml"):
+        for name in ("tests.yml", "verdict.yml", "review-intents.yml", "review-code.yml"):
             text = (self.dir / cs.WORKFLOWS / name).read_text()
             with self.subTest(workflow=name):
                 self.assertIsNone(re.search(r"^    env:\n(?:      .*\n)*?      \w+: \$\{\{ runner\.", text, re.M),
                                   "a job-level env uses the runner context")
-                self.assertIn('>> "$GITHUB_ENV"', text) if name != "review-intents.yml" else None
+                self.assertIn('>> "$GITHUB_ENV"', text) if name not in ("review-intents.yml", "review-code.yml") else None
 
     def test_verdict_template_declares_actions_read(self):
         """setup-step, check 7 (#63): the facts step lists the runs of the review workflow to count the
@@ -294,6 +294,96 @@ class Commands(unittest.TestCase):
         core = json.loads(cs.MANIFEST.read_text())["version"]
         practices = json.loads((ROOT / "charter-practices" / ".claude-plugin" / "plugin.json").read_text())["version"]
         self.assertEqual(core, practices)
+
+
+class PlanPlace(Temp):
+    def test_the_setup_writes_the_template_of_a_plan(self):
+        """plan-tier, check 4."""
+        code, out = self.setup()
+        self.assertEqual(code, cc.PASS, out)
+        text = (self.dir / cs.PLAN_TEMPLATE).read_text()
+        self.assertEqual(cs.PLAN_TEMPLATE, "plans/_template.md")
+        for heading in ("## Steps", "## Files", "## Tests"):
+            self.assertIn(heading, text)
+        self.assertIn("Intent: `intents/", text)
+        high = tomllib.loads((self.dir / cs.CONTRACT_FILE).read_text())["tiers"]["high"]["paths"]
+        for path in ("plans/app.md", "plans/sub/app.md", cs.PLAN_TEMPLATE):
+            with self.subTest(path=path):
+                self.assertFalse(cc.matches(path, high), high)
+
+    def test_the_instructions_and_the_documents_name_the_new_place(self):
+        """plan-tier, check 7: the instruction template, the instructions of this repo, the skill `tracker`,
+        and the document of the contract, which also holds the command of the move."""
+        files = (ROOT / "charter" / "templates" / cs.INSTRUCTIONS_FILE, ROOT / cs.INSTRUCTIONS_FILE,
+                 ROOT / "charter-practices" / "skills" / "tracker" / "SKILL.md", ROOT / "docs" / "contract.md")
+        for path in files:
+            with self.subTest(file=path.name):
+                text = path.read_text()
+                self.assertIn("plan `plans/<part>.md`", " ".join(text.split()))
+                self.assertNotIn("plan `intents/<part>.plan.md`", " ".join(text.split()))
+        contract = (ROOT / "docs" / "contract.md").read_text()
+        self.assertIn("git mv intents/<part>.plan.md plans/<part>.md", contract)
+
+
+class ReviewRounds(unittest.TestCase):
+    def test_the_intent_template_names_no_language(self):
+        """review-rounds, check 8: the test line of the intent template names no file of one language."""
+        text = (ROOT / "charter" / "templates" / "intent.md").read_text()
+        test_lines = [line.strip() for line in text.splitlines() if line.strip().startswith("test:")]
+        self.assertEqual(test_lines, ["test: <the file of the test, and the name of the test in it>"])
+        for language in (".py", ".ts", ".js", ".go", ".rb", "::"):
+            with self.subTest(language=language):
+                self.assertNotIn(language, " ".join(test_lines))
+
+
+class CodeReviewer(unittest.TestCase):
+    def test_the_instructions_and_the_product_document_name_the_reviewer(self):
+        """code-reviewer, check 12: the instruction template and the instructions of this repo name the reviewer of
+        the code with its rule, and the Test row of the lifecycle map names it."""
+        for path in (ROOT / "charter" / "templates" / cs.INSTRUCTIONS_FILE, ROOT / cs.INSTRUCTIONS_FILE):
+            with self.subTest(file=str(path.relative_to(ROOT))):
+                section = " ".join(path.read_text().split("## Review and limits", 1)[1].split())
+                self.assertIn("The reviewer of the code, the workflow `review-code`", section)
+                self.assertIn("with the skill `change-review`", section)
+                self.assertIn("[review.code_blocks]", section)
+        row = re.search(r"^\| Test \| (.*)$", (ROOT / "docs" / "product.md").read_text(), re.M)
+        self.assertIsNotNone(row, "no Test row")
+        self.assertIn("An agent that is not the author reviews the code.", row.group(1))
+        for name in ("charter.toml", "charter/templates/charter.toml"):
+            with self.subTest(contract=name):
+                table = (ROOT / name).read_text().split("\n[review]\n", 1)[1].split("\n[", 1)[0]
+                self.assertIn("\ncode_blocks = false\n", "\n" + table + "\n")
+
+
+class VerdictMerges(Temp):
+    def test_the_setup_turns_no_merge_on_and_names_the_token(self):
+        """verdict-merges, check 7: the written contract and the contract of this repo name no tier with the
+        approver `agent` and set the flag to false; the printed steps name the merge token as optional."""
+        code, out = self.setup()
+        self.assertEqual(code, cc.PASS, out)
+        for name, path in (("the written contract", self.dir / cs.CONTRACT_FILE), ("this repo", ROOT / cs.CONTRACT_FILE)):
+            with self.subTest(contract=name):
+                data = tomllib.loads(path.read_text())
+                self.assertTrue(data["tiers"])
+                for tier, spec in data["tiers"].items():
+                    self.assertNotEqual(spec.get("approver"), "agent", tier)
+                self.assertIs(data["review"]["code_blocks"], False)
+        steps = out.split(cs.msg("steps_title"), 1)[1]
+        line = next((step for step in steps.splitlines() if "CHARTER_MERGE_TOKEN" in step), None)
+        self.assertIsNotNone(line, steps)
+        self.assertIn("Optional, for a repo that gives a tier the approver `agent`", line)
+        self.assertRegex(line, r"^  \d+\. ")
+
+    def test_the_instructions_say_who_merges(self):
+        """verdict-merges, check 7: the instruction template and the instructions of this repo."""
+        for path in (ROOT / "charter" / "templates" / cs.INSTRUCTIONS_FILE, ROOT / cs.INSTRUCTIONS_FILE):
+            with self.subTest(file=str(path.relative_to(ROOT))):
+                text = " ".join(path.read_text().split())
+                self.assertIn("The approver of the tier merges: a person, or the verdict for a tier whose approver is "
+                              "`agent`. [tiers.high.approver]", text)
+                self.assertIn("In a tier whose approver is `agent`, the review of the plan by the intent reviewer is its "
+                              "acceptance.", text)
+                self.assertNotIn("A person merges.", text)
 
 
 if __name__ == "__main__":

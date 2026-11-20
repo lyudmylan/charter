@@ -13,8 +13,10 @@ jobs:
     name: tests
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           persist-credentials: false
+      # charter:toolchain:start
+      # charter:toolchain:end
       - name: Run the quality checks of the contract on this code
         run: python3 charter/scripts/charter_gate.py quality --contract charter.toml --repo-only

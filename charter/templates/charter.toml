@@ -43,8 +43,10 @@ approvals = 1
 # The review loop: a finding at this severity or above keeps the loop open. The limits come from the source.
 [review]
 threshold = "medium"
+# The reviewer of the code is in its shadow period: its open findings block nothing yet.
+code_blocks = false
 
-# The Build phase: each work item has its plan, intents/<part>.plan.md, before the code.
+# The Build phase: each work item has its plan, plans/<part>.md, before the code.
 [build]
 plan_before_code = true
 
@@ -53,6 +55,13 @@ necessary = ["docs/product.md"]
 code_paths = [%{code_paths}]
 text_checked = [%{text_checked}]   # they must contain none of the text-checked patterns
 absent = ["docs/adr/**", "doc/adr/**", "doc/arch/adr-*.md", "docs/decisions/**"]   # no file for one decision: the choice and its reason go into the architecture map
+
+# The boundary of a run of an agent without a person. Such a run never changes a file under no_write and
+# never reads a file under no_read. The plan of a work item, plans/<part>.md, is under no pattern and passes.
+# Add the package files of the repo, for example package.json and its lock file.
+[boundary]
+no_write = ["charter.toml", "AGENTS.md", "CLAUDE.md", "intents/**", ".github/**", ".claude/**"]
+no_read = [".env", ".env.*", "**/.env", "**/.env.*"]
 
 [instructions]
 file = "AGENTS.md"

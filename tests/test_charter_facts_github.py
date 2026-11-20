@@ -92,7 +92,7 @@ class Text(unittest.TestCase):
             28: {cf.ISSUE_BODY: "Intent: intents/app.plan.md\nIntent: intents/App.MD", cf.ISSUE_STATE: "open"},   # a plan, a wrong case
         }
         self.assertEqual(cf.intent_paths(issues), ["intents/app.md", "intents/other.md", "intents/older-form.md"])
-        self.assertEqual(cg.plan_of("intents/app.md"), "intents/app.plan.md")
+        self.assertEqual(cg.plan_of("intents/app.md"), "plans/app.md")
         facts = cf.build_facts({cf.PR_NUMBER: 7, cf.PR_TITLE: "t", cf.PR_BODY: ""}, [], {}, 0, {},
                                plans={"intents/app.md": True, "intents/other.md": False})
         self.assertEqual(facts[cg.FACT_INTENTS], [{cg.INTENT_PATH: "intents/app.md", cg.INTENT_PLAN: True, cg.INTENT_REMOVED: False},
@@ -130,23 +130,23 @@ class ReviewLoop(unittest.TestCase):
         self.assertIsNone(cf.highest_severity([{**self.bot, cf.COMMENT_BODY: f"{cf.REVIEW_MARKER}\nno line"}], cf.RECORD_AUTHOR))
 
     def test_rounds_are_the_successful_runs_since_the_change_request_opened(self):
-        """review-loop, check 4."""
-        pr = {cf.PR_CREATED: "2026-10-01T10:00:00Z"}
-        runs = [
-            {cf.RUN_CONCLUSION: cf.CONCLUSION_SUCCESS, cf.RUN_CREATED: "2026-10-01T12:00:00Z"},
-            {cf.RUN_CONCLUSION: "failure", cf.RUN_CREATED: "2026-10-01T11:00:00Z"},
-            {cf.RUN_CONCLUSION: cf.CONCLUSION_SUCCESS, cf.RUN_CREATED: "2026-10-01T10:30:00Z"},
-            {cf.RUN_CONCLUSION: cf.CONCLUSION_SUCCESS, cf.RUN_CREATED: "2026-09-30T10:00:00Z"},   # an older change request
-        ]
-        self.assertEqual(cf.review_rounds(runs, pr), 2)
+        """review-loop, check 4. Since review-rounds (#61) a successful run is a run that added a report, so the
+        fact `review_rounds` is the number of the reports of the reviewer; a comment of another author is none."""
+        report = f"{cf.REVIEW_MARKER}\nHighest open severity: low\n"
+        person = {cf.COMMENT_USER: {cf.USER_LOGIN: "alice"}, cf.COMMENT_BODY: report}
+        comments = [{**self.bot, cf.COMMENT_BODY: report}, person, {**self.bot, cf.COMMENT_BODY: report}]
+        pr = {cf.PR_NUMBER: 7, cf.PR_TITLE: "t", cf.PR_BODY: ""}
+        facts = cf.build_facts(pr, [], {}, 0, {}, review=cf.review_reports(comments, cf.RECORD_AUTHOR))
+        self.assertEqual(facts[cg.FACT_REVIEW_ROUNDS], 2)
 
     def test_facts_carry_the_loop_only_when_a_reviewer_is_named(self):
         """review-loop, check 4."""
         pr = {cf.PR_NUMBER: 7, cf.PR_TITLE: "t", cf.PR_BODY: ""}
         without = cf.build_facts(pr, [], {}, 0, {})
         self.assertNotIn(cg.FACT_REVIEW_ROUNDS, without)
-        with_loop = cf.build_facts(pr, [], {}, 0, {}, review=(2, "low"))
+        with_loop = cf.build_facts(pr, [], {}, 0, {}, review=["high", "low"])
         self.assertEqual((with_loop[cg.FACT_REVIEW_ROUNDS], with_loop[cg.FACT_REVIEW_SEVERITY]), (2, "low"))
+        self.assertEqual(with_loop[cg.FACT_REVIEW_REPORTS], ["high", "low"])
 
 
 class Facts(unittest.TestCase):
@@ -189,6 +189,163 @@ class Facts(unittest.TestCase):
         self.assertEqual(cf.parse_checks(["quality=success", " tests = failure "]), {"quality": "success", "tests": "failure"})
         with self.assertRaises(cc.CannotRun):
             cf.parse_checks(["quality"])
+
+
+class FakeHost:
+    """The code host as data: a change request that links issue 4, whose intent is `intents/app.md`, and the
+    files that exist at the head commit. A missing file is None, as the API answers with optional."""
+    REPO, NUMBER, COMMIT = "o/r", 7, "abc"
+
+    def __init__(self, files_at_head: set[str]):
+        self.files_at_head = files_at_head
+        self.asked: list[str] = []
+
+    def get(self, path: str, optional: bool = False) -> object:
+        self.asked.append(path)
+        if path == f"/repos/{self.REPO}/pulls/{self.NUMBER}":
+            return {cf.PR_NUMBER: self.NUMBER, cf.PR_TITLE: "t", cf.PR_BODY: "Closes #4.", cf.PR_HEAD: {cf.HEAD_SHA: self.COMMIT}}
+        if path == f"/repos/{self.REPO}/issues/4":
+            return {cf.ISSUE_BODY: "Intent: intents/app.md", cf.ISSUE_STATE: "open"}
+        prefix, suffix = f"/repos/{self.REPO}/contents/", f"?ref={self.COMMIT}"
+        if path.startswith(prefix) and path.endswith(suffix):
+            return {} if path[len(prefix):-len(suffix)] in self.files_at_head else None
+        raise AssertionError(f"not expected: {path}")
+
+    def pages(self, path: str) -> list:
+        return [{cf.FILE_NAME: "src/app.py", cf.FILE_STATUS: "modified"}]
+
+    def unresolved_threads(self, owner: str, name: str, number: int) -> int:
+        return 0
+
+
+class ReviewReports(unittest.TestCase):
+    bot = {cf.COMMENT_USER: {cf.USER_LOGIN: cf.RECORD_AUTHOR}}
+
+    def report(self, line: str) -> dict:
+        return {**self.bot, cf.COMMENT_BODY: f"{cf.REVIEW_MARKER}\nCommit: abc\n{line}\n"}
+
+    def test_each_report_gives_its_severity_in_order(self):
+        """review-rounds, check 5."""
+        person = {cf.COMMENT_USER: {cf.USER_LOGIN: "alice"},
+                  cf.COMMENT_BODY: f"{cf.REVIEW_MARKER}\nHighest open severity: blocker\n"}
+        plain = {**self.bot, cf.COMMENT_BODY: "Highest open severity: high"}     # no marker: no report
+        comments = [self.report("Highest open severity: Medium"), person, plain, self.report("no line"),
+                    self.report("Highest open severity: low")]
+        self.assertEqual(cf.review_reports(comments, cf.RECORD_AUTHOR), ["medium", None, "low"])
+        self.assertEqual(cf.review_reports([person], cf.RECORD_AUTHOR), [])
+
+    def test_the_collector_lists_no_workflow_runs(self):
+        """review-rounds, check 5: the collector reads the reports from the comments, and asks the code host
+        for no list of workflow runs."""
+        reports = [self.report("Highest open severity: high"), self.report("Highest open severity: none")]
+
+        class Host(FakeHost):
+            def pages(self, path: str) -> list:
+                self.asked.append(path)
+                return reports if path.endswith("/comments") else super().pages(path)
+
+        host = Host(set())
+        facts = cf.collect(FakeHost.REPO, FakeHost.NUMBER, {}, [], host, review_workflow="review-intents.yml")
+        self.assertEqual(facts[cg.FACT_REVIEW_REPORTS], ["high", "none"])
+        self.assertEqual((facts[cg.FACT_REVIEW_ROUNDS], facts[cg.FACT_REVIEW_SEVERITY]), (2, "none"))
+        self.assertIn(f"/repos/{FakeHost.REPO}/issues/{FakeHost.NUMBER}/comments", host.asked)
+        self.assertFalse([path for path in host.asked if "/actions/" in path], host.asked)
+
+
+class PlanPlace(unittest.TestCase):
+    def facts(self, *files_at_head: str) -> dict:
+        host = FakeHost(set(files_at_head))
+        return cf.collect(FakeHost.REPO, FakeHost.NUMBER, {}, [], host)[cg.FACT_INTENTS]
+
+    def test_the_plan_is_found_in_the_plans_folder(self):
+        """plan-tier, check 2."""
+        self.assertEqual(self.facts("plans/app.md"),
+                         [{cg.INTENT_PATH: "intents/app.md", cg.INTENT_PLAN: True, cg.INTENT_REMOVED: False}])
+
+    def test_a_plan_at_the_old_place_still_counts(self):
+        """plan-tier, check 2."""
+        self.assertEqual(self.facts("intents/app.plan.md"),
+                         [{cg.INTENT_PATH: "intents/app.md", cg.INTENT_PLAN: True, cg.INTENT_REMOVED: False}])
+
+    def test_a_plan_at_neither_place_is_missing(self):
+        """plan-tier, check 2."""
+        self.assertEqual(self.facts("intents/app.md", "plans/other.md"),
+                         [{cg.INTENT_PATH: "intents/app.md", cg.INTENT_PLAN: False, cg.INTENT_REMOVED: False}])
+
+
+class CodeReview(unittest.TestCase):
+    bot = {cf.COMMENT_USER: {cf.USER_LOGIN: cf.RECORD_AUTHOR}}
+
+    def report(self, marker: str, commit: str, line: str) -> dict:
+        return {**self.bot, cf.COMMENT_BODY: f"{marker}\nCommit: {commit}\n\n| item | finding |\n{line}\n"}
+
+    def test_each_report_gives_its_severity_in_order(self):
+        """code-reviewer, check 5: the severity of each report, oldest first, and the commit of the newest."""
+        person = {cf.COMMENT_USER: {cf.USER_LOGIN: "alice"},
+                  cf.COMMENT_BODY: f"{cf.CODE_REVIEW_MARKER}\nCommit: fff\nHighest open severity: blocker\n"}
+        comments = [self.report(cf.CODE_REVIEW_MARKER, "aaa", "Highest open severity: High"), person,
+                    self.report(cf.CODE_REVIEW_MARKER, "bbb", "no line"),
+                    self.report(cf.CODE_REVIEW_MARKER, "ccc", "Highest open severity: low")]
+        self.assertEqual(cf.review_reports(comments, cf.RECORD_AUTHOR, cf.CODE_REVIEW_MARKER), ["high", None, "low"])
+        self.assertEqual(cf.report_commit(comments, cf.RECORD_AUTHOR, cf.CODE_REVIEW_MARKER), "ccc")
+        self.assertIsNone(cf.report_commit([person], cf.RECORD_AUTHOR, cf.CODE_REVIEW_MARKER))
+        pr = {cf.PR_NUMBER: 7, cf.PR_TITLE: "t", cf.PR_BODY: ""}
+        facts = cf.build_facts(pr, [], {}, 0, {}, code_review=["high", None, "low"], code_commit="ccc", head="ccc")
+        self.assertEqual((facts[cg.FACT_CODE_REVIEW_REPORTS], facts[cg.FACT_CODE_REVIEW_COMMIT], facts[cg.FACT_HEAD_COMMIT]),
+                         (["high", None, "low"], "ccc", "ccc"))
+        self.assertNotIn(cg.FACT_CODE_REVIEW_REPORTS, cf.build_facts(pr, [], {}, 0, {}))
+
+    def test_the_two_reviews_stay_apart(self):
+        """code-reviewer, check 5: one list of comments holds the reports of both reviewers."""
+        comments = [self.report(cf.REVIEW_MARKER, "aaa", "Highest open severity: blocker"),
+                    self.report(cf.CODE_REVIEW_MARKER, "bbb", "Highest open severity: medium"),
+                    self.report(cf.REVIEW_MARKER, "ccc", "Highest open severity: none")]
+
+        class Host(FakeHost):
+            def pages(self, path: str) -> list:
+                return comments if path.endswith("/comments") else super().pages(path)
+
+        facts = cf.collect(FakeHost.REPO, FakeHost.NUMBER, {}, [], Host(set()), review_workflow="review-intents.yml",
+                           code_review_workflow="review-code.yml")
+        self.assertEqual(facts[cg.FACT_REVIEW_REPORTS], ["blocker", "none"])
+        self.assertEqual(facts[cg.FACT_CODE_REVIEW_REPORTS], ["medium"])
+        self.assertEqual(facts[cg.FACT_CODE_REVIEW_COMMIT], "bbb")
+        self.assertEqual(facts[cg.FACT_HEAD_COMMIT], FakeHost.COMMIT)
+        only_intents = cf.collect(FakeHost.REPO, FakeHost.NUMBER, {}, [], Host(set()), review_workflow="review-intents.yml")
+        self.assertNotIn(cg.FACT_CODE_REVIEW_REPORTS, only_intents)
+        only_code = cf.collect(FakeHost.REPO, FakeHost.NUMBER, {}, [], Host(set()), code_review_workflow="review-code.yml")
+        self.assertNotIn(cg.FACT_REVIEW_REPORTS, only_code)
+        self.assertEqual(only_code[cg.FACT_CODE_REVIEW_REPORTS], ["medium"])
+
+
+class VerdictMerges(unittest.TestCase):
+    bot = {cf.COMMENT_USER: {cf.USER_LOGIN: cf.RECORD_AUTHOR}}
+
+    def report(self, marker: str, commit: str, line: str) -> dict:
+        return {**self.bot, cf.COMMENT_BODY: f"{marker}\nCommit: {commit}\n\n| intent | verdict |\n{line}\n"}
+
+    def test_the_commit_of_the_newest_intent_report_is_a_fact(self):
+        """verdict-merges, check 3."""
+        person = {cf.COMMENT_USER: {cf.USER_LOGIN: "alice"},
+                  cf.COMMENT_BODY: f"{cf.REVIEW_MARKER}\nCommit: fff\nHighest open severity: low\n"}
+        comments = [self.report(cf.REVIEW_MARKER, "aaa", "Highest open severity: high"),
+                    self.report(cf.REVIEW_MARKER, "BBB", "Highest open severity: low"),
+                    self.report(cf.CODE_REVIEW_MARKER, "ccc", "Highest open severity: low"), person]
+
+        class Host(FakeHost):
+            def pages(self, path: str) -> list:
+                return comments if path.endswith("/comments") else super().pages(path)
+
+        facts = cf.collect(FakeHost.REPO, FakeHost.NUMBER, {}, [], Host(set()), review_workflow="review-intents.yml",
+                           code_review_workflow="review-code.yml")
+        self.assertEqual(facts[cg.FACT_REVIEW_COMMIT], "bbb")
+        self.assertEqual(facts[cg.FACT_CODE_REVIEW_COMMIT], "ccc")
+        no_report = cf.collect(FakeHost.REPO, FakeHost.NUMBER, {}, [], Host(set()), review_workflow="review-intents.yml",
+                               author="nobody")
+        self.assertIn(cg.FACT_REVIEW_COMMIT, no_report)
+        self.assertIsNone(no_report[cg.FACT_REVIEW_COMMIT])
+        only_code = cf.collect(FakeHost.REPO, FakeHost.NUMBER, {}, [], Host(set()), code_review_workflow="review-code.yml")
+        self.assertNotIn(cg.FACT_REVIEW_COMMIT, only_code)
 
 
 if __name__ == "__main__":
