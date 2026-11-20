@@ -447,5 +447,108 @@ class PlanPlace(Temp):
         self.assertGreaterEqual(tuple(int(part) for part in versions[0].split(".")), (0, 3, 8))
 
 
+class ReviewRounds(Temp):
+    """The sample repo: review_loop 3, threshold medium. The facts carry the reports, as the collector writes them."""
+    OPEN = "keeps the loop open"
+    CLOSED = "the loop is closed"
+    LIMIT = "the limit is reached, a person decides"
+
+    def verdict(self, reports: list, **changes) -> str:
+        facts = {cg.FACT_REVIEW_REPORTS: reports, cg.FACT_REVIEW_ROUNDS: len(reports),
+                 cg.FACT_REVIEW_SEVERITY: reports[-1] if reports else None, **changes}
+        code, out = run(cg.CMD_VERDICT, f"--{cg.ARG_FACTS}", str(self.facts(**facts)), *self.contract_args())
+        self.assertEqual(code, cc.PASS, out)     # shadow mode: the loop changes no verdict
+        return out
+
+    def test_the_round_is_the_number_of_reports_in_the_current_loop(self):
+        """review-rounds, check 1."""
+        self.assertEqual(cg.current_round(["high", "medium", "blocker"], "medium"), 3)
+        self.assertEqual(cg.current_round(["high"], "medium"), 1)
+        self.assertEqual(cg.current_round([], "medium"), 0)
+        self.assertIn("review loop: round 2 of 3, highest open severity high: a finding at medium", self.verdict(["medium", "high"]))
+
+    def test_a_report_after_a_closed_one_starts_a_new_loop(self):
+        """review-rounds, check 1."""
+        self.assertEqual(cg.current_round(["high", "low", "medium"], "medium"), 1)
+        self.assertEqual(cg.current_round(["high", "none", "high", "medium"], "medium"), 2)
+        self.assertEqual(cg.current_round(["high", "medium", "low"], "medium"), 3)     # the closing report ends its own loop
+        self.assertEqual(cg.current_round(["medium", "medium"], "high"), 1)            # the threshold of the contract decides
+        self.assertEqual(cg.current_round(["medium", "medium"], "medium"), 2)
+        out = self.verdict(["high", "low", "low"])
+        self.assertIn("review loop: round 1 of 3, highest open severity low: " + self.CLOSED, out)
+
+    def test_the_first_review_of_a_plan_is_round_one(self):
+        """review-rounds, check 2: the case of the adopter, an intent that used three rounds and closed, then the
+        first review of its plan with a medium finding."""
+        out = self.verdict(["high", "medium", "low", "medium"])
+        self.assertIn("review loop: round 1 of 3, highest open severity medium: a finding at medium or above " + self.OPEN, out)
+
+    def test_a_push_after_a_closed_loop_is_no_round_above_the_limit(self):
+        """review-rounds, check 2: the case of #57, pushes after a closed loop."""
+        for reports in (["high", "medium", "low", "low", "none"], ["high", "high", "high", "none", "low", "none", "low"]):
+            with self.subTest(reports=reports):
+                out = self.verdict(reports)
+                self.assertIn("review loop: round 1 of 3, highest open severity", out)
+                self.assertIn(self.CLOSED, out)
+                self.assertNotRegex(out, r"round [4-9] of 3")
+
+    def test_three_open_reports_reach_the_limit(self):
+        """review-rounds, check 3."""
+        out = self.verdict(["high", "medium", "high"])
+        self.assertIn("review loop: round 3 of 3, highest open severity high: " + self.LIMIT, out)
+        out = self.verdict(["low", "high", "medium", "high"])
+        self.assertIn("review loop: round 3 of 3, highest open severity high: " + self.LIMIT, out)
+
+    def test_a_report_without_a_severity_line_counts_as_open(self):
+        """review-rounds, check 3."""
+        self.assertEqual(cg.current_round(["high", None, "medium"], "medium"), 3)
+        self.assertEqual(cg.current_round([None, None], "medium"), 2)
+        out = self.verdict(["high", None, "medium"])
+        self.assertIn("review loop: round 3 of 3, highest open severity medium: " + self.LIMIT, out)
+        self.assertIn("review loop: round 2 of 3, no severity line in the report", self.verdict(["low", "high", None]))
+
+    def test_older_facts_are_read_as_before(self):
+        """review-rounds, check 4: a facts file without `review_reports` takes the round from `review_rounds`."""
+        older = {cg.FACT_REVIEW_ROUNDS: 2, cg.FACT_REVIEW_SEVERITY: "medium"}
+        code, out = run(cg.CMD_VERDICT, f"--{cg.ARG_FACTS}", str(self.facts(**older)), *self.contract_args())
+        self.assertEqual(code, cc.PASS, out)
+        self.assertIn("review loop: round 2 of 3, highest open severity medium: a finding at medium or above " + self.OPEN, out)
+        for wrong in (["huge"], "low", [1]):
+            with self.subTest(reports=wrong):
+                code, out = run(cg.CMD_VERDICT, f"--{cg.ARG_FACTS}", str(self.facts(**{cg.FACT_REVIEW_REPORTS: wrong})),
+                                *self.contract_args())
+                self.assertEqual(code, cc.CANNOT_RUN)
+                self.assertIn(f"wrong value for {cg.FACT_REVIEW_REPORTS}", out)
+
+    def test_the_record_holds_the_reports_and_the_round(self):
+        """review-rounds, check 7."""
+        reports = ["high", "low", None, "medium"]
+        record = self.dir / "record.json"
+        facts = self.facts(**{cg.FACT_REVIEW_REPORTS: reports, cg.FACT_REVIEW_ROUNDS: 4, cg.FACT_REVIEW_SEVERITY: "medium"})
+        code, out = run(cg.CMD_VERDICT, f"--{cg.ARG_FACTS}", str(facts), *self.contract_args(), f"--{cg.ARG_RECORD}", str(record))
+        self.assertEqual(code, cc.PASS, out)
+        data = json.loads(record.read_text())
+        self.assertEqual(data[cg.FACT_REVIEW_REPORTS], reports)
+        self.assertEqual(data[cg.FACT_REVIEW_ROUNDS], 2)
+        self.assertEqual(data[cg.FACT_REVIEW_SEVERITY], "medium")
+
+    def test_the_contract_document_says_what_a_round_is(self):
+        """review-rounds, check 9."""
+        text = (ROOT / "docs" / "contract.md").read_text()
+        section = " ".join(text[text.index("### The review loop"):text.index("## The evidence record")].split())
+        for part in ("A round is a report of the reviewer in the current loop", "A loop starts with the first report",
+                     "a report without a severity line counts as open", "Each report stays on the change request as its own comment",
+                     "fails, is no round"):
+            with self.subTest(part=part):
+                self.assertIn(part, section)
+
+    def test_both_manifests_name_the_version(self):
+        """review-rounds, check 10."""
+        versions = [json.loads((ROOT / plugin / ".claude-plugin" / "plugin.json").read_text())["version"]
+                    for plugin in ("charter", "charter-practices")]
+        self.assertEqual(versions[0], versions[1])
+        self.assertGreaterEqual(tuple(int(part) for part in versions[0].split(".")), (0, 3, 9))
+
+
 if __name__ == "__main__":
     unittest.main()

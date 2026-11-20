@@ -65,7 +65,8 @@ FACT_CHECKS = "checks"                      # {"tests": "pass"}
 FACT_FALSE_FAILURES = "false_failures"    # optional: [{"gate": "documents", "reason": "..."}], recorded by a person
 FACT_DROPPED_FINDINGS = "dropped_findings"   # optional: ["reason"], the findings of the reviewer that the author dropped
 FACT_FALSE_FINDINGS = "false_findings"       # optional: ["reason"], the findings of the reviewer that the leader marked as false
-FACT_REVIEW_ROUNDS = "review_rounds"         # optional: whole number, the completed runs of the reviewer on the change request
+FACT_REVIEW_ROUNDS = "review_rounds"         # optional: whole number, the reports of the reviewer; an older collector counted its runs
+FACT_REVIEW_REPORTS = "review_reports"       # optional: [severity or null], the severity line of each report, oldest first
 FACT_REVIEW_SEVERITY = "review_highest_severity"   # optional: the last reported severity, or null before the first report
 FACT_INTENTS = "intents"                     # optional: [{"path": "intents/x.md", "plan": true, "removed": false}], from the linked issues
 # FACT_APPROVALS is optional and not checked in this version: the merge by the approver is the approval.
@@ -81,6 +82,8 @@ INTENT_SUFFIX, OLD_PLAN_SUFFIX = cc.INTENT_SUFFIX, cc.OLD_PLAN_SUFFIX
 
 # The review loop. A finding at the threshold or above keeps the loop open; the loop ends below it,
 # or when the rounds reach the limit. Then a person decides. Shadow mode: the loop blocks nothing yet.
+# A round is a report in the current loop. A loop starts with the first report, and again with the first
+# report after one whose severity is below the threshold. A report without a severity line counts as open.
 SEVERITIES = ("none", "low", "medium", "high", "blocker")   # from the lowest
 FIELD_REVIEW_LOOP = "limits.review_loop"
 FIELD_REVIEW_THRESHOLD = "review.threshold"
@@ -108,7 +111,7 @@ ARG_RECORD, ARG_SCRIPTS_VERSION = "record", "scripts_version"
 # The evidence record: the verdict, plus these fields.
 RECORD_FORM = 1
 RECORD_KEYS = ("record_form", "change_request", "time", "scripts_version", "false_failures", "dropped_findings", "false_findings",
-               FACT_REVIEW_ROUNDS, FACT_REVIEW_SEVERITY, FACT_INTENTS)
+               FACT_REVIEW_ROUNDS, FACT_REVIEW_SEVERITY, FACT_INTENTS, FACT_REVIEW_REPORTS)
 
 MSG = {
     "facts_not_json": "not JSON: {path}, {error}",
@@ -225,6 +228,9 @@ def load_facts(path: Path) -> dict:
         raise cc.CannotRun(msg("facts_bad_value", key=FACT_REVIEW_ROUNDS, path=path))
     if facts.get(FACT_REVIEW_SEVERITY) not in (None, *SEVERITIES):
         raise cc.CannotRun(msg("facts_bad_value", key=FACT_REVIEW_SEVERITY, path=path))
+    reports = facts.get(FACT_REVIEW_REPORTS, [])
+    if not (isinstance(reports, list) and all(r in (None, *SEVERITIES) for r in reports)):
+        raise cc.CannotRun(msg("facts_bad_value", key=FACT_REVIEW_REPORTS, path=path))
     intents = facts.get(FACT_INTENTS, [])
     if not (isinstance(intents, list) and all(_is_intent(i) for i in intents)):
         raise cc.CannotRun(msg("facts_bad_value", key=FACT_INTENTS, path=path))
@@ -377,9 +383,26 @@ def tier_of(changed: list[str], e: cc.Effective) -> tuple[str | None, dict]:
     return None, {}
 
 
+def current_round(reports: list[str | None], threshold: str) -> int:
+    """The round of the current loop: the number of the reports after the last report, before the newest one,
+    whose severity is below the threshold. A report without a severity line counts as open."""
+    start = 0
+    for i, severity in enumerate(reports[:-1]):
+        if severity is not None and SEVERITIES.index(severity) < SEVERITIES.index(threshold):
+            start = i + 1
+    return len(reports) - start
+
+
+def review_round(facts: dict, e: cc.Effective) -> int:
+    """The round from the reports, or, in a facts file of an older collector, the count `review_rounds`."""
+    if FACT_REVIEW_REPORTS not in facts:
+        return facts.get(FACT_REVIEW_ROUNDS, 0)
+    return current_round(facts[FACT_REVIEW_REPORTS], e.values.get(FIELD_REVIEW_THRESHOLD, DEFAULT_REVIEW_THRESHOLD))
+
+
 def review_loop_state(facts: dict, e: cc.Effective) -> str:
     """One line on the author-reviewer loop. It blocks nothing in this version: shadow mode."""
-    rounds = facts.get(FACT_REVIEW_ROUNDS, 0)
+    rounds = review_round(facts, e)
     severity = facts.get(FACT_REVIEW_SEVERITY)
     if not rounds:
         return msg("review_none")
@@ -449,7 +472,8 @@ def gate_verdict(facts: dict, e: cc.Effective) -> tuple[bool, list[str], dict]:
     reasons.append(review_loop_state(facts, e))
 
     tier, spec = tier_of(facts[FACT_CHANGED_FILES], e)
-    detail: dict = {JSON_KEY_TIER: tier, JSON_KEY_APPROVER: spec.get(TIER_APPROVER), JSON_KEY_MERGES: []}
+    detail: dict = {JSON_KEY_TIER: tier, JSON_KEY_APPROVER: spec.get(TIER_APPROVER), JSON_KEY_MERGES: [],
+                    FACT_REVIEW_ROUNDS: review_round(facts, e)}
     if tier is None:
         passed = False
         reasons.append(msg("no_tier"))
@@ -525,9 +549,10 @@ def build_record(facts: dict, verdict: str, origin: str, reasons: list[str], det
         RECORD_KEYS[4]: facts.get(FACT_FALSE_FAILURES, []),
         RECORD_KEYS[5]: facts.get(FACT_DROPPED_FINDINGS, []),
         RECORD_KEYS[6]: facts.get(FACT_FALSE_FINDINGS, []),
-        RECORD_KEYS[7]: facts.get(FACT_REVIEW_ROUNDS, 0),
+        RECORD_KEYS[7]: detail.get(FACT_REVIEW_ROUNDS, facts.get(FACT_REVIEW_ROUNDS, 0)),
         RECORD_KEYS[8]: facts.get(FACT_REVIEW_SEVERITY),
         RECORD_KEYS[9]: facts.get(FACT_INTENTS, []),
+        RECORD_KEYS[10]: facts.get(FACT_REVIEW_REPORTS, []),
     }
 
 

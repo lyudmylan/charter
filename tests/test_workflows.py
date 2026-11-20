@@ -15,12 +15,14 @@ WORKFLOWS = ROOT / ".github" / "workflows"
 TEMPLATES = ROOT / "charter" / "templates"
 BEFORE_STEP, GUARD_STEP = "Note the report before the review", "The run fails when the reviewer posted no report"
 NO_REPORT = "the reviewer posted no report"
+MARKER = "<!-- charter-intent-review -->"
+HEAD, OTHER = "1111111111111111111111111111111111111111", "2222222222222222222222222222222222222222"
+HEAD_SHA = "${{ github.event.pull_request.head.sha }}"
 READ_ONLY = {"Read", "Glob", "Grep"}
 # A command that only reads or only posts the one comment.
 ALLOWED_COMMANDS = re.compile(
     r"^Bash\((git diff|git log|gh issue view|gh issue list|gh pr view|gh pr comment):\*\)$|"
-    r"^Bash\(gh api repos/\$\{\{ github\.repository \}\}/issues/\*/comments\*\)$|"
-    r"^Bash\(gh api -X PATCH repos/\$\{\{ github\.repository \}\}/issues/comments/\*\)$"
+    r"^Bash\(gh api repos/\$\{\{ github\.repository \}\}/issues/\*/comments\*\)$"
 )
 
 
@@ -49,6 +51,22 @@ def run_shell(script: str, folder: Path, env: dict[str, str]) -> tuple[int, str]
     return result.returncode, result.stdout + result.stderr
 
 
+def answer(count: int, commit: str | None = HEAD) -> str:
+    """The answer of the code host to the last step: the number of the reports, then the newest report."""
+    if not count:
+        return "0\n"
+    return f"{count}\n{MARKER}\nCommit: {commit}\n\n| intent | verdict |\nHighest open severity: low\n"
+
+
+def guard_env(before: str, gh_answer: str) -> dict[str, str]:
+    return {"BEFORE": before, "GH_ANSWER": gh_answer, "PR_NUMBER": "7", "GITHUB_REPOSITORY": "owner/name",
+            "HEAD_SHA": HEAD, "EXECUTION_FILE": ""}
+
+
+def prompt_of(text: str) -> str:
+    return re.search(r"prompt: \|\n((?:            .*\n)+)", text).group(1)
+
+
 class ReviewIntents(unittest.TestCase):
     text = (WORKFLOWS / "review-intents.yml").read_text()
     template = (TEMPLATES / "review-intents.yml").read_text()
@@ -68,9 +86,9 @@ class ReviewIntents(unittest.TestCase):
         self.assertIn("contents: read", self.text)
 
     def test_a_run_without_a_report_fails(self):
-        """intent-reviewer, check 4 (#70): the run fails when the report comment was neither posted nor updated,
-        and passes when it was. The two steps have the same text in the template and in this workflow, and
-        they stand before and after the reviewer."""
+        """intent-reviewer, check 4 (#70): the run fails when no new report was posted, and passes when one was
+        (review-rounds: each report is a new comment, so the step compares the number of the reports). The two
+        steps have the same text in the template and in this workflow, and they stand before and after the reviewer."""
         step = run_block(self.text, GUARD_STEP)
         self.assertEqual(step, run_block(self.template, GUARD_STEP))
         self.assertEqual(run_block(self.text, BEFORE_STEP), run_block(self.template, BEFORE_STEP))
@@ -80,12 +98,9 @@ class ReviewIntents(unittest.TestCase):
             self.assertIn(f"      - name: {GUARD_STEP}\n        if: always()\n", text)
         folder = Path(tempfile.mkdtemp())
         try:
-            t1, t2 = "2026-11-09T10:00:00Z", "2026-11-09T10:05:00Z"
-            for before, after, passes in (("none", "none", False), (t1, t1, False), ("none", t2, True), (t1, t2, True)):
+            for before, after, passes in (("0", 0, False), ("1", 1, False), ("0", 1, True), ("1", 2, True)):
                 with self.subTest(before=before, after=after):
-                    env = {"BEFORE": before, "GH_ANSWER": after, "PR_NUMBER": "7", "GITHUB_REPOSITORY": "owner/name",
-                           "EXECUTION_FILE": ""}
-                    code, out = run_shell(step, folder, env)
+                    code, out = run_shell(step, folder, guard_env(before, answer(after)))
                     self.assertEqual(code == 0, passes, out)
                     self.assertEqual(NO_REPORT in out, not passes, out)
         finally:
@@ -102,8 +117,7 @@ class ReviewIntents(unittest.TestCase):
             log.write_text(json.dumps([{"type": "system", "subtype": "init"},
                                        {"type": "result", "subtype": "success", "permission_denials": [
                                            {"tool_name": "Bash", "tool_input": {"command": "cat intents/x.md"}}]}]))
-            env = {"BEFORE": "none", "GH_ANSWER": "2026-11-09T10:05:00Z", "PR_NUMBER": "7",
-                   "GITHUB_REPOSITORY": "owner/name", "EXECUTION_FILE": str(log)}
+            env = {**guard_env("0", answer(1)), "EXECUTION_FILE": str(log)}
             code, out = run_shell(step, folder, env)
             self.assertEqual(code, 0, out)
             self.assertIn('denied: Bash {"command":"cat intents/x.md"}', out)
@@ -111,16 +125,102 @@ class ReviewIntents(unittest.TestCase):
             shutil.rmtree(folder, ignore_errors=True)
 
     def test_the_prompt_names_the_tools_and_the_posting_command(self):
-        """intent-reviewer, check 5 (#70)."""
+        """intent-reviewer, check 5 (#70). Since review-rounds (#61) the reviewer posts and updates no comment."""
         for name, text in (("this workflow", self.text), ("the template", self.template)):
             with self.subTest(file=name):
                 prompt = re.search(r"prompt: \|\n((?:            .*\n)+)", text)
                 self.assertIsNotNone(prompt, "no prompt")
                 for part in ("Read files with the Read tool", "A denied command is no reason to stop",
-                             "ends only after it is posted or updated",
-                             "gh pr comment ${{ github.event.pull_request.number }} --body-file - <<'REPORT'",
-                             "gh api -X PATCH repos/${{ github.repository }}/issues/comments/<id> -F body=@- <<'REPORT'"):
+                             "ends only after it is posted",
+                             "gh pr comment ${{ github.event.pull_request.number }} --body-file - <<'REPORT'"):
                     self.assertIn(part, prompt.group(1))
+
+
+class ReviewRounds(unittest.TestCase):
+    files = {"this workflow": (WORKFLOWS / "review-intents.yml").read_text(),
+             "the template": (TEMPLATES / "review-intents.yml").read_text()}
+
+    def test_the_reviewer_posts_a_new_comment_and_updates_none(self):
+        """review-rounds, check 6."""
+        for name, text in self.files.items():
+            with self.subTest(file=name):
+                prompt = " ".join(prompt_of(text).split())
+                self.assertIn("The report is a new comment on change request", prompt)
+                self.assertIn("at each run", prompt)
+                self.assertIn("Change no earlier comment", prompt)
+                self.assertNotIn("PATCH", text)
+                tools = re.search(r'--allowedTools "([^"]+)"', text).group(1)
+                self.assertIn("Bash(gh pr comment:*)", tools.split(","))
+                self.assertFalse([tool for tool in tools.split(",") if "-X" in tool], tools)
+
+    def test_the_run_fails_when_no_report_was_added(self):
+        """review-rounds, check 6: the last step, run with `bash -e` and a fake of the code host."""
+        step = run_block(self.files["this workflow"], GUARD_STEP)
+        self.assertEqual(step, run_block(self.files["the template"], GUARD_STEP))
+        before = run_block(self.files["this workflow"], BEFORE_STEP)
+        self.assertEqual(before, run_block(self.files["the template"], BEFORE_STEP))
+        self.assertIn("| length", before)
+        self.assertIn("reports=$REPORTS", before)
+        folder = Path(tempfile.mkdtemp())
+        try:
+            cases = (("2", answer(2), False), ("0", answer(0), False), ("", answer(0), False), ("3", answer(2), False),
+                     ("1", "not a number", False), ("2", answer(3), True), ("", answer(1), True))
+            for before_count, gh_answer, passes in cases:
+                with self.subTest(before=before_count, answer=gh_answer.splitlines()[0]):
+                    code, out = run_shell(step, folder, guard_env(before_count, gh_answer))
+                    self.assertEqual(code == 0, passes, out)
+                    self.assertEqual(NO_REPORT in out, not passes, out)
+        finally:
+            shutil.rmtree(folder, ignore_errors=True)
+
+
+class ReviewerDiff(unittest.TestCase):
+    files = ReviewRounds.files
+
+    def test_the_report_names_its_commit(self):
+        """reviewer-reads-the-diff-of-a-round, check 1: the head commit comes to the reviewer in the prompt, and to
+        the last step through `env:`, never into the text of the script."""
+        for name, text in self.files.items():
+            with self.subTest(file=name):
+                prompt = " ".join(prompt_of(text).split())
+                self.assertIn(f"The head commit is {HEAD_SHA}.", prompt)
+                self.assertIn(f"The report holds one line `Commit: {HEAD_SHA}`.", prompt)
+                self.assertIn(f"          HEAD_SHA: {HEAD_SHA}\n", text)
+                self.assertNotIn("${{", run_block(text, GUARD_STEP))
+        skill = " ".join((ROOT / "charter-practices" / "skills" / "intent-review" / "SKILL.md").read_text().split())
+        self.assertIn("`Commit: <the full identifier of the head commit>`", skill)
+
+    def test_the_run_fails_when_the_report_names_another_commit(self):
+        """reviewer-reads-the-diff-of-a-round, check 2: the last step, run with `bash -e` and a fake of the code host."""
+        step = run_block(self.files["this workflow"], GUARD_STEP)
+        folder = Path(tempfile.mkdtemp())
+        try:
+            wrong = (answer(2, OTHER), answer(2, None), answer(2, HEAD[:12]),
+                     f"2\n{MARKER}\nThe report covers Commit: {HEAD}\n")
+            for gh_answer in wrong:
+                with self.subTest(answer=gh_answer):
+                    code, out = run_shell(step, folder, guard_env("1", gh_answer))
+                    self.assertEqual(code, 1, out)
+                    self.assertIn(f"Commit: {HEAD}", out)
+                    self.assertNotIn(NO_REPORT, out)
+            code, out = run_shell(step, folder, guard_env("1", answer(2, HEAD)))
+            self.assertEqual(code, 0, out)
+            self.assertIn(HEAD, out)
+        finally:
+            shutil.rmtree(folder, ignore_errors=True)
+
+    def test_a_later_round_starts_from_the_diff(self):
+        """reviewer-reads-the-diff-of-a-round, check 3."""
+        for name, text in self.files.items():
+            with self.subTest(file=name):
+                prompt = " ".join(prompt_of(text).split())
+                for part in ("When the change request has a report already, read the line `Commit:` of the newest report",
+                             "`git diff <that commit>..${{ github.event.pull_request.head.sha }} -- intents/ plans/`",
+                             'write the section "Changed since the last report"',
+                             "start the findings of this round from that diff"):
+                    self.assertIn(part, prompt)
+                tools = re.search(r'--allowedTools "([^"]+)"', text).group(1).split(",")
+                self.assertIn("Bash(git diff:*)", tools)
 
 
 class PlanPlace(unittest.TestCase):

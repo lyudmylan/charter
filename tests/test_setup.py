@@ -325,5 +325,15 @@ class PlanPlace(Temp):
         self.assertIn("git mv intents/<part>.plan.md plans/<part>.md", contract)
 
 
+class ReviewRounds(unittest.TestCase):
+    def test_the_intent_template_names_no_language(self):
+        """review-rounds, check 8: the test line of the intent template names no file of one language."""
+        text = (ROOT / "charter" / "templates" / "intent.md").read_text()
+        test_lines = [line.strip() for line in text.splitlines() if line.strip().startswith("test:")]
+        self.assertEqual(test_lines, ["test: <the file of the test, and the name of the test in it>"])
+        for language in (".py", ".ts", ".js", ".go", ".rb", "::"):
+            with self.subTest(language=language):
+                self.assertNotIn(language, " ".join(test_lines))
+
 if __name__ == "__main__":
     unittest.main()

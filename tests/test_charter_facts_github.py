@@ -130,23 +130,23 @@ class ReviewLoop(unittest.TestCase):
         self.assertIsNone(cf.highest_severity([{**self.bot, cf.COMMENT_BODY: f"{cf.REVIEW_MARKER}\nno line"}], cf.RECORD_AUTHOR))
 
     def test_rounds_are_the_successful_runs_since_the_change_request_opened(self):
-        """review-loop, check 4."""
-        pr = {cf.PR_CREATED: "2026-10-01T10:00:00Z"}
-        runs = [
-            {cf.RUN_CONCLUSION: cf.CONCLUSION_SUCCESS, cf.RUN_CREATED: "2026-10-01T12:00:00Z"},
-            {cf.RUN_CONCLUSION: "failure", cf.RUN_CREATED: "2026-10-01T11:00:00Z"},
-            {cf.RUN_CONCLUSION: cf.CONCLUSION_SUCCESS, cf.RUN_CREATED: "2026-10-01T10:30:00Z"},
-            {cf.RUN_CONCLUSION: cf.CONCLUSION_SUCCESS, cf.RUN_CREATED: "2026-09-30T10:00:00Z"},   # an older change request
-        ]
-        self.assertEqual(cf.review_rounds(runs, pr), 2)
+        """review-loop, check 4. Since review-rounds (#61) a successful run is a run that added a report, so the
+        fact `review_rounds` is the number of the reports of the reviewer; a comment of another author is none."""
+        report = f"{cf.REVIEW_MARKER}\nHighest open severity: low\n"
+        person = {cf.COMMENT_USER: {cf.USER_LOGIN: "alice"}, cf.COMMENT_BODY: report}
+        comments = [{**self.bot, cf.COMMENT_BODY: report}, person, {**self.bot, cf.COMMENT_BODY: report}]
+        pr = {cf.PR_NUMBER: 7, cf.PR_TITLE: "t", cf.PR_BODY: ""}
+        facts = cf.build_facts(pr, [], {}, 0, {}, review=cf.review_reports(comments, cf.RECORD_AUTHOR))
+        self.assertEqual(facts[cg.FACT_REVIEW_ROUNDS], 2)
 
     def test_facts_carry_the_loop_only_when_a_reviewer_is_named(self):
         """review-loop, check 4."""
         pr = {cf.PR_NUMBER: 7, cf.PR_TITLE: "t", cf.PR_BODY: ""}
         without = cf.build_facts(pr, [], {}, 0, {})
         self.assertNotIn(cg.FACT_REVIEW_ROUNDS, without)
-        with_loop = cf.build_facts(pr, [], {}, 0, {}, review=(2, "low"))
+        with_loop = cf.build_facts(pr, [], {}, 0, {}, review=["high", "low"])
         self.assertEqual((with_loop[cg.FACT_REVIEW_ROUNDS], with_loop[cg.FACT_REVIEW_SEVERITY]), (2, "low"))
+        self.assertEqual(with_loop[cg.FACT_REVIEW_REPORTS], ["high", "low"])
 
 
 class Facts(unittest.TestCase):
@@ -216,6 +216,40 @@ class FakeHost:
 
     def unresolved_threads(self, owner: str, name: str, number: int) -> int:
         return 0
+
+
+class ReviewReports(unittest.TestCase):
+    bot = {cf.COMMENT_USER: {cf.USER_LOGIN: cf.RECORD_AUTHOR}}
+
+    def report(self, line: str) -> dict:
+        return {**self.bot, cf.COMMENT_BODY: f"{cf.REVIEW_MARKER}\nCommit: abc\n{line}\n"}
+
+    def test_each_report_gives_its_severity_in_order(self):
+        """review-rounds, check 5."""
+        person = {cf.COMMENT_USER: {cf.USER_LOGIN: "alice"},
+                  cf.COMMENT_BODY: f"{cf.REVIEW_MARKER}\nHighest open severity: blocker\n"}
+        plain = {**self.bot, cf.COMMENT_BODY: "Highest open severity: high"}     # no marker: no report
+        comments = [self.report("Highest open severity: Medium"), person, plain, self.report("no line"),
+                    self.report("Highest open severity: low")]
+        self.assertEqual(cf.review_reports(comments, cf.RECORD_AUTHOR), ["medium", None, "low"])
+        self.assertEqual(cf.review_reports([person], cf.RECORD_AUTHOR), [])
+
+    def test_the_collector_lists_no_workflow_runs(self):
+        """review-rounds, check 5: the collector reads the reports from the comments, and asks the code host
+        for no list of workflow runs."""
+        reports = [self.report("Highest open severity: high"), self.report("Highest open severity: none")]
+
+        class Host(FakeHost):
+            def pages(self, path: str) -> list:
+                self.asked.append(path)
+                return reports if path.endswith("/comments") else super().pages(path)
+
+        host = Host(set())
+        facts = cf.collect(FakeHost.REPO, FakeHost.NUMBER, {}, [], host, review_workflow="review-intents.yml")
+        self.assertEqual(facts[cg.FACT_REVIEW_REPORTS], ["high", "none"])
+        self.assertEqual((facts[cg.FACT_REVIEW_ROUNDS], facts[cg.FACT_REVIEW_SEVERITY]), (2, "none"))
+        self.assertIn(f"/repos/{FakeHost.REPO}/issues/{FakeHost.NUMBER}/comments", host.asked)
+        self.assertFalse([path for path in host.asked if "/actions/" in path], host.asked)
 
 
 class PlanPlace(unittest.TestCase):

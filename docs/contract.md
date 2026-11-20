@@ -117,6 +117,7 @@ The facts file:
   "unresolved_review_threads": 0,
   "approvals": ["login"],
   "checks": {"tests": "pass"},
+  "review_reports": ["medium", "low"],
   "review_rounds": 2,
   "review_highest_severity": "low",
   "intents": [{"path": "intents/app.md", "plan": true, "removed": false}]
@@ -124,8 +125,10 @@ The facts file:
 ```
 
 A change request records a reason for a missing document change with one line in its text:
-`No document change: <reason>`. The collecting step copies it into the facts file. The two review
-fields are optional: the collecting step writes them when it is given the reviewer workflow. The field
+`No document change: <reason>`. The collecting step copies it into the facts file. The three review
+fields are optional: the collecting step writes them when it is given the reviewer workflow. The verdict
+counts the round from `review_reports`; a facts file without it, from an older collector, gives the round
+in `review_rounds`. The field
 `intents` lists the intents that the linked issues name with a line `Intent: intents/<part>.md`, and
 whether the plan `plans/<part>.md` of each exists at the head commit. A plan at the old place,
 `intents/<part>.plan.md`, counts too. The linked issues are those that the text of the change request
@@ -222,9 +225,13 @@ next round. The skill `charter-practices/skills/review-loop/SKILL.md` is the aut
 the agent in the session of the author.
 
 The loop ends when the highest open severity is below the threshold, or when the rounds reach
-`limits.review_loop`; then a person decides, with the merge. A round is one successful run of the reviewer
-on the change request; a run that ends without a report fails, is no round, and prints the denied commands
-of the agent in its log. The collecting step counts the rounds and reads the severity line, and the verdict
+`limits.review_loop`; then a person decides, with the merge. A round is a report of the reviewer in the
+current loop. A loop starts with the first report, and again with the first report after one whose highest
+open severity is below the threshold; a report without a severity line counts as open. Each report stays
+on the change request as its own comment: the reviewer posts a new comment at each run and changes no
+earlier one. Each report names the head commit that it covers, in a line `Commit: <identifier>`. A run
+that ends without a new report that names the head commit fails, is no round, and prints the denied
+commands of the agent in its log. The collecting step reads the severity line of each report, and the verdict
 prints `review loop: round <n> of <limit>, highest open severity <level>: ...`. In shadow mode, this line
 changes no verdict.
 
@@ -249,7 +256,8 @@ else does not count. The check "verdict" keeps the short text.
 | `false_failures` | What a person recorded with a line `False failure: <gate>: <reason>` in the change request |
 | `dropped_findings` | The findings of the intent reviewer that the author dropped, from lines `Dropped finding: <reason>` |
 | `false_findings` | The findings of the intent reviewer that the leader marked as false, from lines `False finding: <reason>` |
-| `review_rounds`, `review_highest_severity` | The rounds of the review loop (0 before the first), and the severity line of the newest report (`null` before the first, or when the report has no such line) |
+| `review_rounds`, `review_highest_severity` | The round of the current review loop (0 before the first report), and the severity line of the newest report (`null` before the first, or when the report has no such line) |
+| `review_reports` | The severity line of each report of the intent reviewer, oldest first (`null` for a report without the line) |
 | `intents` | The intents that the linked issues name, each with whether its plan exists and whether the change request removes or renames it away |
 
 `charter_facts_github.py records --repo owner/name --last N` prints the records of the last merged

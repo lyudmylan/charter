@@ -83,6 +83,36 @@ class ReviewLoopSkill(unittest.TestCase):
         self.assertIn("Do not push a round beyond the limit", text)
 
 
+class ReviewRounds(unittest.TestCase):
+    def test_the_author_skill_names_the_wait_and_the_newest_report(self):
+        """review-rounds, check 8: the newest report, the wait after a push, and the verdict that follows the reviewer."""
+        check_skill(self, "review-loop")
+        text = one_line((SKILLS / "review-loop" / "SKILL.md").read_text())
+        for part in ("at each run it posts a new comment", "Then read the newest report",
+                     '| select(.body | startswith("<!-- charter-intent-review -->"))] | last | .body',
+                     "Right after a push it can answer that no checks are reported: ask again",
+                     "Read the evidence record only after the verdict that follows the run of the reviewer",
+                     "the time in the record is later than the newest report", "A round is a report in the current loop"):
+            with self.subTest(part=part):
+                self.assertIn(part, text)
+
+
+class ReviewerDiff(unittest.TestCase):
+    def test_the_skill_holds_the_section_and_the_commit_line(self):
+        """reviewer-reads-the-diff-of-a-round, check 3: the skill `intent-review` holds the line `Commit:`, the diff
+        from the commit of the newest earlier report, and the section, and stays under the size limit."""
+        check_skill(self, "intent-review")
+        text = one_line((SKILLS / "intent-review" / "SKILL.md").read_text())
+        for part in ("The report is a new comment on the change request at each run; change no earlier comment",
+                     "Line 1: `<!-- charter-intent-review -->`; line 2: `Commit: <the full identifier of the head commit>`",
+                     "After the first report, read the line `Commit:` of the newest earlier report",
+                     "run `git diff <that commit>..<the head commit> -- intents/ plans/`, and start the findings from that diff",
+                     'the section "Changed since the last report"',
+                     "each changed file of `intents/` and `plans/` with its changed lines in a few words",
+                     "or the sentence that no file of the two folders changed"):
+            with self.subTest(part=part):
+                self.assertIn(part, text)
+
 class EvidenceReviewSkill(unittest.TestCase):
     def test_size_and_description(self):
         """drafted-reading-review, check 1."""
