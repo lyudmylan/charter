@@ -71,11 +71,15 @@ kind = "choice"
 order = ["blocker", "high", "medium", "low"]
 note = "The lowest severity of a finding that keeps the review loop open. Below it, the loop ends."
 
+[fields."review.code_blocks"]
+kind = "flag"
+note = "An open finding of the reviewer of the code makes the change request not ready. Without it, or with false, the reviewer of the code is in its shadow period: the verdict prints its state and blocks nothing."
+
 # --- The Build phase ---
 
 [fields."build.plan_before_code"]
 kind = "flag"
-note = "Each work item has its plan, intents/<part>.plan.md, before the code. The verdict checks that the plan exists at the head commit."
+note = "Each work item has its plan, plans/<part>.md, before the code. The verdict checks that the plan exists at the head commit. A plan at the old place, intents/<part>.plan.md, counts too."
 
 # --- Risk tiers. The segment "*" is the name of the tier. ---
 
@@ -119,11 +123,29 @@ note = "Path patterns. When a file under one of them changes, a necessary docume
 kind = "set"
 note = "Path patterns that the repo must not hold. The contract checks fail when a file is under one of them."
 
+# --- The boundary of a run of an agent without a person ---
+
+[fields."boundary.no_write"]
+kind = "set"
+note = "Path patterns that a run without a person never changes, adds, or deletes. A pattern has no exception: the plan of a work item, plans/<part>.md, passes because it is under no pattern."
+
+[fields."boundary.no_read"]
+kind = "set"
+note = "Path patterns that a run without a person never reads."
+
 # --- Quality checks ---
 
 [fields."checks.quality"]
 kind = "set"
 note = "Commands that must pass before a push."
+
+[fields."checks.product"]
+kind = "set"
+note = "Commands that start the product and test it from the outside, as a user or a caller meets it. The gate product runs them."
+
+[fields."checks.no_product_reason"]
+kind = "text"
+note = "Why the repo has no product test yet. A contract that declares code paths has a command in checks.product or this reason, not both."
 
 # --- The version of Charter that the repo uses ---
 

@@ -1,0 +1,219 @@
+# The run of an agent on a ready issue. A person starts it: the label `charter-run` on an issue, or a start
+# by hand with the number of an issue. It always runs from the main branch, with the contract of the main
+# branch. The agent works in the sandbox, under the settings of the boundary, and holds no token of the code
+# host. Scripts check what it changed and publish the result as a change request. No step after the agent
+# runs a file of the folder that the agent wrote in. The variable CHARTER_RUNS with the value `off` stops
+# the start of every run.
+# The scripts come from the main branch, in a git worktree outside the folder of the agent.
+name: run
+
+on:
+  issues:
+    types: [labeled]
+  workflow_dispatch:
+    inputs:
+      issue:
+        description: "Number of the issue"
+        required: true
+
+permissions:
+  contents: read
+  issues: write
+
+# One run works at a time; a second one waits.
+concurrency:
+  group: charter-run
+  cancel-in-progress: false
+
+env:
+  CLAUDE_CODE_VERSION: "2.1.329"
+  MAX_TURNS: "200"
+
+jobs:
+  run:
+    name: run
+    if: vars.CHARTER_RUNS != 'off' && (github.event_name == 'workflow_dispatch' || github.event.label.name == 'charter-run')
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    steps:
+      - name: Take the main branch
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.repository.default_branch }}
+          persist-credentials: false
+
+      - name: Take the scripts of Charter from the main branch
+        run: |
+          git worktree add --quiet --detach "$RUNNER_TEMP/charter" HEAD
+          echo "CHARTER_SCRIPTS=$RUNNER_TEMP/charter/charter/scripts" >> "$GITHUB_ENV"
+
+      # The contract of the main branch is copied out before the agent starts: the gate reads the copy.
+      - name: Read the issue and decide whether it is ready
+        id: ready
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          ISSUE: ${{ inputs.issue || github.event.issue.number }}
+        run: |
+          RUN="$RUNNER_TEMP/run"
+          mkdir -p "$RUN"
+          cp charter.toml "$RUN/charter.toml"
+          gh issue view "$ISSUE" --repo "$GITHUB_REPOSITORY" --json number,title,body,state > "$RUN/issue.json"
+          if ! python3 "$CHARTER_SCRIPTS/charter_run.py" ready --issue "$RUN/issue.json" --root . > "$RUN/ready.txt"; then
+            cp "$RUN/ready.txt" "$RUN/reason"
+            cat "$RUN/ready.txt"
+            exit 1
+          fi
+          cat "$RUN/ready.txt"
+          cat "$RUN/ready.txt" >> "$GITHUB_OUTPUT"
+
+      # The steps of the toolchain of this repo stand between the two marker lines. They run with no secret.
+      # charter:toolchain:start
+      # charter:toolchain:end
+
+      # The sandbox of Linux, as the documentation of Claude Code gives it for Ubuntu: two packages, and a
+      # profile that lets /usr/bin/bwrap start.
+      - name: Install the sandbox and Claude Code
+        run: |
+          sudo apt-get update -q
+          sudo apt-get install -y -q bubblewrap socat
+          sudo tee /etc/apparmor.d/bwrap > /dev/null <<'EOF'
+          abi <abi/4.0>,
+          include <tunables/global>
+
+          profile bwrap /usr/bin/bwrap flags=(unconfined) {
+            userns,
+            include if exists <local/bwrap>
+          }
+          EOF
+          sudo systemctl reload apparmor
+          curl -fsSL https://claude.ai/install.sh | bash -s "$CLAUDE_CODE_VERSION"
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+
+      # The organization source is fetched with its token. Its clone is removed before the agent starts: the
+      # shell of the agent can read most of the disk, and the source of an organization can be private.
+      - name: Write the settings of the run
+        env:
+          CHARTER_ORG_TOKEN: ${{ secrets.CHARTER_ORG_TOKEN }}
+        run: |
+          RUN="$RUNNER_TEMP/run"
+          SOURCE=$(python3 "$CHARTER_SCRIPTS/charter_check.py" source charter.toml) || { echo "$SOURCE"; exit 2; }
+          readarray -t S <<< "$SOURCE"
+          git clone --quiet "${S[0]/https:\/\//https://x-access-token:${CHARTER_ORG_TOKEN}@}" "${S[3]}"
+          python3 "$CHARTER_SCRIPTS/charter_check.py" boundary charter.toml > "$RUN/settings.json"
+          rm -rf "${S[3]}"
+
+      - name: Write the brief
+        env:
+          INTENT: ${{ steps.ready.outputs.intent }}
+        run: |
+          RUN="$RUNNER_TEMP/run"
+          python3 "$CHARTER_SCRIPTS/charter_run.py" brief --issue "$RUN/issue.json" --intent "$INTENT" --out "$RUN/brief.md"
+
+      # The one secret of this step is the token of the model. The settings reach Claude Code as text, so the
+      # agent cannot change them. The command names no allowed tool: such a list opens a tool for every path,
+      # and the settings keep the file tools inside this folder. The copy of .git, made before the agent starts, replaces the .git of the
+      # folder after it.
+      - name: Run the agent
+        id: agent
+        continue-on-error: true
+        timeout-minutes: 90
+        env:
+          CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          BRANCH: ${{ steps.ready.outputs.branch }}
+        run: |
+          RUN="$RUNNER_TEMP/run"
+          git -c core.hooksPath=/dev/null switch --quiet -c "$BRANCH"
+          git rev-parse HEAD > "$RUN/base"
+          cp -a .git "$RUN/git"
+          SETTINGS=$(cat "$RUN/settings.json")
+          claude -p --settings "$SETTINGS" --max-turns "$MAX_TURNS" --output-format json < "$RUN/brief.md" > "$RUN/agent.json"
+
+      - name: Take the result of the agent
+        id: result
+        run: |
+          RUN="$RUNNER_TEMP/run"
+          BASE=$(cat "$RUN/base")
+          if ! python3 "$CHARTER_SCRIPTS/charter_run.py" result --agent "$RUN/agent.json" --root . --base "$BASE" \
+            --issue "$RUN/issue.json" --git-dir "$RUN/git" --out "$RUN/out" > "$RUN/result.txt"; then
+            cp "$RUN/result.txt" "$RUN/reason"
+            cat "$RUN/result.txt"
+            exit 1
+          fi
+          cat "$RUN/result.txt"
+
+      # The gate reads the contract with its organization source, so the source is fetched again here.
+      - name: Check the result against the boundary
+        id: gate
+        env:
+          CHARTER_ORG_TOKEN: ${{ secrets.CHARTER_ORG_TOKEN }}
+        run: |
+          RUN="$RUNNER_TEMP/run"
+          SOURCE=$(python3 "$CHARTER_SCRIPTS/charter_check.py" source "$RUN/charter.toml") || { echo "$SOURCE" | tee "$RUN/reason"; exit 2; }
+          readarray -t S <<< "$SOURCE"
+          rm -rf "${S[3]}"
+          git -c core.hooksPath=/dev/null clone --quiet "${S[0]/https:\/\//https://x-access-token:${CHARTER_ORG_TOKEN}@}" "${S[3]}"
+          git -c core.hooksPath=/dev/null -C "${S[3]}" remote set-url origin "${S[0]}"
+          if ! python3 "$CHARTER_SCRIPTS/charter_gate.py" boundary --contract "$RUN/charter.toml" --changed "$RUN/out/changed" > "$RUN/gate.txt"; then
+            cp "$RUN/gate.txt" "$RUN/reason"
+            cat "$RUN/gate.txt"
+            exit 1
+          fi
+          cat "$RUN/gate.txt"
+
+      # The secret CHARTER_RUN_TOKEN is a token that a person creates: a change request that the token of the
+      # workflow opens starts no workflow on the code host. After the push, the block of the run, with the commit
+      # that was pushed, goes at the end of the text of the change request.
+      - name: Publish the change request
+        id: publish
+        if: success() && steps.result.outcome == 'success' && steps.gate.outcome == 'success'
+        env:
+          GH_TOKEN: ${{ secrets.CHARTER_RUN_TOKEN }}
+          ISSUE: ${{ steps.ready.outputs.number }}
+          BRANCH: ${{ steps.ready.outputs.branch }}
+          MAIN: ${{ github.event.repository.default_branch }}
+        run: |
+          RUN="$RUNNER_TEMP/run"
+          if [ -z "$GH_TOKEN" ]; then
+            echo "the secret CHARTER_RUN_TOKEN is not set, so nothing is published" | tee "$RUN/reason"
+            exit 1
+          fi
+          TITLE=$(gh issue view "$ISSUE" --repo "$GITHUB_REPOSITORY" --json title --jq .title)
+          echo "Closes #$ISSUE" > "$RUN/body.md"
+          echo >> "$RUN/body.md"
+          if [ -f "$RUN/out/agent/change-request.md" ] && [ ! -L "$RUN/out/agent/change-request.md" ]; then
+            cat "$RUN/out/agent/change-request.md" >> "$RUN/body.md"
+          else
+            echo "An agent run built this work item. The agent wrote no text for the change request." >> "$RUN/body.md"
+          fi
+          gh auth setup-git
+          git -c core.hooksPath=/dev/null push --quiet origin "HEAD:refs/heads/$BRANCH"
+          if COMMIT=$(git -c core.hooksPath=/dev/null rev-parse HEAD) \
+            && python3 "$CHARTER_SCRIPTS/charter_run.py" record --agent "$RUN/agent.json" --commit "$COMMIT" > "$RUN/block.md"; then
+            echo >> "$RUN/body.md"
+            cat "$RUN/block.md" >> "$RUN/body.md"
+          else
+            echo "the block of the run is not written"
+          fi
+          URL=$(gh pr create --repo "$GITHUB_REPOSITORY" --base "$MAIN" --head "$BRANCH" --title "$TITLE" --body-file "$RUN/body.md")
+          echo "url=$URL" >> "$GITHUB_OUTPUT"
+
+      - name: Write the outcome on the issue
+        if: always()
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          ISSUE: ${{ inputs.issue || github.event.issue.number }}
+          URL: ${{ steps.publish.outputs.url }}
+        run: |
+          RUN="$RUNNER_TEMP/run"
+          mkdir -p "$RUN"
+          if [ -n "$URL" ]; then STATE=published; else STATE=blocked; fi
+          REASON=$(cat "$RUN/reason" 2>/dev/null || true)
+          [ -n "$REASON" ] || REASON="the run stopped before its result; the log of the job names the cause"
+          if ! python3 "$CHARTER_SCRIPTS/charter_run.py" outcome --state "$STATE" --reason="$REASON" \
+            --agent "$RUN/agent.json" --url="$URL" > "$RUN/comment.md"; then
+            echo "<!-- charter-run -->" > "$RUN/comment.md"
+            echo "Outcome: $STATE" >> "$RUN/comment.md"
+            echo "Reason: $REASON" >> "$RUN/comment.md"
+          fi
+          cat "$RUN/comment.md"
+          gh issue comment "$ISSUE" --repo "$GITHUB_REPOSITORY" --body-file "$RUN/comment.md"

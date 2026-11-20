@@ -6,7 +6,7 @@ name: verdict
 
 on:
   workflow_run:
-    workflows: [tests, review-intents]
+    workflows: [tests, review-intents, review-code]
     types: [completed]
   workflow_dispatch:
     inputs:
@@ -21,7 +21,7 @@ permissions:
   issues: write
   checks: write
 
-# A push that touches the intents starts two runs, after `tests` and after `review-intents`. They run
+# A push starts a run after `tests`, and one after each reviewer that the push starts. They run
 # one after the other, so that the record and the check of one commit are not written at the same time.
 concurrency:
   group: verdict-${{ github.event.workflow_run.head_sha || inputs.pr }}
@@ -94,7 +94,9 @@ jobs:
           --pr "$PR_NUMBER" --sha "$PR_SHA"
           --check "contract=$CONTRACT_RESULT"
           --check-run tests
+          --check-run product
           --review-workflow review-intents.yml
+          --code-review-workflow review-code.yml
           --out facts.json
 
       - name: Verdict
@@ -137,3 +139,26 @@ jobs:
             -f "output[title]=$TITLE" -f "output[summary]=$SUMMARY" >/dev/null
           echo "$SUMMARY"
           [ "$CONCLUSION" = "success" ]
+
+      # The verdict merges only when the record says so. The merge uses the secret CHARTER_MERGE_TOKEN, a token
+      # that a person creates: a merge with the token of the workflow starts no workflow on the main branch. The
+      # merge names the commit that the verdict read, so a push after the verdict is not merged. A refusal of the
+      # code host fails the run.
+      - name: Merge, for a tier whose approver is agent
+        if: success() && steps.verdict.outputs.code == '0'
+        env:
+          GH_TOKEN: ${{ secrets.CHARTER_MERGE_TOKEN }}
+          PR_NUMBER: ${{ steps.pr.outputs.number }}
+          PR_SHA: ${{ steps.pr.outputs.sha }}
+        run: |
+          MERGE=$(python3 -c 'import json, sys; print(json.load(open(sys.argv[1])).get("merge_by_verdict") is True)' record.json 2>/dev/null || true)
+          if [ "$MERGE" != "True" ] || [ -z "$PR_NUMBER" ] || [ -z "$PR_SHA" ]; then
+            echo "merge: a person merges: the record does not say that the verdict merges"
+            exit 0
+          fi
+          if [ -z "$GH_TOKEN" ]; then
+            echo "merge: the secret CHARTER_MERGE_TOKEN is not set, so a person merges"
+            exit 0
+          fi
+          gh pr merge "$PR_NUMBER" --repo "$GITHUB_REPOSITORY" --merge --match-head-commit "$PR_SHA"
+          echo "merge: the verdict merged change request $PR_NUMBER at the commit $PR_SHA"
