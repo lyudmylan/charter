@@ -787,7 +787,7 @@ class VerdictMerges(Temp):
             "no commit": ({cg.FACT_REVIEW_REPORTS: ["low"], cg.FACT_REVIEW_COMMIT: None}, "names the commit None"),
         }
         for name, (review, reason) in cases.items():
-            for files in (plan, ["plans/app.md"], ["intents/app.md", "src/app.py", "docs/product.md"]):
+            for files in (plan, ["plans/app.md"]):
                 with self.subTest(case=name, files=files):
                     code, out = self.verdict(self.contract(), **self.reviewed(**{cg.FACT_CHANGED_FILES: files, **review}))
                     self.assertEqual(code, cc.PASS, out)
@@ -806,6 +806,44 @@ class VerdictMerges(Temp):
                 self.assertTrue(self.merge_lines(out)[0].startswith(self.PERSON), out)
         code, out = self.verdict(self.contract(), **self.reviewed(**{cg.FACT_REVIEW_COMMIT: 7}))
         self.assertEqual(code, cc.CANNOT_RUN, out)
+
+    def test_a_change_that_holds_an_intent_stays_with_a_person(self):
+        """verdict-merges, check 2: also in a contract whose agent tier holds `intents/`, and with both reviews
+        closed on the head commit. A plan at the old place is a file under `intents/` too."""
+        closed = {cg.FACT_REVIEW_REPORTS: ["low"], cg.FACT_REVIEW_COMMIT: self.HEAD}
+        for files in (["intents/app.md"], ["intents/app.md", "plans/app.md", "src/app.py", "docs/product.md"],
+                      ["intents/app.plan.md", "src/app.py", "docs/product.md"]):
+            with self.subTest(files=files):
+                code, out = self.verdict(self.contract(), **self.reviewed(**{cg.FACT_CHANGED_FILES: files, **closed}))
+                self.assertEqual(code, cc.PASS, out)
+                self.assertIn("tier low:", out)
+                self.assertEqual(self.merge_lines(out), [self.PERSON + "a file under intents/ changed, and a person approves an intent"])
+
+    def test_a_change_of_a_plan_alone_merges_with_a_closed_intent_review(self):
+        """verdict-merges, check 1: no code changed, so no report of the code review is asked for."""
+        facts = {cg.FACT_CHANGED_FILES: ["plans/app.md"], cg.FACT_HEAD_COMMIT: self.HEAD,
+                 cg.FACT_REVIEW_REPORTS: ["medium", "low"], cg.FACT_REVIEW_COMMIT: self.HEAD}
+        code, out = self.verdict(self.contract(), **facts)
+        self.assertEqual(code, cc.PASS, out)
+        self.assertEqual(len(self.merge_lines(out)), 1, out)
+        self.assertTrue(self.merge_lines(out)[0].startswith(self.MERGES), out)
+
+    def test_a_change_with_code_and_a_plan_needs_both_reports(self):
+        """verdict-merges, check 1: both closed on the head commit merge; one of the two open, or on another
+        commit, gives a person."""
+        files = {cg.FACT_CHANGED_FILES: ["src/app.py", "docs/product.md", "plans/app.md"]}
+        closed = {cg.FACT_REVIEW_REPORTS: ["low"], cg.FACT_REVIEW_COMMIT: self.HEAD}
+        code, out = self.verdict(self.contract(), **self.reviewed(**files, **closed))
+        self.assertEqual(code, cc.PASS, out)
+        self.assertTrue(self.merge_lines(out)[0].startswith(self.MERGES), out)
+        for name, changes in {"the plan review is open": {cg.FACT_REVIEW_REPORTS: ["high"], cg.FACT_REVIEW_COMMIT: self.HEAD},
+                              "the plan review is of another commit": {cg.FACT_REVIEW_REPORTS: ["low"], cg.FACT_REVIEW_COMMIT: self.OTHER},
+                              "the code review is open": {**closed, cg.FACT_CODE_REVIEW_REPORTS: ["high"]},
+                              "the code review is of another commit": {**closed, cg.FACT_CODE_REVIEW_COMMIT: self.OTHER}}.items():
+            with self.subTest(case=name):
+                _, out = self.verdict(self.contract(), **self.reviewed(**files, **changes))
+                self.assertEqual(len(self.merge_lines(out)), 1, out)
+                self.assertTrue(self.merge_lines(out)[0].startswith(self.PERSON), out)
 
     def test_the_record_holds_the_merge_and_its_reason(self):
         """verdict-merges, check 4."""

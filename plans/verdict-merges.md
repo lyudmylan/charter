@@ -14,9 +14,11 @@ This plan builds on #95: the facts and the state of the code review.
    - The value `agent` of an approver as a constant.
    - A function `merge_decision(facts, e, ready, spec)` that returns whether the verdict merges and the
      line. It checks the conditions of the intent in their order and names the first one that fails:
-     not ready; the approver is no agent; `review.code_blocks` is not true; a file under `plans/` or
-     `intents/` changed and the newest report of the intent reviewer is missing, is open at the
-     threshold, has no severity line, or names another commit than `head_commit`.
+     not ready; the approver is no agent; `review.code_blocks` is not true; the facts name no head
+     commit; a file under `intents/` changed; a file outside `intents/` and `plans/` changed and the
+     newest report of the code review is missing, is not closed, or names another commit; a file under
+     `plans/` changed and the newest report of the intent reviewer is missing, is open at the threshold,
+     has no severity line, or names another commit than `head_commit`.
    - `gate_verdict` adds the line after the line of the tier and puts the decision into the detail. The
      readiness does not change.
    - The evidence record holds `merge_by_verdict`.
@@ -60,6 +62,6 @@ This plan builds on #95: the facts and the state of the code review.
 
 ## Tests
 
-A class `VerdictMerges` in `tests/test_charter_gate.py` (eight tests), `tests/test_charter_facts_github.py`
+A class `VerdictMerges` in `tests/test_charter_gate.py` (eleven tests), `tests/test_charter_facts_github.py`
 (one), `tests/test_workflows.py` (five), and `tests/test_setup.py` (two), with the names that the intent
 gives. The merge step is run with `bash -e` and a fake `gh` that records its arguments.

@@ -279,15 +279,17 @@ not hold, and a person merges:
 
 - the verdict is ready;
 - the approver of the tier of the change is `agent`;
-- `review.code_blocks` is true, and the newest report of the reviewer of the code is closed on the head commit;
-- when the change holds a file under `plans/` or `intents/`: the newest report of the intent reviewer is
-  below `review.threshold` and names the head commit. In such a tier, this review is the acceptance of the plan.
+- `review.code_blocks` is true, so the reviewer of the code is past its shadow period;
+- no file under `intents/` changed: a person approves an intent, whatever tier the contract gives to that folder;
+- when the change holds a file outside `intents/` and `plans/`: the newest report of the reviewer of the
+  code is closed on the head commit;
+- when the change holds a file under `plans/`: the newest report of the intent reviewer is below
+  `review.threshold` and names the head commit. In such a tier, this review is the acceptance of the plan.
 
 A missing fact means that a person merges. The collecting step writes `review_commit`, the line `Commit:` of
 the newest report of the intent reviewer. The verdict prints one line, `merge: the verdict merges: ...` or
 `merge: a person merges: <the reason>`, and the evidence record holds the decision under `merge_by_verdict`.
-The decision changes no readiness. A change request that holds an intent is in the high tier, so a person
-merges it.
+The decision changes no readiness.
 
 The workflow `verdict` has one step after the step that publishes the check "verdict": "Merge, for a tier
 whose approver is agent". It runs only when the verdict is ready, and merges only when the record says that

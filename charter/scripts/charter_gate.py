@@ -180,11 +180,12 @@ MSG = {
     "merge_approver": "the approver of the tier is {approver}, not {agent}",
     "merge_shadow": "{field} is not true, so the code review is in its shadow period",
     "merge_no_head": "the facts name no head commit",
+    "merge_intent": "a file under {intents} changed, and a person approves an intent",
     "merge_code_review": "the newest report of the code review is missing, is not closed, or names another commit than the head commit",
-    "merge_plan_none": "a file under {intents} or {plans} changed, and the facts hold no report of the intent reviewer",
-    "merge_plan_no_line": "a file under {intents} or {plans} changed, and the newest report of the intent reviewer has no severity line",
-    "merge_plan_open": "a file under {intents} or {plans} changed, and the newest report of the intent reviewer is open at {severity}, at {threshold} or above",
-    "merge_plan_commit": "a file under {intents} or {plans} changed, and the newest report of the intent reviewer names the commit {commit}, not the head commit {head}",
+    "merge_plan_none": "a file under {plans} changed, and the facts hold no report of the intent reviewer",
+    "merge_plan_no_line": "a file under {plans} changed, and the newest report of the intent reviewer has no severity line",
+    "merge_plan_open": "a file under {plans} changed, and the newest report of the intent reviewer is open at {severity}, at {threshold} or above",
+    "merge_plan_commit": "a file under {plans} changed, and the newest report of the intent reviewer names the commit {commit}, not the head commit {head}",
     "plan_intents_only": "not needed, the change is the Plan phase (only files under {dir})",
     "plan_no_intent": "no linked issue names an intent (a line `Intent: {dir}<part>{suffix}` in the issue)",
     "plan_missing": "`{plan}` is missing. A plan at the old place, `{old}`, counts too.",
@@ -527,14 +528,16 @@ def merge_decision(facts: dict, e: cc.Effective, ready: bool, spec: dict) -> tup
         return person("merge_no_head")
     threshold = e.values.get(FIELD_REVIEW_THRESHOLD, DEFAULT_REVIEW_THRESHOLD)
     changed = facts[FACT_CHANGED_FILES]
+    if any(f.startswith(INTENTS_DIR) for f in changed):
+        return person("merge_intent", intents=INTENTS_DIR)
     if any(is_code(f) for f in changed):
         reports = facts.get(FACT_CODE_REVIEW_REPORTS) or []
         severity = reports[-1] if reports else None
         if (severity is None or SEVERITIES.index(severity) >= SEVERITIES.index(threshold)
                 or facts.get(FACT_CODE_REVIEW_COMMIT) != head):
             return person("merge_code_review")
-    if any(not is_code(f) for f in changed):
-        folders = dict(intents=INTENTS_DIR, plans=PLANS_DIR)
+    if any(f.startswith(PLANS_DIR) for f in changed):
+        folders = dict(plans=PLANS_DIR)
         reports = facts.get(FACT_REVIEW_REPORTS) or []
         if not reports:
             return person("merge_plan_none", **folders)

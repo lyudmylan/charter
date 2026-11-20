@@ -13,15 +13,18 @@ agents that are not the author closed on its head commit, and a person still mer
   merges each change request, also one of the low tier that passed each check.
 - The decision of the leader of 2026-11-20: the tier decides who accepts the plan, who reviews, and who
   merges. In a tier whose approver is `agent`, agents do the three and a person reads the evidence
-  record. A change request that holds an intent is in the high tier and stays with a person.
+  record. A change request that holds an intent stays with a person.
 - The gate decides, in the verdict. It merges when each of these holds, and else it names the first
   one that does not:
   - the verdict is ready;
   - the approver of the tier of the change is `agent`;
-  - `review.code_blocks` is true, so the reviewer of the code is past its shadow period, and its newest
-    report is closed on the head commit (#95);
-  - when the change holds a file under `plans/` or `intents/`: the newest report of the intent reviewer
-    is below the threshold and names the head commit. This is the acceptance of the plan in that tier.
+  - `review.code_blocks` is true, so the reviewer of the code is past its shadow period;
+  - no file under `intents/` changed: a person approves an intent, whatever tier the contract gives to
+    that folder;
+  - when the change holds a file outside `intents/` and `plans/`: the newest report of the code review
+    is closed on the head commit (#95);
+  - when the change holds a file under `plans/`: the newest report of the intent reviewer is below the
+    threshold and names the head commit. This is the acceptance of the plan in that tier.
 - The facts collector gives the line `Commit:` of the newest report of the intent reviewer, as the fact
   `review_commit`.
 - The verdict prints one line, `merge: the verdict merges ...` or `merge: a person merges: <the reason>`,
@@ -60,11 +63,17 @@ approval of an intent by an agent: the leader noted the question on 2026-11-20 a
 ## Automatic checks
 
 1. The gate says that the verdict merges for a ready change of a tier whose approver is `agent`, with the
-   flag of the code review and a closed report of it on the head commit.
+   flag of the code review and a closed report of it on the head commit. A change of a plan alone merges
+   with a closed report of the intent reviewer on the head commit, and needs no report of the code
+   review. A change with code and a plan needs both reports.
    test: `tests/test_charter_gate.py::VerdictMerges.test_the_verdict_merges_a_ready_change_of_an_agent_tier`
+   test: `tests/test_charter_gate.py::VerdictMerges.test_a_change_of_a_plan_alone_merges_with_a_closed_intent_review`
+   test: `tests/test_charter_gate.py::VerdictMerges.test_a_change_with_code_and_a_plan_needs_both_reports`
 2. It says that a person merges, with the reason, in each other case: a tier of a person; a verdict that
-   is not ready; the shadow period of the code review; a change with a plan whose newest intent report is
-   open, is missing, or names another commit.
+   is not ready; the shadow period of the code review; a change that holds a file under `intents/`; a
+   change with a plan whose newest intent report is open, is missing, has no severity line, or names
+   another commit.
+   test: `tests/test_charter_gate.py::VerdictMerges.test_a_change_that_holds_an_intent_stays_with_a_person`
    test: `tests/test_charter_gate.py::VerdictMerges.test_a_tier_of_a_person_is_merged_by_a_person`
    test: `tests/test_charter_gate.py::VerdictMerges.test_a_change_that_is_not_ready_is_not_merged`
    test: `tests/test_charter_gate.py::VerdictMerges.test_the_shadow_period_of_the_code_review_keeps_the_merge_with_a_person`
@@ -78,8 +87,8 @@ approval of an intent by an agent: the leader noted the question on 2026-11-20 a
    test: `tests/test_workflows.py::VerdictMerges.test_the_merge_step_follows_the_published_check`
    test: `tests/test_workflows.py::VerdictMerges.test_the_workflow_of_this_repo_follows_the_template`
 6. The step, run with a fake of the code host: with a record that says so and a token, it merges the
-   change request at the head commit of the verdict. With a record of a person's merge, or without a
-   token, it calls no merge and ends well.
+   change request at the head commit of the verdict. With a fake that refuses the merge, the step fails.
+   With a record of a person's merge, or without a token, it calls no merge and ends well.
    test: `tests/test_workflows.py::VerdictMerges.test_the_step_merges_the_head_commit_with_the_merge_token`
    test: `tests/test_workflows.py::VerdictMerges.test_the_step_merges_nothing_for_a_person_or_without_the_token`
 7. The contract that the setup step writes names no tier with the approver `agent` and sets the flag to
