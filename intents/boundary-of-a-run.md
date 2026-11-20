@@ -1,6 +1,6 @@
 # Intent: the boundary of a run without a person
 
-Work item: #91. Status: planned. Approval: a person merges the change request that adds this file.
+Work item: #91. Status: done. Approval: a person merges the change request that adds this file.
 
 ## Goal
 
@@ -135,6 +135,6 @@ from it; the check that a run used them is in #92.
 
 16. On a runner of the code host, in the first run of #92, with the settings that the command printed:
     the run starts with the sandbox, the edit tool refuses a write to the contract, a shell command
-    reaches no host, and the log of the run names both refusals. who: the leader. Not automatic: the
+    reaches no host, and the log of the run names the refused write and the refused network access. who: the leader. Not automatic: the
     check needs a model call and a runner, and the workflow of the run comes with #92. The issue #92
     carries a line for this check, and the leader closes it there.

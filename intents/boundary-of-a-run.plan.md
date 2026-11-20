@@ -1,6 +1,7 @@
 # Plan: the boundary of a run without a person (#91)
 
 Intent: `intents/boundary-of-a-run.md`, checks 1 to 15. The leader merged the intent on 2026-11-20.
+Accepted by the leader in the conversation on 2026-11-20, before the code.
 Check 16 is manual and belongs to the first run of #92.
 
 ## What the documentation of Claude Code changed in the design
