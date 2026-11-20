@@ -139,6 +139,14 @@ note = "Path patterns that a run without a person never reads."
 kind = "set"
 note = "Commands that must pass before a push."
 
+[fields."checks.product"]
+kind = "set"
+note = "Commands that start the product and test it from the outside, as a user or a caller meets it. The gate product runs them."
+
+[fields."checks.no_product_reason"]
+kind = "text"
+note = "Why the repo has no product test yet. A contract that declares code paths has a command in checks.product or this reason, not both."
+
 # --- The version of Charter that the repo uses ---
 
 [fields."charter.version"]

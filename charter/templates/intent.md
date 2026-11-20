@@ -23,6 +23,8 @@ Work item: #<number>. Status: planned. Approval: a person merges the change requ
 2. <Another result.>
    command: `<a command that exits with 0 when the result holds>`
 
+A work item that changes the behaviour of the product names the scenario of the product test that shows the change.
+
 ## Manual checks
 
 3. <A result that only a person can verify.> who: <the role>. Not automatic: <the reason>.

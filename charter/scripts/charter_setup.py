@@ -63,8 +63,8 @@ WRITTEN_IF_MISSING = {
     "architecture.md": "docs/architecture.md",
     "product.md": PRODUCT_FILE,
 }
-# The block of the toolchain in `tests.yml`: the steps of the repo that install its tools. The workflow `run`
-# has the same block, with the same steps.
+# The block of the toolchain in `tests.yml`: the steps of the repo that install its tools. The jobs `tests` and
+# `product` of `tests.yml` and the workflow `run` have the same block, with the same steps.
 TOOLCHAIN_TEMPLATE = "tests.yml"
 TOOLCHAIN_TEMPLATES = (TOOLCHAIN_TEMPLATE, "run.yml")
 TOOLCHAIN_VALUE = "toolchain"
@@ -72,6 +72,10 @@ TOOLCHAIN_START = "# charter:toolchain:start"
 TOOLCHAIN_END = "# charter:toolchain:end"
 STEP_INDENT = "      "
 HIGH_TIER_PATHS = [CONTRACT_FILE, INSTRUCTIONS_FILE, "intents/**", ".github/**"]
+# The product test in the contract: the commands of the flag, or the reason for none.
+PRODUCT_LINE = "product = [{commands}]"
+NO_PRODUCT_LINE = "no_product_reason = {reason}"
+NO_PRODUCT_REASON = "no product to start yet"
 
 DEFAULTS = {
     "source_file": "organization.toml",
@@ -111,6 +115,7 @@ MSG = {
     "step_ruleset": "Protect the main branch with a ruleset: a change request is required, and the check \"verdict\" is required.",
     "step_cache": "On each computer, put the organization source in the cache of the checker: git clone {address} {cache}",
     "step_quality": "Put the test command of this repo in checks.quality of {contract}; the gate fails without one.",
+    "step_product": "Write the product test of this repo: the commands that start the product and test it from the outside. Put them in checks.product of {contract}, and remove checks.no_product_reason. A run of an agent runs them in its sandbox, so they need no network and no secret.",
     "step_claude": "{claude} exists, so Claude Code does not read {instructions}. Add the line `@{instructions}` to {claude}.",
     "step_intents": "Write the first intent from {template}, and open the change request that adds it.",
 }
@@ -162,6 +167,8 @@ def values_of(args: argparse.Namespace, target: Path, version: str) -> dict[str,
         "code_paths": toml_list(list(args.code_path)),
         "text_checked": toml_list(text_checked),
         "quality": toml_list(list(args.quality)),
+        "product": (PRODUCT_LINE.format(commands=toml_list(list(args.product))) if args.product
+                    else NO_PRODUCT_LINE.format(reason=toml_text(NO_PRODUCT_REASON))),
     }
 
 
@@ -213,6 +220,8 @@ def manual_steps(target: Path, args: argparse.Namespace, cache_dir: Path) -> lis
              msg("step_cache", address=args.source, cache=cc.cache_path(args.source, cache_dir))]
     if not args.quality:
         steps.append(msg("step_quality", contract=CONTRACT_FILE))
+    if not args.product:
+        steps.append(msg("step_product", contract=CONTRACT_FILE))
     if (target / CLAUDE_FILE).exists():
         steps.append(msg("step_claude", claude=CLAUDE_FILE, instructions=INSTRUCTIONS_FILE))
     steps.append(msg("step_intents", template=INTENT_TEMPLATE))
@@ -285,6 +294,8 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--high-path", dest="high_path", action="append", default=[],
                         help="a path pattern added to the high risk tier; repeatable")
     parser.add_argument("--quality", action="append", default=[], help="a command that must pass before a push; repeatable")
+    parser.add_argument("--product", action="append", default=[],
+                        help="a command that starts the product and tests it from the outside; repeatable")
     parser.add_argument("--toolchain", type=Path, metavar="FILE",
                         help="the steps that install the tools of the repo, for the block of the tests workflow")
     parser.add_argument("--target", type=Path, default=Path("."), help="the root of the repo; default: here")

@@ -9,7 +9,9 @@ Commands:
   source CONTRACT                    Print the address, the file, the version, and the cache path of the source.
   all CONTRACT                       Run check, then instructions on the declared instruction file, then text
                                      on each declared text-checked file, then look for a file under a path
-                                     that the contract forbids. The files are relative to the contract.
+                                     that the contract forbids, then, for a contract that declares code
+                                     paths, ask for a product test or a reason for none. The files are
+                                     relative to the contract.
   boundary CONTRACT                  Print the settings of Claude Code for a run without a person, as JSON,
                                      from the boundary of the effective contract. The paths are absolute,
                                      from the folder of the contract: the settings are for this checkout.
@@ -90,6 +92,9 @@ JSON_KEY_EFFECTIVE, JSON_KEY_FAILURES = "effective", "failures"
 FIELD_INSTRUCTIONS_FILE = "instructions.file"
 FIELD_TEXT_CHECKED = "documents.text_checked"
 FIELD_ABSENT = "documents.absent"
+FIELD_CODE_PATHS = "documents.code_paths"
+FIELD_PRODUCT = "checks.product"
+FIELD_NO_PRODUCT_REASON = "checks.no_product_reason"
 
 # Path patterns: `*` and `?` stay inside one segment; `**` crosses segments.
 PATH_WILDCARDS = "*?"
@@ -172,6 +177,9 @@ MSG = {
     "instructions_pass": "{path} agrees with the contract ({count} identifiers, source: {origin})",
     "text_pass": "{path} contains none of the patterns (source: {origin})",
     "all_pass": "all contract checks of {contract} passed",
+    "product_none": "the contract declares code paths and names no product test: add the commands to "
+                    "`{product}`, or the reason to `{reason}`",
+    "product_and_reason": "the contract names a product test and a reason for none: remove `{reason}`",
     "redacted": "redacted: {count} patterns",
     "not_a_file": "not a file: {path}",
     "not_utf8": "not UTF-8 text: {path}",
@@ -618,6 +626,25 @@ def absent_hits(e: Effective, root: Path) -> list[str]:
     return [msg("absent_hit", path=path, field=FIELD_ABSENT) for path in sorted(found)]
 
 
+def product_reason(e: Effective) -> str:
+    """The reason of the contract for no product test, without blanks. A reason of blanks only is no reason."""
+    reason = e.values.get(FIELD_NO_PRODUCT_REASON) or ""
+    return (" ".join(reason) if isinstance(reason, list) else reason).strip()
+
+
+def product_problems(e: Effective) -> list[str]:
+    """A contract that declares code paths names a product test or a reason for none, not both.
+    A contract without code paths is not asked."""
+    if not e.values.get(FIELD_CODE_PATHS):
+        return []
+    commands, reason = e.values.get(FIELD_PRODUCT) or [], product_reason(e)
+    if not commands and not reason:
+        return [msg("product_none", product=FIELD_PRODUCT, reason=FIELD_NO_PRODUCT_REASON)]
+    if commands and reason:
+        return [msg("product_and_reason", reason=FIELD_NO_PRODUCT_REASON)]
+    return []
+
+
 def is_folder_pattern(pattern: str) -> bool:
     """`dir/**` with no other wildcard: the one form that the write lists of the sandbox honour on Linux."""
     return pattern.endswith(FOLDER_PATTERN_END) and not has_wildcard(pattern[:-len(FOLDER_PATTERN_END)])
@@ -725,6 +752,7 @@ def cmd_all(args) -> int:
             path = root / name
             problems += pattern_hits(e, path, read_text(path))
         problems += absent_hits(e, root)
+        problems += product_problems(e)
     if report_failures(problems) == FAIL:
         return FAIL
     emit(OUT_PASS, msg("all_pass", contract=args.contract))

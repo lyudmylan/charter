@@ -71,6 +71,8 @@ file = "AGENTS.md"
 # The contract checks (charter_check.py all charter.toml) run separately, with trusted scripts.
 [checks]
 quality = ["python3 -m unittest discover -s tests"]
+# The product test: it makes a repo with the setup step in a temporary folder and runs the commands of charter/bin on it.
+product = ["python3 tests/product.py"]
 
 # The lifecycle map: the six phases of the AI-native SDLC playbook. In each: what does the work, which
 # skill of Charter helps, and which built-in abilities of Claude Code the phase uses. The template of

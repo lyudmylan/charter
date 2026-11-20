@@ -10,6 +10,9 @@ Commands:
                                        or the change request records a reason.
   quality   --contract C [--repo-only]  The quality checks of the contract run and pass. With --repo-only
                                        the repo contract is read alone, without its organization source.
+  product   --contract C [--repo-only]  The product test of the contract, checks.product, runs and passes, as
+                                       quality does. With no command and a reason for none, it passes and
+                                       prints the reason.
   boundary  --contract C --changed F   No path that a run without a person changed is under a pattern of
                                        boundary.no_write. F lists the changed paths: each added, changed,
                                        or deleted path, and both names of a rename. With a NUL character
@@ -48,6 +51,7 @@ import charter_check as cc  # noqa: E402
 
 CMD_LINK, CMD_DOCUMENTS, CMD_QUALITY, CMD_VERDICT = "link", "documents", "quality", "verdict"
 CMD_PLAN = "plan"      # a part of the verdict, not a command of its own
+CMD_PRODUCT = "product"
 CMD_BOUNDARY = cc.CMD_BOUNDARY
 CMD_TIER = "tier"
 ARG_FACTS = "facts"
@@ -82,6 +86,7 @@ ISSUE_NUMBER, ISSUE_STATE = "number", "state"
 INTENT_PATH, INTENT_PLAN, INTENT_REMOVED = "path", "plan", "removed"   # removed: the change request removes or renames the intent away
 STATE_OPEN = "open"
 CHECK_PASS = "pass"
+CHECK_PRODUCT = "product"                   # the check of the job `product` of the workflow `tests`
 
 # The plan of a work item: `plans/<part>.md` for the intent `intents/<part>.md`, accepted before the code.
 FIELD_PLAN_BEFORE_CODE = "build.plan_before_code"
@@ -121,6 +126,8 @@ RUN_OUTCOME = "outcome"
 FIELD_CODE_PATHS = "documents.code_paths"
 FIELD_NECESSARY = "documents.necessary"
 FIELD_QUALITY = "checks.quality"
+FIELD_PRODUCT = cc.FIELD_PRODUCT
+FIELD_NO_PRODUCT_REASON = cc.FIELD_NO_PRODUCT_REASON
 FIELD_ROLE = "roles.{role}"
 TIERS_PREFIX = "tiers."
 TIER_PATHS, TIER_APPROVER, TIER_REVIEW = "paths", "approver", "review"
@@ -163,6 +170,12 @@ MSG = {
     "quality_failed": "failed with exit code {code}: {command}\n{output}",
     "quality_shell": "shell syntax is not supported, put the command in a script: {command}",
     "quality_cannot_run": "cannot run: {command}: {error}",
+    "product_reason": "no product test, the contract says: {reason}",
+    "product_passed": "product test: passed: {commands}",
+    "product_not_passed": "product test: not passed",
+    "product_line_none": "product test: none, the contract says: {reason}",
+    "product_not_reported": "product test: not reported",
+    "product_not_named": "product test: none, the contract names no product test",
     "checks_pending": "checks not passed: {names}",
     "checks_ok": "all checks passed: {names}",
     "no_checks": "no checks reported",
@@ -407,10 +420,11 @@ def needs_a_shell(command: str) -> bool:
                for tok in tokens if tok)
 
 
-def gate_quality(e: cc.Effective, cwd: Path) -> GateResult:
-    commands = e.values.get(FIELD_QUALITY, [])
+def gate_quality(e: cc.Effective, cwd: Path, field: str = FIELD_QUALITY, gate: str = CMD_QUALITY) -> GateResult:
+    """The commands of one field of the contract run without a shell, and each exits with 0."""
+    commands = e.values.get(field, [])
     if not commands:
-        return GateResult(CMD_QUALITY, False, [msg("quality_none")])
+        return GateResult(gate, False, [msg("quality_none")])
     reasons: list[str] = []
     passed = True
     for command in commands:
@@ -430,7 +444,35 @@ def gate_quality(e: cc.Effective, cwd: Path) -> GateResult:
             tail = "\n".join((result.stdout + result.stderr).strip().splitlines()[-OUTPUT_TAIL_LINES:])
             reasons.append(msg("quality_failed", command=command, code=result.returncode, output=tail))
             passed = False
-    return GateResult(CMD_QUALITY, passed, reasons)
+    return GateResult(gate, passed, reasons)
+
+
+def gate_product(e: cc.Effective, cwd: Path) -> GateResult:
+    """The commands of checks.product run as the quality commands do. With no command, a reason for none
+    passes and is printed; with neither, the gate fails with the message of the checker."""
+    if not e.values.get(FIELD_PRODUCT):
+        reason = cc.product_reason(e)
+        if reason:
+            return GateResult(CMD_PRODUCT, True, [msg("product_reason", reason=reason)])
+        return GateResult(CMD_PRODUCT, False, [cc.msg("product_none", product=FIELD_PRODUCT, reason=FIELD_NO_PRODUCT_REASON)])
+    return gate_quality(e, cwd, FIELD_PRODUCT, CMD_PRODUCT)
+
+
+def product_line(facts: dict, e: cc.Effective) -> str:
+    """One line on the product test, for the verdict. Information only: a check `product` that did not pass
+    makes the verdict not ready through the rule for checks."""
+    commands = e.values.get(FIELD_PRODUCT) or []
+    state = facts[FACT_CHECKS].get(CHECK_PRODUCT)
+    if commands:
+        if state is None:
+            return msg("product_not_reported")
+        if state == CHECK_PASS:
+            return msg("product_passed", commands=commands)
+        return msg("product_not_passed")
+    reason = cc.product_reason(e)
+    if reason:
+        return msg("product_line_none", reason=reason)
+    return msg("product_not_named")
 
 
 def tiers_in_order(e: cc.Effective) -> dict[str, dict]:
@@ -661,6 +703,7 @@ def gate_verdict(facts: dict, e: cc.Effective) -> tuple[bool, list[str], dict]:
         reasons.append(msg("checks_pending", names=not_passed))
     else:
         reasons.append(msg("checks_ok", names=sorted(checks)))
+    reasons.append(product_line(facts, e))
 
     threads = facts[FACT_UNRESOLVED_THREADS]
     if threads:
@@ -761,6 +804,11 @@ def cmd_quality(args) -> int:
     return report(gate_quality(e, args.contract.resolve().parent), args.json)
 
 
+def cmd_product(args) -> int:
+    e = repo_only(args) if args.repo_only else effective(args)
+    return report(gate_product(e, args.contract.resolve().parent), args.json)
+
+
 def build_record(facts: dict, verdict: str, origin: str, reasons: list[str], detail: dict,
                  scripts_version: str, time: str) -> dict:
     """The evidence record of one change: the verdict and its facts, in the documented form."""
@@ -817,6 +865,7 @@ def main(argv: list[str] | None = None) -> int:
         CMD_LINK: (cmd_link, True, False),
         CMD_DOCUMENTS: (cmd_documents, True, True),
         CMD_QUALITY: (cmd_quality, False, True),
+        CMD_PRODUCT: (cmd_product, False, True),
         CMD_BOUNDARY: (cmd_boundary, False, True),
         CMD_VERDICT: (cmd_verdict, True, True),
         CMD_TIER: (cmd_tier, False, True),
@@ -838,7 +887,7 @@ def main(argv: list[str] | None = None) -> int:
         if name in (CMD_BOUNDARY, CMD_TIER):
             p.add_argument(f"--{ARG_CHANGED}", type=Path, required=True,
                            help="a file with the paths that the run changed: with NUL between them, or one on each line")
-        if name in (CMD_QUALITY, CMD_TIER):
+        if name in (CMD_QUALITY, CMD_PRODUCT, CMD_TIER):
             p.add_argument(f"--{ARG_REPO_ONLY.replace('_', '-')}", dest=ARG_REPO_ONLY, action="store_true",
                            help="read the repo contract alone, without its organization source")
     args = parser.parse_args(argv)

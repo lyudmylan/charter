@@ -69,6 +69,8 @@ file = "AGENTS.md"
 # Commands that must pass before a push. They run on the code of the change.
 [checks]
 quality = [%{quality}]
+# The product test: the commands that start the product and test it from the outside, or the reason for none.
+%{product}
 
 # The lifecycle map: the six phases of the AI-native SDLC playbook. In each: what does the work, which
 # skill of Charter helps, and which built-in abilities of Claude Code the phase uses.

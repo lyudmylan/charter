@@ -59,6 +59,8 @@ any of its patterns. The `instructions` and `text` commands read this from the s
 | `boundary.no_write` | set | Path patterns that a run of an agent without a person never changes, adds, or deletes. The plan of a work item passes. Needs the version 0.3.6 of the core |
 | `boundary.no_read` | set | Path patterns that a run without a person never reads. Needs the version 0.3.6 of the core |
 | `checks.quality` | set | Commands that must pass before a push. They run on the code of the change. |
+| `checks.product` | set | The product test: the commands that start the product and test it from the outside, as a user or a caller meets it. The gate `product` runs them. Needs the version 0.3.15 of the core |
+| `checks.no_product_reason` | text | Why the repo has no product test yet. A contract that declares code paths has a command in `checks.product` or this reason, not both. Needs the version 0.3.15 of the core |
 | `charter.version` | text | The version of the core plugin of Charter that the repo uses; the workflows fetch Charter at the tag `charter--v<version>` |
 | `tools.issue_tracker`, `tools.code_host`, `tools.ci` | text | The tools of the repo |
 | `roles.leader`, `roles.team_lead`, `roles.engineer`, `roles.agent` | text | Who holds a role |
@@ -97,6 +99,7 @@ from one JSON file. A collecting step writes that file on the code host; the gat
 python3 charter/scripts/charter_gate.py link      --facts facts.json
 python3 charter/scripts/charter_gate.py documents --facts facts.json --contract charter.toml
 python3 charter/scripts/charter_gate.py quality   --contract charter.toml
+python3 charter/scripts/charter_gate.py product   --contract charter.toml
 python3 charter/scripts/charter_gate.py verdict   --facts facts.json --contract charter.toml [--json]
 ```
 
@@ -105,6 +108,7 @@ python3 charter/scripts/charter_gate.py verdict   --facts facts.json --contract 
 | `link` | The change request links an open issue with a closing keyword of the code host followed by the number: `close`, `closes`, `closed`, `fix`, `fixes`, `fixed`, `resolve`, `resolves` or `resolved`, in any case, with or without a colon, then `#N` (`Closes #N`); or `Part of #N`, which links the issue without closing it, the form of a change request of the Plan phase, the intent alone. A bare `#N` in the text is a mention, not a link. |
 | `documents` | No file under `documents.code_paths` changed; or a document in `documents.necessary` changed; or the change request records a reason. |
 | `quality` | Each command in `checks.quality` exits with 0. |
+| `product` | Each command in `checks.product` exits with 0; or the contract names no command and a reason in `checks.no_product_reason`. |
 | `verdict` | `link` and `documents` pass, all reported checks passed, no review thread is unresolved, a tier matches the changed files, and, when the contract sets `build.plan_before_code`, the plan of each intent that a linked issue names exists at the head commit (a change of intents alone needs no plan; an intent that the change request removes or renames away needs no plan). The first line of the output is `ready` or `not ready`; the reasons follow. The verdict names the tier and who merges, and prints one line `merge: ...`: the verdict merges, or a person merges and why. |
 
 The facts file:
@@ -150,6 +154,35 @@ Three rules of the gates:
   command is shown.
 - **Approvals** are not checked in this version. The merge by the approver of the tier is the approval,
   and the verdict says so. The field `approvals` of the facts file is optional.
+
+## The product test
+
+A review reads the change; it does not show that the product works. The product test does: its commands
+start the product and test it from the outside, as a user or a caller meets it. The repo writes them, and
+Charter writes no product test.
+
+- **The contract.** A contract that declares code paths has a command in `checks.product` or a reason in
+  `checks.no_product_reason`. With neither, `charter-check all` fails and says what to add. With both it
+  fails too: a repo with a product test has no reason left. A contract without code paths is not asked.
+- **The gate.** `charter-gate product --contract charter.toml [--repo-only]` runs the commands as the gate
+  `quality` does: with no shell, and it fails when one fails. With a reason and no command it passes and
+  prints the reason.
+- **The job.** The workflow `tests` has a second job, `product`, with the same checkout, the same toolchain
+  block, and the same fetch of Charter as the job `tests`. It runs the gate with `--repo-only`. It runs the
+  code of the change request and holds no secret.
+- **The verdict.** The verdict reads the check `product` beside the check `tests`, so a failed product test
+  makes the change request not ready, and the evidence record holds its state. It prints one line:
+  `product test: passed: <the commands>`, `product test: not passed`, `product test: not reported` when no
+  check `product` reached the facts, `product test: none, the contract says: <the reason>`, or, for a
+  contract with neither field, `product test: none, the contract names no product test`. The line changes
+  no readiness of its own.
+- **The run.** The brief of a run tells the agent to run the commands of `checks.product` after the quality
+  commands, in its sandbox. So a product test that a run can use needs no network and no secret. A product
+  test that needs either runs in the job `product` only.
+
+The product test of this repo is `python3 tests/product.py`. It makes a repo with the setup step in a
+temporary folder, through the commands of `charter/bin`, and runs the contract checks, the quality gate,
+the boundary gate, and a verdict on it.
 
 ## The boundary of a run
 
@@ -279,7 +312,7 @@ Two workflows run on each change request of this repo. They and the collecting s
 
 | Workflow | Trust | What it does |
 |---|---|---|
-| `tests` | Runs the code of the change request. It gets no secret. | Runs the quality checks of the contract with `--repo-only`. |
+| `tests` | Runs the code of the change request. It gets no secret. | Runs the quality checks of the contract with `--repo-only`, and in a second job, `product`, the gate `product` with `--repo-only`. |
 | `verdict` | Runs from the main branch, with the scripts of the main branch. It never runs the code of the change request. | Reads the files of the change request as data, fetches the organization source from the address in main, runs the contract checks on those files with the schema of the change request (a data file, so that a change request can add a field and use it), collects the facts, runs the verdict, and publishes the check "verdict" on the change request, also when the verdict could not run: the check then says so, and the log of the job holds the cause. |
 
 The ruleset on `main` demands the check "verdict". The workflow `verdict` starts when `tests`,
@@ -433,13 +466,15 @@ clone of the Charter repo, the same scripts are `charter/scripts/charter_*.py`.
 
 ```
 charter-setup --repo NAME --source ADDRESS --source-version TAG --leader LOGIN \
-              [--quality CMD]... [--code-path PATTERN]... [--high-path PATTERN]... [--toolchain FILE]
+              [--quality CMD]... [--product CMD]... [--code-path PATTERN]... [--high-path PATTERN]... [--toolchain FILE]
 ```
 
 It writes `charter.toml`, `AGENTS.md`, `intents/_template.md`, `plans/_template.md`, and the five workflows from
 `charter/templates/`; `docs/product.md` and `docs/architecture.md` only when they are missing. It writes
 nothing when one of its files exists, and names the file. At the end it prints the steps that a person
-does by hand: the secrets, the ruleset, the cache command, and the first intent. For the workflow `run`
+does by hand: the secrets, the ruleset, the cache command, and the first intent. The flag `--product`
+puts its commands in `checks.product`; without it the contract gets the reason "no product to start yet",
+and the steps by hand name the product test. For the workflow `run`
 they name the label `charter-run`, the variable `CHARTER_RUNS`, and the secret `CHARTER_RUN_TOKEN`; the
 setup step creates nothing on the code host.
 
@@ -452,8 +487,8 @@ the checkout and before the quality step, between the line `# charter:toolchain:
 `# charter:toolchain:end`. The flag `--toolchain FILE` fills the block. The file holds steps as they stand
 in a workflow, with no indent before the first `- `; the setup step gives them the indent of a step and
 does not substitute their text. A file that holds a marker line is refused, and so is a missing file.
-Without the flag the block is empty. The steps run in the `tests` workflow, which holds no secret. The
-workflow `run` has the same block with the same steps, before the agent starts.
+Without the flag the block is empty. The steps run in the `tests` workflow, which holds no secret. Its job
+`product` has the same block with the same steps, and so has the workflow `run`, before the agent starts.
 An update of the repo keeps the block.
 
 ## The checker

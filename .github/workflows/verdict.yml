@@ -89,6 +89,7 @@ jobs:
           --pr "$PR_NUMBER" --sha "$PR_SHA"
           --check "contract=$CONTRACT_RESULT"
           --check-run tests
+          --check-run product
           --review-workflow review-intents.yml
           --code-review-workflow review-code.yml
           --out facts.json
