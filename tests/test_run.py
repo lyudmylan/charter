@@ -21,6 +21,7 @@ ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / "charter" / "scripts"))
 sys.path.insert(0, str(ROOT / "tests"))
 import charter_check as cc  # noqa: E402
+import charter_facts_github as cf  # noqa: E402
 import charter_gate as cg  # noqa: E402
 import charter_run as cr  # noqa: E402
 import charter_setup as cs  # noqa: E402
@@ -539,7 +540,8 @@ class Publish(Temp):
                 self.dir.mkdir()
                 code, out, gh, git, output = self.publish(RUN_TOKEN, request)
                 self.assertEqual(code, 0, out)
-                self.assertEqual(git, [["-c", "core.hooksPath=/dev/null", "push", "--quiet", "origin", "HEAD:refs/heads/run/7"]])
+                self.assertEqual(git, [["-c", "core.hooksPath=/dev/null", "push", "--quiet", "origin", "HEAD:refs/heads/run/7"],
+                                       ["-c", "core.hooksPath=/dev/null", "rev-parse", "HEAD"]])
                 self.assertEqual(gh[0][:2], ["issue", "view"])
                 self.assertEqual(gh[1], ["auth", "setup-git"])
                 create = gh[2]
@@ -563,6 +565,72 @@ class Publish(Temp):
         self.assertEqual((gh, git), ([], []))
         self.assertFalse(output.exists())
         self.assertIn("CHARTER_RUN_TOKEN is not set", (self.dir / "runner" / "run" / "reason").read_text())
+
+
+class RunRecord(Temp):
+    COMMIT = "abcdef0123456789abcdef0123456789abcdef01"
+    AGENT = {"type": "result", "subtype": "success", "is_error": False, "num_turns": 12, "duration_ms": 65400,
+             "total_cost_usd": 1.5}
+
+    def test_the_block_holds_the_numbers_of_the_agent_result(self):
+        """record-of-a-run, check 1: the command writes the marker and the line `Run:`, with `none` for a value
+        that the result does not hold, and the collector reads the block back."""
+        agent = self.dir / "agent.json"
+        cases = {
+            "all values": (self.AGENT, f"Run: commit={self.COMMIT} turns=12 duration_seconds=65 cost_usd=1.50",
+                           {cg.RUN_TURNS: 12, cg.RUN_DURATION: 65, cg.RUN_COST: 1.5}),
+            "no values": ({"type": "result", "subtype": "success", "num_turns": "12", "duration_ms": True},
+                          f"Run: commit={self.COMMIT} turns=none duration_seconds=none cost_usd=none",
+                          {cg.RUN_TURNS: None, cg.RUN_DURATION: None, cg.RUN_COST: None}),
+            "a list of messages": ([{"type": "system"}, {**self.AGENT, "num_turns": 3}],
+                                   f"Run: commit={self.COMMIT} turns=3 duration_seconds=65 cost_usd=1.50",
+                                   {cg.RUN_TURNS: 3, cg.RUN_DURATION: 65, cg.RUN_COST: 1.5}),
+            "no result": (None, f"Run: commit={self.COMMIT} turns=none duration_seconds=none cost_usd=none",
+                          {cg.RUN_TURNS: None, cg.RUN_DURATION: None, cg.RUN_COST: None}),
+        }
+        for case, (result, line, numbers) in cases.items():
+            with self.subTest(case=case):
+                agent.unlink(missing_ok=True)
+                if result is not None:
+                    agent.write_text(json.dumps(result))
+                code, out = run_cli(cr.CMD_RECORD, "--agent", str(agent), "--commit", self.COMMIT.upper())
+                self.assertEqual(code, cc.PASS, out)
+                self.assertEqual(out.splitlines(), [cg.RUN_MARKER, line])
+                self.assertEqual(cf.run_block("The change.\n\n" + out), {cg.RUN_COMMIT: self.COMMIT, **numbers})
+        code, out = run_cli(cr.CMD_RECORD, "--agent", str(agent), "--commit", "HEAD; touch pwned")
+        self.assertEqual(code, cc.CANNOT_RUN, out)
+
+    def test_the_publishing_step_adds_the_block(self):
+        """record-of-a-run, check 1: the step of this workflow and of the template, run with `bash -e`, a fake
+        `gh`, a fake `git`, and the scripts of this repo. The block comes after the push, with the commit that
+        was pushed, at the end of the text of the change request."""
+        for name, text in Workflow.files.items():
+            with self.subTest(file=name):
+                folder = self.dir / name.replace(" ", "-")
+                run = folder / "runner" / "run"
+                (run / "out" / "agent").mkdir(parents=True)
+                (run / "out" / "agent" / "change-request.md").write_text("The change.\n")
+                (run / "agent.json").write_text(json.dumps(self.AGENT))
+                repo = folder / "repo"
+                repo.mkdir()
+                fake(folder, "gh", RECORD.replace("$CALLS", "$GH_CALLS")
+                     + 'if [ "$1" = issue ]; then echo "A title"; fi\nif [ "$1" = pr ]; then echo "$URL"; fi\n')
+                fake(folder, "git", RECORD.replace("$CALLS", "$GIT_CALLS") + 'if [ "$3" = rev-parse ]; then echo "$COMMIT"; fi\n')
+                env = {"GH_TOKEN": RUN_TOKEN, "ISSUE": "7", "BRANCH": "run/7", "MAIN": "main", "GITHUB_REPOSITORY": "owner/name",
+                       "RUNNER_TEMP": str(folder / "runner"), "GITHUB_OUTPUT": str(folder / "output"), "URL": URL,
+                       "CHARTER_SCRIPTS": str(ROOT / "charter" / "scripts"), "COMMIT": self.COMMIT,
+                       "GH_CALLS": str(folder / "gh.txt"), "GIT_CALLS": str(folder / "git.txt")}
+                code, out = run_step(run_block(text, PUBLISH_STEP), repo, env, folder / "bin")
+                self.assertEqual(code, 0, out)
+                git = calls(folder / "git.txt")
+                self.assertEqual([call[2] for call in git], ["push", "rev-parse"])
+                create = calls(folder / "gh.txt")[-1]
+                self.assertEqual(create[:2], ["pr", "create"])
+                body = Path(create[create.index("--body-file") + 1]).read_text()
+                self.assertIn("The change.\n", body)
+                self.assertEqual(body.splitlines()[-2:],
+                                 [cg.RUN_MARKER, f"Run: commit={self.COMMIT} turns=12 duration_seconds=65 cost_usd=1.50"])
+                self.assertEqual(cf.run_block(body)[cg.RUN_COMMIT], self.COMMIT)
 
 
 class Outcome(Temp):

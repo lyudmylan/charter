@@ -237,6 +237,41 @@ and the quality commands run in the workflow `tests` of the change request. The 
 through `tests`, the reviewers, and `verdict` as any other, and the merge follows the tier. A finding of a
 reviewer on it is for a person in this version.
 
+## The record of a run
+
+The evidence record of a change request that a run built says how the run ended and what it cost. After the
+push, the publishing step reads the commit that it pushed, with no hook, and adds the block of the run at
+the end of the text of the change request:
+
+```
+charter-run record --agent agent.json --commit <commit>
+```
+
+```
+<!-- charter-run -->
+Run: commit=<the commit that the run published> turns=<n> duration_seconds=<n> cost_usd=<n>
+```
+
+A value that Claude Code did not report is `none`. The facts collector reads the last block of the text
+into the fact `run`: the marker line, then the line `Run:` right after it, with the four values in any order.
+A block with a missing or unknown name, a value that is no number, or a commit that is no identifier gives
+no run, and the collection goes on. A change request without the block has no fact `run`.
+
+The verdict decides the outcome, one of three:
+
+| Outcome | When |
+|---|---|
+| `success` | The head commit is the commit of the run, the verdict is ready, and no reviewer has an open finding at the threshold |
+| `flawed` | The head commit is the commit of the run, and the verdict is not ready, or the newest report of the intent reviewer or of the reviewer of the code is open at the threshold or has no severity line, also in the shadow period of that reviewer |
+| `manual` | The head commit is not the commit of the run, or the facts name no head commit: a later push changed what the run built |
+
+A run that opened no change request is `blocked`; that outcome stays on the issue. The verdict prints one
+line after the line `merge: ...`: `run: <outcome>, <turns> turns, <duration>, cost <cost> (an estimate of
+Claude Code)`, or `run: none, no agent run built this change request`. The cost is the estimate that
+Claude Code prints, not a bill. The block is text of the change request, so a person can write one: the
+record says what the text says, and the outcome decides nothing. It changes no readiness and no merge.
+Needs the version 0.3.14 of the core.
+
 ## On the code host
 
 Two workflows run on each change request of this repo. They and the collecting script
@@ -383,6 +418,7 @@ else does not count. The check "verdict" keeps the short text.
 | `review_reports` | The severity line of each report of the intent reviewer, oldest first (`null` for a report without the line) |
 | `code_review_reports`, `code_review_round`, `code_review_highest_severity` | The same for the reviewer of the code: the severity line of each report, the round of the current loop, and the severity line of the newest report |
 | `intents` | The intents that the linked issues name, each with whether its plan exists and whether the change request removes or renames it away |
+| `run` | The agent run that built the change request: `outcome` (`success`, `flawed`, or `manual`), `turns`, `duration_seconds`, and `cost_usd`, each number `null` when Claude Code did not report it. `null` when no run built the change request. See "The record of a run" |
 
 `charter_facts_github.py records --repo owner/name --last N` prints the records of the last merged
 change requests, one line each, for a sample review.

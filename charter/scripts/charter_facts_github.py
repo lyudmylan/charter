@@ -74,6 +74,11 @@ REASON_LINE = re.compile(r"^No document change:\s*(.+?)\s*$", re.IGNORECASE | re
 FALSE_FAILURE_LINE = re.compile(r"^False failure:\s*([a-z0-9_-]+)\s*:\s*(.+?)\s*$", re.IGNORECASE | re.MULTILINE)
 DROPPED_FINDING_LINE = re.compile(r"^Dropped finding:\s*(.+?)\s*$", re.IGNORECASE | re.MULTILINE)
 FALSE_FINDING_LINE = re.compile(r"^False finding:\s*(.+?)\s*$", re.IGNORECASE | re.MULTILINE)
+# The block of an agent run: the marker line, then the line `Run:` right after it. Anyone who edits the text can
+# write it, so it is read strictly; a wrong block gives no run and never fails the collection.
+RUN_VALUE = re.compile(r"^(\w+)=(\S+)$")
+RUN_COMMIT_FORM = re.compile(r"^[0-9a-fA-F]{7,64}$")
+RUN_NUMBER_FORM = re.compile(r"^\d+(?:\.\d+)?$")
 
 # The text of an issue: the line that names the intent of the work item, `Intent: intents/<part>.md`, or
 # the older form, a heading `## Intent` with the path on the next line. The path keeps its case; a plan
@@ -158,6 +163,37 @@ def false_failures(text: str) -> list[dict]:
 def finding_lines(text: str) -> tuple[list[str], list[str]]:
     """The findings that the author dropped, and the findings that the leader marked as false."""
     return DROPPED_FINDING_LINE.findall(text or ""), FALSE_FINDING_LINE.findall(text or "")
+
+
+def run_block(text: str) -> dict | None:
+    """The fact `run` from the last block of an agent run in the text, or None. The four values may come in any
+    order, each once; `none` gives no value. A missing or unknown name, a value that is no number, or a commit
+    that is no identifier gives None."""
+    lines = [line.strip() for line in (text or "").splitlines()]
+    starts = [i for i, line in enumerate(lines) if line == cg.RUN_MARKER]
+    if not starts or starts[-1] + 1 >= len(lines):
+        return None
+    line = lines[starts[-1] + 1]
+    if not line.startswith(cg.RUN_LINE):
+        return None
+    values: dict[str, str] = {}
+    for item in line[len(cg.RUN_LINE):].split():
+        match = RUN_VALUE.match(item)
+        if not match or match.group(1) in values:
+            return None
+        values[match.group(1)] = match.group(2)
+    if set(values) != {cg.RUN_COMMIT, *cg.RUN_NUMBERS} or not RUN_COMMIT_FORM.match(values[cg.RUN_COMMIT]):
+        return None
+    run: dict = {cg.RUN_COMMIT: values[cg.RUN_COMMIT].lower()}
+    for key in cg.RUN_NUMBERS:
+        value = values[key]
+        if value == cg.RUN_NONE:
+            run[key] = None
+        elif RUN_NUMBER_FORM.match(value):
+            run[key] = float(value) if "." in value else int(value)
+        else:
+            return None
+    return run
 
 
 def removed_paths(files: list[dict]) -> set[str]:
@@ -281,7 +317,8 @@ def build_facts(pr: dict, files: list[dict], issues: dict[int, dict | None], unr
     request removes or renames away, and an intent among them is marked, so that the gate asks no plan for it.
     The facts of the code review are written only when the caller named the reviewer of the code: `code_review`
     holds the severity line of each of its reports, oldest first, and `code_commit` the commit of the newest.
-    `head` is the commit that the facts describe."""
+    `head` is the commit that the facts describe. The fact `run` is written only when the text of the change
+    request holds a block of an agent run in the right form."""
     linked = [
         {cg.ISSUE_NUMBER: number, cg.ISSUE_STATE: issue[ISSUE_STATE]}
         for number, issue in issues.items()
@@ -292,6 +329,7 @@ def build_facts(pr: dict, files: list[dict], issues: dict[int, dict | None], unr
                                       cg.FACT_REVIEW_SEVERITY: review[-1] if review else None,
                                       cg.FACT_REVIEW_COMMIT: review_commit}
     code = {} if code_review is None else {cg.FACT_CODE_REVIEW_REPORTS: code_review, cg.FACT_CODE_REVIEW_COMMIT: code_commit}
+    run = run_block(pr.get(PR_BODY) or "")
     return {
         cg.FACT_CHANGE_REQUEST: pr[PR_NUMBER],
         cg.FACT_LINKED_ISSUES: linked,
@@ -307,6 +345,7 @@ def build_facts(pr: dict, files: list[dict], issues: dict[int, dict | None], unr
         cg.FACT_HEAD_COMMIT: head,
         **loop,
         **code,
+        **({} if run is None else {cg.FACT_RUN: run}),
     }
 
 

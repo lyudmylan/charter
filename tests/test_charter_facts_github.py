@@ -348,5 +348,52 @@ class VerdictMerges(unittest.TestCase):
         self.assertNotIn(cg.FACT_REVIEW_COMMIT, only_code)
 
 
+class RunRecord(unittest.TestCase):
+    COMMIT = "abcdef0123456789abcdef0123456789abcdef01"
+    LINE = f"Run: commit={COMMIT} turns=12 duration_seconds=65 cost_usd=1.50"
+
+    def facts(self, body: str) -> dict:
+        return cf.build_facts({**PR, cf.PR_BODY: body}, FILES, ISSUES, 0, {})
+
+    def test_the_block_is_read_from_the_text(self):
+        """record-of-a-run, check 2: the marker line, then the line `Run:` right after it, with the four values
+        in any order; `none` gives no value; the last block of the text counts."""
+        expected = {cg.RUN_COMMIT: self.COMMIT, cg.RUN_TURNS: 12, cg.RUN_DURATION: 65, cg.RUN_COST: 1.5}
+        facts = self.facts(f"Closes #4\n\nThe change.\n\n{cg.RUN_MARKER}\n{self.LINE}\n")
+        self.assertEqual(facts[cg.FACT_RUN], expected)
+        self.assertTrue(cg._is_run(facts[cg.FACT_RUN]))
+        crlf = f"Closes #4\r\n{cg.RUN_MARKER}\r\nRun: cost_usd=none turns=3 commit={self.COMMIT.upper()}  duration_seconds=none\r\n"
+        self.assertEqual(self.facts(crlf)[cg.FACT_RUN],
+                         {cg.RUN_COMMIT: self.COMMIT, cg.RUN_TURNS: 3, cg.RUN_DURATION: None, cg.RUN_COST: None})
+        older = f"{cg.RUN_MARKER}\nRun: commit=1234567 turns=1 duration_seconds=1 cost_usd=1\n"
+        self.assertEqual(cf.run_block(f"{older}\nText.\n{cg.RUN_MARKER}\n{self.LINE}\n"), expected)
+
+    def test_no_block_and_a_wrong_block_give_no_run(self):
+        """record-of-a-run, check 2: a wrong block gives no run, and the collection goes on."""
+        self.assertNotIn(cg.FACT_RUN, self.facts("Closes #4\n\nThe change.\n"))
+        self.assertNotIn(cg.FACT_RUN, cf.build_facts({**PR, cf.PR_BODY: None}, FILES, ISSUES, 0, {}))
+        wrong = {
+            "no line after the marker": f"{cg.RUN_MARKER}\n",
+            "a line between": f"{cg.RUN_MARKER}\n\n{self.LINE}",
+            "the line alone": self.LINE,
+            "a missing name": f"{cg.RUN_MARKER}\nRun: commit={self.COMMIT} turns=12 duration_seconds=65",
+            "an unknown name": f"{cg.RUN_MARKER}\n{self.LINE} model=x",
+            "a name twice": f"{cg.RUN_MARKER}\n{self.LINE} turns=3",
+            "a value that is no number": f"{cg.RUN_MARKER}\nRun: commit={self.COMMIT} turns=many duration_seconds=65 cost_usd=1.50",
+            "a negative number": f"{cg.RUN_MARKER}\nRun: commit={self.COMMIT} turns=-1 duration_seconds=65 cost_usd=1.50",
+            "a number in another form": f"{cg.RUN_MARKER}\nRun: commit={self.COMMIT} turns=1e3 duration_seconds=nan cost_usd=1.50",
+            "a commit that is no identifier": f"{cg.RUN_MARKER}\nRun: commit=HEAD~1 turns=12 duration_seconds=65 cost_usd=1.50",
+            "no commit": f"{cg.RUN_MARKER}\nRun: commit=none turns=12 duration_seconds=65 cost_usd=1.50",
+            "a value with no name": f"{cg.RUN_MARKER}\n{self.LINE} 7",
+            "the last block is wrong": f"{cg.RUN_MARKER}\n{self.LINE}\n{cg.RUN_MARKER}\nRun: turns=1",
+        }
+        for case, block in wrong.items():
+            with self.subTest(case=case):
+                self.assertIsNone(cf.run_block(block))
+                facts = self.facts(f"Closes #4\n\n{block}\n")
+                self.assertNotIn(cg.FACT_RUN, facts)
+                self.assertEqual(facts[cg.FACT_CHANGE_REQUEST], 24)
+
+
 if __name__ == "__main__":
     unittest.main()

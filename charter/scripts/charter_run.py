@@ -20,6 +20,9 @@ Commands:
   outcome --state STATE --reason TEXT --agent FILE [--url URL]
                                        Print the comment for the issue: the outcome, the reason or the change
                                        request, and the turns, the duration, and the cost of the agent.
+  record  --agent FILE --commit COMMIT Print the block of the run for the text of the change request: the marker
+                                       line, and one line `Run:` with the commit, the turns, the duration in
+                                       seconds, and the cost. A value that the result does not hold is `none`.
 
 FILE of --issue is the issue as JSON of the code host: number, title, body, state. FILE of --agent is the
 JSON that `claude -p --output-format json` printed.
@@ -45,9 +48,10 @@ import charter_gate as cg  # noqa: E402
 # Configuration. Every name, key, and message lives here, once.
 # ---------------------------------------------------------------------------
 
-CMD_READY, CMD_BRIEF, CMD_RESULT, CMD_OUTCOME = "ready", "brief", "result", "outcome"
+CMD_READY, CMD_BRIEF, CMD_RESULT, CMD_OUTCOME, CMD_RECORD = "ready", "brief", "result", "outcome", "record"
 ARG_ISSUE, ARG_ROOT, ARG_INTENT, ARG_OUT = "issue", "root", "intent", "out"
 ARG_AGENT, ARG_BASE, ARG_GIT_DIR, ARG_STATE, ARG_REASON, ARG_URL = "agent", "base", "git_dir", "state", "reason", "url"
+ARG_COMMIT = "commit"
 
 # The issue, as JSON of the code host.
 ISSUE_NUMBER, ISSUE_STATE, ISSUE_BODY, ISSUE_TITLE = cg.ISSUE_NUMBER, cg.ISSUE_STATE, cf.ISSUE_BODY, cf.PR_TITLE
@@ -81,7 +85,7 @@ GIT_AUTHOR = ("-c", f"user.name={AUTHOR_NAME}", "-c", f"user.email={AUTHOR_EMAIL
 # The outcome on the issue.
 STATE_PUBLISHED, STATE_BLOCKED = "published", "blocked"
 STATES = (STATE_PUBLISHED, STATE_BLOCKED)
-OUTCOME_MARKER = "<!-- charter-run -->"
+OUTCOME_MARKER = cg.RUN_MARKER   # the same marker as the block of the run on the change request
 
 # The brief. The fixed text comes first. The text of the issue follows the line DATA_LINE.
 BRIEF = """You build one work item of this repo, with no person present.
@@ -128,6 +132,9 @@ MSG = {
     "seconds": "{value:.0f} s",
     "dollars": "{value:.2f} USD",
     "not_reported": "not reported",
+    "bad_commit": "the commit is no identifier of git: {commit}",
+    "whole": "{value:.0f}",
+    "cents": "{value:.2f}",
 }
 
 
@@ -290,6 +297,20 @@ def outcome(state: str, reason: str, agent: Path, url: str | None) -> str:
     return "\n".join(lines) + "\n"
 
 
+def record(agent: Path, commit: str) -> str:
+    """The block of the run for the text of the change request. The facts collector reads it back."""
+    if not cf.RUN_COMMIT_FORM.match(commit):
+        raise cc.CannotRun(msg("bad_commit", commit=commit))
+    data = agent_result(agent)
+    turns, duration, cost = (number_of(data, key) for key in (AGENT_TURNS, AGENT_DURATION, AGENT_COST))
+    values = {cg.RUN_COMMIT: commit.lower(),
+              cg.RUN_TURNS: cg.RUN_NONE if turns is None else msg("whole", value=turns),
+              cg.RUN_DURATION: cg.RUN_NONE if duration is None else msg("whole", value=duration / 1000),
+              cg.RUN_COST: cg.RUN_NONE if cost is None else msg("cents", value=cost)}
+    line = " ".join([cg.RUN_LINE, *(f"{key}={value}" for key, value in values.items())])
+    return f"{cg.RUN_MARKER}\n{line}\n"
+
+
 def cmd_ready(args) -> int:
     for line in ready(load_object(args.issue), args.root):
         print(line)
@@ -311,6 +332,11 @@ def cmd_result(args) -> int:
 
 def cmd_outcome(args) -> int:
     print(outcome(args.state, args.reason, args.agent, args.url), end="")
+    return cc.PASS
+
+
+def cmd_record(args) -> int:
+    print(record(args.agent, args.commit), end="")
     return cc.PASS
 
 
@@ -338,7 +364,11 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument(f"--{ARG_REASON}", default="")
     p.add_argument(f"--{ARG_AGENT}", type=Path, required=True)
     p.add_argument(f"--{ARG_URL}", default=None)
-    commands = {CMD_READY: cmd_ready, CMD_BRIEF: cmd_brief, CMD_RESULT: cmd_result, CMD_OUTCOME: cmd_outcome}
+    p = sub.add_parser(CMD_RECORD)
+    p.add_argument(f"--{ARG_AGENT}", type=Path, required=True)
+    p.add_argument(f"--{ARG_COMMIT}", required=True)
+    commands = {CMD_READY: cmd_ready, CMD_BRIEF: cmd_brief, CMD_RESULT: cmd_result, CMD_OUTCOME: cmd_outcome,
+                CMD_RECORD: cmd_record}
     args = parser.parse_args(argv)
     try:
         return commands[args.command](args)

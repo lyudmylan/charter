@@ -76,6 +76,7 @@ FACT_CODE_REVIEW_REPORTS = "code_review_reports"   # optional: [severity or null
 FACT_CODE_REVIEW_COMMIT = "code_review_commit"     # optional: the line `Commit:` of the newest report of the code review, or null
 FACT_HEAD_COMMIT = "head_commit"                   # optional: the commit that the facts describe
 FACT_REVIEW_COMMIT = "review_commit"               # optional: the line `Commit:` of the newest report of the intent reviewer, or null
+FACT_RUN = "run"                                   # optional: {"commit": "...", "turns": n or null, "duration_seconds": n or null, "cost_usd": n or null}
 # FACT_APPROVALS is optional and not checked in this version: the merge by the approver is the approval.
 ISSUE_NUMBER, ISSUE_STATE = "number", "state"
 INTENT_PATH, INTENT_PLAN, INTENT_REMOVED = "path", "plan", "removed"   # removed: the change request removes or renames the intent away
@@ -104,6 +105,18 @@ FIELD_CODE_BLOCKS = "review.code_blocks"
 # every other tier, and also this one when a condition of the merge does not hold or a fact is missing.
 APPROVER_AGENT = "agent"
 
+# The record of an agent run. The publishing step of the workflow `run` writes a block at the end of the text of
+# the change request: the marker line, then one line `Run:` with the four values `name=value`. A value that
+# Claude Code did not report is `none`. The collector reads the block into the fact `run`. The outcome is
+# information only: it changes no readiness and no merge.
+RUN_MARKER = "<!-- charter-run -->"
+RUN_LINE = "Run:"
+RUN_COMMIT, RUN_TURNS, RUN_DURATION, RUN_COST = "commit", "turns", "duration_seconds", "cost_usd"
+RUN_NUMBERS = (RUN_TURNS, RUN_DURATION, RUN_COST)
+RUN_NONE = "none"
+RUN_SUCCESS, RUN_FLAWED, RUN_MANUAL = "success", "flawed", "manual"
+RUN_OUTCOME = "outcome"
+
 # Fields of the contract that the gates read.
 FIELD_CODE_PATHS = "documents.code_paths"
 FIELD_NECESSARY = "documents.necessary"
@@ -129,7 +142,7 @@ CODE_REVIEW_ROUND, CODE_REVIEW_SEVERITY = "code_review_round", "code_review_high
 RECORD_MERGE_BY_VERDICT = "merge_by_verdict"   # true when the verdict merges the change request, else a person merges
 RECORD_KEYS = ("record_form", "change_request", "time", "scripts_version", "false_failures", "dropped_findings", "false_findings",
                FACT_REVIEW_ROUNDS, FACT_REVIEW_SEVERITY, FACT_INTENTS, FACT_REVIEW_REPORTS, "review_round",
-               FACT_CODE_REVIEW_REPORTS, CODE_REVIEW_ROUND, CODE_REVIEW_SEVERITY, RECORD_MERGE_BY_VERDICT)
+               FACT_CODE_REVIEW_REPORTS, CODE_REVIEW_ROUND, CODE_REVIEW_SEVERITY, RECORD_MERGE_BY_VERDICT, FACT_RUN)
 RECORD_REVIEW_ROUND = RECORD_KEYS[11]        # the round of the current loop; `review_rounds` is the number of all reports
 
 MSG = {
@@ -186,6 +199,10 @@ MSG = {
     "merge_plan_no_line": "a file under {plans} changed, and the newest report of the intent reviewer has no severity line",
     "merge_plan_open": "a file under {plans} changed, and the newest report of the intent reviewer is open at {severity}, at {threshold} or above",
     "merge_plan_commit": "a file under {plans} changed, and the newest report of the intent reviewer names the commit {commit}, not the head commit {head}",
+    "run": "run: {outcome}, {turns} turns, {duration}, cost {cost} (an estimate of Claude Code)",
+    "run_none": "run: none, no agent run built this change request",
+    "run_seconds": "{value:.0f} s",
+    "run_dollars": "{value:.2f} USD",
     "plan_intents_only": "not needed, the change is the Plan phase (only files under {dir})",
     "plan_no_intent": "no linked issue names an intent (a line `Intent: {dir}<part>{suffix}` in the issue)",
     "plan_missing": "`{plan}` is missing. A plan at the old place, `{old}`, counts too.",
@@ -280,7 +297,19 @@ def load_facts(path: Path) -> dict:
     for key in (FACT_CODE_REVIEW_COMMIT, FACT_HEAD_COMMIT, FACT_REVIEW_COMMIT):
         if not (facts.get(key) is None or isinstance(facts.get(key), str)):
             raise cc.CannotRun(msg("facts_bad_value", key=key, path=path))
+    if FACT_RUN in facts and not _is_run(facts[FACT_RUN]):
+        raise cc.CannotRun(msg("facts_bad_value", key=FACT_RUN, path=path))
     return facts
+
+
+def _is_number(value: object) -> bool:
+    return isinstance(value, (int, float)) and not isinstance(value, bool)
+
+
+def _is_run(value: object) -> bool:
+    """The fact `run`: a table with the commit as text and the three numbers, each a number or null."""
+    return (isinstance(value, dict) and isinstance(value.get(RUN_COMMIT), str) and bool(value.get(RUN_COMMIT))
+            and all(key in value and (value[key] is None or _is_number(value[key])) for key in RUN_NUMBERS))
 
 
 def _is_intent(value: object) -> bool:
@@ -552,6 +581,43 @@ def merge_decision(facts: dict, e: cc.Effective, ready: bool, spec: dict) -> tup
     return True, msg("merge_verdict", approver=approver, head=head)
 
 
+def run_outcome(facts: dict, e: cc.Effective, ready: bool) -> str | None:
+    """The outcome of the agent run that built the change request, or None without the fact `run`. `manual`:
+    the head commit is missing or is not the commit of the run, so a later push changed what the run built.
+    `flawed`: the verdict is not ready, or the newest report of the intent review or of the code review is
+    open at the threshold or has no severity line, also in the shadow period. Else `success`. Information only."""
+    run = facts.get(FACT_RUN)
+    if run is None:
+        return None
+    head = facts.get(FACT_HEAD_COMMIT)
+    if not head or head.lower() != run[RUN_COMMIT].lower():
+        return RUN_MANUAL
+    threshold = e.values.get(FIELD_REVIEW_THRESHOLD, DEFAULT_REVIEW_THRESHOLD)
+    for key in (FACT_REVIEW_REPORTS, FACT_CODE_REVIEW_REPORTS):
+        reports = facts.get(key) or []
+        if reports and (reports[-1] is None or SEVERITIES.index(reports[-1]) >= SEVERITIES.index(threshold)):
+            return RUN_FLAWED
+    return RUN_SUCCESS if ready else RUN_FLAWED
+
+
+def run_line(facts: dict, outcome: str | None) -> str:
+    """The line of the verdict on the run, with `none` for a value that the block does not hold."""
+    if outcome is None:
+        return msg("run_none")
+    run = facts[FACT_RUN]
+    turns, duration, cost = (run.get(key) for key in RUN_NUMBERS)
+    return msg("run", outcome=outcome, turns=RUN_NONE if turns is None else f"{turns:.0f}",
+               duration=RUN_NONE if duration is None else msg("run_seconds", value=duration),
+               cost=RUN_NONE if cost is None else msg("run_dollars", value=cost))
+
+
+def run_record(facts: dict, outcome: str | None) -> dict | None:
+    """The run in the evidence record: the outcome and the three numbers, or None."""
+    if outcome is None:
+        return None
+    return {RUN_OUTCOME: outcome, **{key: facts[FACT_RUN].get(key) for key in RUN_NUMBERS}}
+
+
 def gate_plan(facts: dict, e: cc.Effective) -> GateResult | None:
     """The plan of the work item exists before the code. None when the contract does not set the flag. A
     change of intents alone is the Plan phase and needs no plan. An intent that the change request removes or
@@ -621,6 +687,9 @@ def gate_verdict(facts: dict, e: cc.Effective) -> tuple[bool, list[str], dict]:
     merges, merge_line = merge_decision(facts, e, passed, spec)
     reasons.append(merge_line)
     detail[RECORD_MERGE_BY_VERDICT] = merges
+    outcome = run_outcome(facts, e, passed)
+    reasons.append(run_line(facts, outcome))
+    detail[FACT_RUN] = run_record(facts, outcome)
     if tier is not None:
         reasons.append(msg("approvals_not_checked", approver=spec.get(TIER_APPROVER)))
     detail[JSON_KEY_GATES] = [g.as_dict() for g in gates]
@@ -717,6 +786,7 @@ def build_record(facts: dict, verdict: str, origin: str, reasons: list[str], det
         CODE_REVIEW_ROUND: detail.get(CODE_REVIEW_ROUND, 0),
         CODE_REVIEW_SEVERITY: (facts.get(FACT_CODE_REVIEW_REPORTS) or [None])[-1],
         RECORD_MERGE_BY_VERDICT: detail.get(RECORD_MERGE_BY_VERDICT) is True,
+        FACT_RUN: detail.get(FACT_RUN),
     }
 
 

@@ -162,7 +162,8 @@ jobs:
           cat "$RUN/gate.txt"
 
       # The secret CHARTER_RUN_TOKEN is a token that a person creates: a change request that the token of the
-      # workflow opens starts no workflow on the code host.
+      # workflow opens starts no workflow on the code host. After the push, the block of the run, with the commit
+      # that was pushed, goes at the end of the text of the change request.
       - name: Publish the change request
         id: publish
         if: success() && steps.result.outcome == 'success' && steps.gate.outcome == 'success'
@@ -187,6 +188,13 @@ jobs:
           fi
           gh auth setup-git
           git -c core.hooksPath=/dev/null push --quiet origin "HEAD:refs/heads/$BRANCH"
+          if COMMIT=$(git -c core.hooksPath=/dev/null rev-parse HEAD) \
+            && python3 "$CHARTER_SCRIPTS/charter_run.py" record --agent "$RUN/agent.json" --commit "$COMMIT" > "$RUN/block.md"; then
+            echo >> "$RUN/body.md"
+            cat "$RUN/block.md" >> "$RUN/body.md"
+          else
+            echo "the block of the run is not written"
+          fi
           URL=$(gh pr create --repo "$GITHUB_REPOSITORY" --base "$MAIN" --head "$BRANCH" --title "$TITLE" --body-file "$RUN/body.md")
           echo "url=$URL" >> "$GITHUB_OUTPUT"
 
