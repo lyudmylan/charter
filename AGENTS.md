@@ -25,8 +25,9 @@ A work item has an intent, `intents/<part>.md`, approved through a change reques
 with one line, `Intent: intents/<part>.md`. Before the code, the plan `plans/<part>.md`: the steps, the
 files to change, the tests to add, in the words of the author. The agent stops and asks the person
 who holds the work item to accept it; the code starts after the acceptance. In a tier whose approver is
-`agent`, the review of the plan by the intent reviewer is its acceptance. The verdict checks that the
-plan exists. A change request that changes only intents needs no
+`agent`, the review of the plan by the intent reviewer is its acceptance. In a run of an agent with no
+person present, the plan comes with the code, and its acceptance follows: the review in such a tier, or
+the merge of a person. The verdict checks that the plan exists. A change request that changes only intents needs no
 plan: that is the Plan phase itself. [build.plan_before_code]
 
 ## Before a push

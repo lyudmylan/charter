@@ -49,7 +49,8 @@ This plan builds on #91, #101, #66, and #88.
      `/usr/bin/bwrap`, and the install script of Claude Code at the version of an `env` value
      at the top of the file);
      "Write the settings of the run" (the organization source with its token, as the verdict fetches it,
-     then `charter_check.py boundary`, into a file of the temporary folder);
+     then `charter_check.py boundary`, into a file of the temporary folder, then the removal of the clone
+     of the source, before the agent starts);
      "Write the brief";
      "Run the agent" (the new branch; `claude -p` with the brief on standard input or as the argument,
      `--settings` with the text of the settings file, no list of allowed tools,
@@ -57,8 +58,9 @@ This plan builds on #91, #101, #66, and #88.
      folder; `continue-on-error: true`; a time limit of the step; the one secret
      `CLAUDE_CODE_OAUTH_TOKEN`);
      "Take the result of the agent" (`charter_run.py result`);
-     "Check the result against the boundary" (`charter_gate.py boundary` with the contract of the main
-     branch from the copy made before the agent, and the list of the result step);
+     "Check the result against the boundary" (the organization source again, with its token, to read
+     the contract; then `charter_gate.py boundary` with the contract of the main branch from the copy
+     made before the agent, and the list of the result step);
      "Publish the change request" (only when the two steps before passed; the secret
      `CHARTER_RUN_TOKEN` as `GH_TOKEN`; without it the step fails with a message; `gh auth setup-git`,
      `git -c core.hooksPath=/dev/null push origin HEAD:refs/heads/<branch>`, `gh pr create` with the
@@ -86,7 +88,7 @@ This plan builds on #91, #101, #66, and #88.
   `charter/scripts/charter_check.py` (three values more in the settings of the boundary)
 - `charter/templates/run.yml`, `.github/workflows/run.yml`
 - `charter-practices/skills/tracker/SKILL.md`
-- `docs/contract.md`, `docs/product.md`, `docs/decisions.md`
+- `docs/contract.md`, `docs/product.md`, `docs/decisions.md`, `AGENTS.md`, `charter/templates/AGENTS.md`
 - `charter/.claude-plugin/plugin.json`, `charter-practices/.claude-plugin/plugin.json`
 - `intents/run-from-an-issue.md`, `plans/run-from-an-issue.md`
 - `tests/test_run.py`, `tests/test_setup.py`, `tests/test_workflows.py`, `tests/test_boundary.py`

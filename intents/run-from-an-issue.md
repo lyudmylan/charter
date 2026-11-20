@@ -62,7 +62,13 @@ work item inside the boundary of the contract, and a script publishes the result
   The workflows `tests`, `review-intents`, `review-code`, and `verdict` run on the change request as on
   any other, and the merge follows the tier (#66).
 - The plan. The run writes it with the code. In a tier whose approver is `agent`, the review of the
-  intent reviewer is its acceptance (#66); in a tier of a person, the merge of that person is.
+  intent reviewer is its acceptance (#66); in a tier of a person, the merge of that person is. So in a
+  run the acceptance follows the code and does not come before it: the verdict checks that the plan
+  exists, not the order (`intents/plan-before-the-code.md`). The Build row of `docs/product.md` and the
+  section on the plan of `AGENTS.md` and of its template say so.
+- The run can use no other settings than the ones of the boundary: one step writes them, and the command
+  of the agent takes them as text. A test of the workflow proves this wiring; it is the check that the
+  intent of #91 left to this work item.
 - The findings of a reviewer on the change request of a run: in this version a person decides, by a
   correction in a session or by a new run on a new branch.
 - The skill `tracker` says what a work item for a run looks like: one change request that one run can
@@ -79,7 +85,10 @@ work item inside the boundary of the contract, and a script publishes the result
 ## Out of scope
 
 More than one run at a time, a retry, and a run whose issue changed while it worked: later steps of
-#82. A run that answers the findings of a reviewer. The identity of the agent on the code host: the
+#82. The stop rules of the contract inside a run, which the issue lists: the run has a limit of turns and
+a time limit, a person decides at the findings of a reviewer, and the count of the refusals is a later
+issue of #12. The order of the first work items of a new product in the skill `tracker`, which the issue
+lists: a later change. A run that answers the findings of a reviewer. The identity of the agent on the code host: the
 change request is opened in the name of the owner of the run token (#13). The outcome and the cost in
 the evidence record of the change request: #93; here they are on the issue. A product that needs the
 network or a secret in its tests. A limit of cost: #53.
@@ -135,7 +144,8 @@ network or a secret in its tests. A limit of cost: #53.
     the toolchain block of the run from the file of the flag.
     test: `tests/test_run.py::Setup.test_the_manual_steps_and_the_toolchain_block`
 13. The skill `tracker` says what a work item for a run looks like; `docs/contract.md` holds the section
-    "The run"; `docs/product.md` names the run; the decision record holds the three decisions.
+    "The run"; `docs/product.md` names the run and says that in a run the acceptance of the plan follows
+    the code; the instructions say the same; the decision record holds the three decisions.
     test: `tests/test_run.py::Documents.test_the_skill_and_the_documents_name_the_run`
 14. Both manifests name the same version, 0.3.13 or later.
     test: `tests/test_run.py::Documents.test_both_manifests_name_the_version`

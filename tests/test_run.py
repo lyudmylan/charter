@@ -650,6 +650,11 @@ class Documents(unittest.TestCase):
         product = (ROOT / "docs" / "product.md").read_text()
         build = re.search(r"^\| Build \| (.*)$", product, re.M).group(1)
         self.assertIn("`charter-run`", build)
+        self.assertIn("the plan comes with the code and its acceptance follows", build)
+        for path in (ROOT / "AGENTS.md", ROOT / "charter" / "templates" / "AGENTS.md"):
+            with self.subTest(file=str(path.relative_to(ROOT))):
+                self.assertIn("In a run of an agent with no person present, the plan comes with the code, and its "
+                              "acceptance follows", one_line(path.read_text()))
         who = one_line(product[product.index("## Who does the work"):product.index("## The lifecycle map")])
         self.assertIn("the workflow `run`", who)
         decisions = (ROOT / "docs" / "decisions.md").read_text()

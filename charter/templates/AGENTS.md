@@ -30,8 +30,9 @@ intent with one line, `Intent: intents/<part>.md`. [tiers.high.paths]
 Before the code, the plan `plans/<part>.md`: the steps, the files to change, the tests to add, in the
 words of the author. `plans/_template.md` is the form. The agent stops and asks the person who holds the work item to accept it; the
 code starts after the acceptance. In a tier whose approver is `agent`, the review of the plan by the intent
-reviewer is its acceptance. The verdict checks that the plan exists; a change request that changes
-only intents needs no plan. [build.plan_before_code]
+reviewer is its acceptance. In a run of an agent with no person present, the plan comes with the code,
+and its acceptance follows: the review in such a tier, or the merge of a person. The verdict checks that
+the plan exists; a change request that changes only intents needs no plan. [build.plan_before_code]
 
 ## Before a push
 
