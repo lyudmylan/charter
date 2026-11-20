@@ -5,7 +5,8 @@ Work item: #88. Status: done. Approval: a person merges the change request that 
 ## Goal
 
 A repo whose quality commands need an install step gets a `tests` workflow that works from the setup
-step, and the install steps have one marked place that a later version of the workflow keeps.
+step, and the install steps have one marked place that a function reads back, so that a later update
+can keep it.
 
 ## In scope
 
@@ -46,7 +47,8 @@ workflow to the new checkout action.
 ## Automatic checks
 
 1. Without the flag, the setup step writes a `tests` workflow with an empty block after the checkout and
-   before the quality step. The `tests` workflow of this repo has the same empty block.
+   before the quality step. The `tests` workflow of this repo has the same empty block. The template
+   holds the comment line that says that the steps run with no secret.
    test: `tests/test_workflows.py::Toolchain.test_the_block_is_empty_without_the_flag`
 2. With the flag, the steps of the file stand in the block with the indent of the steps, in their order,
    and the lines outside the block are the ones of the template.
@@ -58,7 +60,8 @@ workflow to the new checkout action.
    nothing.
    test: `tests/test_workflows.py::Toolchain.test_a_file_with_a_marker_or_no_file_is_refused`
 5. The templates and the workflows of this repo that run on a change request use the checkout action at
-   `v7`, and the verdict workflow keeps `v4`.
+   `v7`, and the verdict workflow keeps `v4`. The later change that moves the verdict workflow changes
+   this test.
    test: `tests/test_workflows.py::Toolchain.test_the_checkout_action_of_each_workflow`
 6. `docs/contract.md` names the flag, the two marker lines, and the rule for an update.
    test: `tests/test_workflows.py::Toolchain.test_the_contract_document_names_the_block`

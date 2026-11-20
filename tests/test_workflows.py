@@ -603,6 +603,7 @@ class Toolchain(unittest.TestCase):
         written = self.written()
         start, end = block_place(written)
         self.assertEqual(end, start + 1, "the block of the written workflow is not empty")
+        self.assertIn("They run with no secret.", written.splitlines()[start - 1])
         self.assertEqual(written, self.template.replace("%{charter_address}", cs.CHARTER_ADDRESS)
                          .replace("%{toolchain}", ""))
         own = (WORKFLOWS / "tests.yml").read_text()
