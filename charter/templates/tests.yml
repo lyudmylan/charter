@@ -14,9 +14,12 @@ jobs:
     name: tests
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           persist-credentials: false
+      # The steps of the toolchain of this repo stand between the two marker lines. They run with no secret.
+      # charter:toolchain:start
+%{toolchain}      # charter:toolchain:end
       - name: Fetch Charter at the version of the contract
         run: |
           VERSION=$(python3 -c 'import tomllib; print(tomllib.load(open("charter.toml", "rb"))["charter"]["version"])')
@@ -24,3 +27,23 @@ jobs:
           echo "CHARTER_SCRIPTS=$RUNNER_TEMP/charter/charter/scripts" >> "$GITHUB_ENV"
       - name: Run the quality checks of the contract on this code
         run: python3 "$CHARTER_SCRIPTS/charter_gate.py" quality --contract charter.toml --repo-only
+
+  # The product test of the contract, checks.product: it starts the product and tests it from the outside.
+  # It runs the code of the change request, so it gets no secret, as the job tests.
+  product:
+    name: product
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      # The same steps of the toolchain as in the job tests. The setup step fills both blocks.
+      # charter:toolchain:start
+%{toolchain}      # charter:toolchain:end
+      - name: Fetch Charter at the version of the contract
+        run: |
+          VERSION=$(python3 -c 'import tomllib; print(tomllib.load(open("charter.toml", "rb"))["charter"]["version"])')
+          git clone --quiet --depth 1 --branch "charter--v$VERSION" %{charter_address} "$RUNNER_TEMP/charter"
+          echo "CHARTER_SCRIPTS=$RUNNER_TEMP/charter/charter/scripts" >> "$GITHUB_ENV"
+      - name: Run the product test of the contract on this code
+        run: python3 "$CHARTER_SCRIPTS/charter_gate.py" product --contract charter.toml --repo-only

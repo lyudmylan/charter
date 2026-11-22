@@ -43,6 +43,7 @@ agent = ["bot"]
 
 [checks]
 quality = ["python3 -m unittest discover -s tests"]
+no_product_reason = "the sample repo has no product to start"
 
 [lifecycle.plan]
 work = "issues in the tracker"

@@ -71,6 +71,10 @@ kind = "choice"
 order = ["blocker", "high", "medium", "low"]
 note = "The lowest severity of a finding that keeps the review loop open. Below it, the loop ends."
 
+[fields."review.code_blocks"]
+kind = "flag"
+note = "An open finding of the reviewer of the code makes the change request not ready. Without it, or with false, the reviewer of the code is in its shadow period: the verdict prints its state and blocks nothing."
+
 # --- The Build phase ---
 
 [fields."build.plan_before_code"]
@@ -134,6 +138,14 @@ note = "Path patterns that a run without a person never reads."
 [fields."checks.quality"]
 kind = "set"
 note = "Commands that must pass before a push."
+
+[fields."checks.product"]
+kind = "set"
+note = "Commands that start the product and test it from the outside, as a user or a caller meets it. The gate product runs them."
+
+[fields."checks.no_product_reason"]
+kind = "text"
+note = "Why the repo has no product test yet. A contract that declares code paths has a command in checks.product or this reason, not both."
 
 # --- The version of Charter that the repo uses ---
 

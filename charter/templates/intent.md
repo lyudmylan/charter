@@ -19,9 +19,11 @@ Work item: #<number>. Status: planned. Approval: a person merges the change requ
 ## Automatic checks
 
 1. <A result that a test or a command verifies.>
-   test: `tests/test_<file>.py::<Class>.<test_name>`
+   test: <the file of the test, and the name of the test in it>
 2. <Another result.>
    command: `<a command that exits with 0 when the result holds>`
+
+A work item that changes the behaviour of the product names the scenario of the product test that shows the change.
 
 ## Manual checks
 

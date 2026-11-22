@@ -178,13 +178,25 @@ class Settings(Temp):
         """boundary-of-a-run, check 5 (decision E6)."""
         self.assertIs(self.full()["permissions"]["denyInsteadOfPrompting"], True)
 
+    def test_the_file_tools_stay_inside_the_folder(self):
+        """run-from-an-issue, check 5: the mode that asks before a path outside the folder, the block of writes
+        outside it, and no read of the environment of another process. A test on a Mac on 2026-11-20 showed
+        that a list of allowed tools opens the Read and the Write tool for every path; the settings hold none."""
+        for section in ("", boundary(self.NO_WRITE, self.NO_READ)):
+            with self.subTest(section=bool(section)):
+                settings = self.settings(section)
+                self.assertEqual(settings["permissions"]["defaultMode"], "acceptEdits")
+                self.assertIs(settings["permissions"]["blockWritesOutsideWorkingDirectories"], True)
+                self.assertIn("/proc/*/environ", settings["sandbox"]["filesystem"]["denyRead"])
+                self.assertNotIn("allow", settings["permissions"])
+
     def test_an_empty_section_keeps_the_sandbox(self):
         """boundary-of-a-run, check 6: an absent section, and an empty one."""
         for section in ("", boundary([])):
             with self.subTest(section=section):
                 settings = self.settings(section)
                 self.assertEqual(settings["permissions"]["deny"], [])
-                self.assertEqual(settings["sandbox"]["filesystem"], {"denyWrite": [], "denyRead": []})
+                self.assertEqual(settings["sandbox"]["filesystem"], {"denyWrite": [], "denyRead": [cc.PROCESS_ENVIRONMENTS]})
                 self.assertIs(settings["sandbox"]["enabled"], True)
                 self.assertIs(settings["sandbox"]["failIfUnavailable"], True)
                 self.assertEqual(settings["sandbox"]["network"]["allowedDomains"], [])
