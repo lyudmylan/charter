@@ -20,10 +20,12 @@ permissions:
   contents: read
   issues: write
 
-# One run works at a time; a second one waits.
+# One run works at a time. The others wait in the order of their start: without `queue: max` the code host
+# keeps one waiting run, and a new run cancels it.
 concurrency:
   group: charter-run
   cancel-in-progress: false
+  queue: max
 
 env:
   CLAUDE_CODE_VERSION: "2.1.329"

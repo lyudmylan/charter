@@ -230,7 +230,8 @@ The workflow `run` takes a ready issue and runs an agent on it, with no person p
 from the main branch. A person starts it: the label `charter-run` on an issue, or a start by hand with the
 number of an issue. Only a person with write access can do either. The variable `CHARTER_RUNS` of the repo
 with the value `off` stops the start of every run; the cancel of the code host stops a run that works. One
-run works at a time, and a second one waits.
+run works at a time. The others wait in the order of their start, up to 100: the option `queue: max` of the
+group. Without it the code host keeps one waiting run, and a new run cancels it.
 
 ```
 charter-run ready   --issue issue.json --root .
