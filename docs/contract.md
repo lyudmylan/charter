@@ -197,8 +197,10 @@ python3 charter/scripts/charter_gate.py boundary --contract charter.toml --chang
 `charter-check boundary` prints the settings of Claude Code for the run, as JSON. The workflow of the run
 writes them at the start of each run and passes them on the command line; they are not a file of the repo.
 They turn the sandbox of the shell on, let no command run outside it, and stop the run when the sandbox
-cannot start. The shell has no network. The tokens of the model and of the code host leave the
-environment of each shell command. A call that would need a question to a person is refused. The file tools
+cannot start. A command that runs inside the sandbox needs no approval, `autoAllowBashIfSandboxed`: its
+limits are the limits of the sandbox. The shell has no network. The tokens of the model and of the code
+host leave the environment of each shell command. A call that would need a question to a person is
+refused. The file tools
 stay inside the folder of the repo: the mode `acceptEdits` lets them change a file of that folder with no
 question, a read or a write on a path outside it would need a question and is refused, and
 `blockWritesOutsideWorkingDirectories` refuses such a write in every mode. A run passes no list of allowed
@@ -244,14 +246,16 @@ The steps, in this order:
 2. `ready`: the issue is open, it names exactly one intent with the line `Intent: intents/<part>.md`, and
    that intent is a file of the main branch. Else the run ends as blocked, with the reason on the issue.
 3. The toolchain block of the repo, with the steps of the block of `tests`.
-4. The sandbox of Linux and Claude Code, at the version that the workflow names.
+4. The sandbox of Linux and Claude Code, at the version that the workflow names. The machine is the image
+   `ubuntu-24.04`, by its name: on Ubuntu 26.04 the sandbox of Claude Code starts no command.
 5. The settings of `charter-check boundary`, from the contract of the main branch with its organization
    source. The clone of the source is removed before the agent starts: the shell of the agent can read most
    of the disk, and the source of an organization can be private.
 6. `brief`: the fixed text, then the text of the issue under a line that marks it as data.
 7. The agent: `claude -p` with the settings as text on the command line, with no list of allowed tools, a
    limit of turns, and a time limit of the step. Its one secret is the token of the model. It writes the plan, the code, and the tests, runs
-   the quality commands in its sandbox, and commits nothing. It writes the text of the change request to
+   the quality commands in its sandbox, and commits nothing. The commands `charter-gate` and `charter-check` do
+   not run there: the machine holds no organization source at that time. It writes the text of the change request to
    `.charter-run/change-request.md`, or the reason of a stop to `.charter-run/blocked.md`.
 8. `result`: a copy of `.git`, made before the agent, replaces the `.git` of the folder, so no
    configuration and no hook of the agent runs. The folder `.charter-run/` moves out and is never committed.

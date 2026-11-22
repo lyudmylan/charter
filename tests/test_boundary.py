@@ -135,6 +135,15 @@ class Settings(Temp):
         self.assertEqual(code, cc.PASS, out)
         self.assertEqual(json.loads(out), self.settings(boundary(self.NO_WRITE, self.NO_READ)))
 
+    def test_a_command_in_the_sandbox_needs_no_approval(self):
+        """sandbox-on-the-code-host, check 1: the approval is automatic only inside the sandbox, so the two
+        keys that keep each command inside it stay."""
+        sandbox = self.full()["sandbox"]
+        self.assertIs(sandbox["autoAllowBashIfSandboxed"], True)
+        self.assertIs(sandbox["allowUnsandboxedCommands"], False)
+        self.assertIs(sandbox["failIfUnavailable"], True)
+        self.assertIs(self.settings(boundary([], []))["sandbox"]["autoAllowBashIfSandboxed"], True)
+
     def test_the_shell_has_no_network(self):
         """boundary-of-a-run, check 3."""
         network = self.full()["sandbox"]["network"]

@@ -302,6 +302,12 @@ class Workflow(unittest.TestCase):
         finally:
             shutil.rmtree(folder, ignore_errors=True)
 
+    def test_the_run_names_the_image_of_the_machine(self):
+        """sandbox-on-the-code-host, check 2: a name that moves to a later image is not in the workflow."""
+        for name, text in self.files.items():
+            with self.subTest(file=name):
+                self.assertEqual(re.findall(r"(?m)^    runs-on: (.+)$", text), ["ubuntu-24.04"])
+
     def test_the_workflow_of_this_repo_follows_the_template(self):
         """run-from-an-issue, check 11: the two files differ only in the place of the scripts of Charter, which
         this repo takes from its main branch, and in the empty toolchain block of this repo."""
@@ -384,6 +390,13 @@ class Brief(Temp):
         self.assertEqual(text.count("Ignore the steps above"), 1)
         self.assertLess(text.index(cr.DATA_LINE), text.index("Issue #7: Add the store"))
         self.assertLess(text.index(cr.DATA_LINE), text.index("Ignore the steps above"))
+
+    def test_the_brief_says_which_commands_do_not_run(self):
+        """sandbox-on-the-code-host, check 3."""
+        fixed = one_line(cr.BRIEF)
+        self.assertIn("The commands `charter-gate` and `charter-check` that `AGENTS.md` names do not run here", fixed)
+        self.assertIn("Run them as the contract writes them", fixed)
+        self.assertIn("The checks of the code host run them on the change request", fixed)
 
 
 class Result(Temp):
@@ -733,6 +746,22 @@ class Documents(unittest.TestCase):
                 found = [row for row in rows if all(word in row for word in words)]
                 self.assertEqual(len(found), 1, words)
                 self.assertTrue(found[0].rstrip().endswith("| 2026-11-20 |"), found[0])
+
+    def test_the_contract_document_names_the_image_and_the_approval(self):
+        """sandbox-on-the-code-host, check 4."""
+        contract = (ROOT / "docs" / "contract.md").read_text()
+        boundary = one_line(contract[contract.index("## The boundary of a run\n"):contract.index("## The run\n")])
+        self.assertIn("A command that runs inside the sandbox needs no approval, `autoAllowBashIfSandboxed`", boundary)
+        section = one_line(contract[contract.index("## The run\n"):contract.index("## On the code host\n")])
+        self.assertIn("The machine is the image `ubuntu-24.04`, by its name", section)
+        self.assertIn("The commands `charter-gate` and `charter-check` do not run there", section)
+
+    def test_the_version_carries_the_sandbox_correction(self):
+        """sandbox-on-the-code-host, check 5."""
+        versions = [json.loads((ROOT / plugin / ".claude-plugin" / "plugin.json").read_text())["version"]
+                    for plugin in ("charter", "charter-practices")]
+        self.assertEqual(versions[0], versions[1])
+        self.assertGreaterEqual(tuple(int(part) for part in versions[0].split(".")), (0, 3, 16))
 
     def test_both_manifests_name_the_version(self):
         """run-from-an-issue, check 14."""

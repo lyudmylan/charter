@@ -93,7 +93,10 @@ BRIEF = """You build one work item of this repo, with no person present.
 1. Read `AGENTS.md` and the intent `{intent}`.
 2. Write the plan of the work item to `{plan}`: the steps, the files to change, the tests to add.
 3. Write the code and the tests until each acceptance check of the intent holds.
-4. Run the quality commands of the contract, `checks.quality` in `charter.toml`, until they pass.
+4. Run the quality commands of the contract, `checks.quality` in `charter.toml`, until they pass. Run them
+   as the contract writes them. The commands `charter-gate` and `charter-check` that `AGENTS.md` names do
+   not run here: this machine holds no organization source. The checks of the code host run them on the
+   change request.
 5. When the contract names a product test, `checks.product` in `charter.toml`, run its commands until they pass.
 6. Change no file that the boundary of the contract closes, `boundary.no_write` in `charter.toml`. When the
    work needs such a change, stop and say so in `{blocked}`.
