@@ -578,6 +578,9 @@ class Publish(Temp):
         cases = {
             "the same line": ("Closes #7\n\nThe change.\n", "Closes #7\n\nThe change.\n"),
             "other forms": ("fixes: #7.\n  Part of #7\nResolves #7\nThe change.\n", "Closes #7\n\nThe change.\n"),
+            "a list marker and emphasis": ("- Closes #7\n**Closes #7**\n* _Fixes #7._\n**Resolves: #7**.\nThe change.\n",
+                                           "Closes #7\n\nThe change.\n"),
+            "more than the link": ("Closes #7, #8\n- Closes #7 with a test\n", "Closes #7\n\nCloses #7, #8\n- Closes #7 with a test\n"),
             "a line in the middle": ("The change.\n\nCloses #7\n\nMore.\n", "Closes #7\n\nThe change.\n\n\nMore.\n"),
             "another issue": ("Closes #8\n\nThe change.\n", "Closes #7\n\nCloses #8\n\nThe change.\n"),
             "a longer number": ("Closes #70\n", "Closes #7\n\nCloses #70\n"),
@@ -819,7 +822,7 @@ class Documents(unittest.TestCase):
         """one-closing-line, check 4."""
         contract = (ROOT / "docs" / "contract.md").read_text()
         section = one_line(contract[contract.index("## The run\n"):contract.index("## On the code host\n")])
-        self.assertIn("charter-run text --number <number> --request .charter-run/change-request.md", section)
+        self.assertIn("charter-run text --number <number> --request change-request.md", section)
         self.assertIn("without a line of it that only links the same issue", section)
         versions = [json.loads((ROOT / plugin / ".claude-plugin" / "plugin.json").read_text())["version"]
                     for plugin in ("charter", "charter-practices")]

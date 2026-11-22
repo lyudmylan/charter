@@ -1,7 +1,7 @@
 # Plan: the change request of a run holds the line that closes its issue one time (#116)
 
 Intent: `intents/one-closing-line.md`, checks 1 to 6.
-The intent, the plan, and the code reach the leader together, and her merge approves the three.
+The intent, the plan, and the code reach the leader together, and the merge of the leader approves the three.
 
 ## Steps
 

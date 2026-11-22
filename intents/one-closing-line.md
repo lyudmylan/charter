@@ -15,11 +15,14 @@ first line.
 - A command `text` of `charter_run.py` writes the text of the change request, before the block of the
   run: the line `Closes #<number>`, an empty line, and then what the agent wrote. It leaves out a line of
   the agent that only links the issue of the run: a closing keyword of the code host or `Part of`, then
-  the number, in the forms that the facts collector reads as a link. A line that links another issue
-  stays, and a sentence that holds the link among other words stays.
+  the number, in the forms that the facts collector reads as a link. A list marker before the link, marks
+  of emphasis around it, and a full stop after it do not change this. A line that links another issue
+  stays. A line that holds more than the link stays too, a second number or other words: the script
+  removes no words of the agent.
 - The file of the agent can be missing, empty, a link, or the closing line alone. The text then holds one
-  sentence in its place, the sentence that the workflow wrote before this change. A link is not followed:
-  the agent wrote the file.
+  sentence in its place, the sentence that the workflow wrote before this change: "An agent run built this
+  work item. The agent wrote no text for the change request." A link is not followed: the agent wrote the
+  file.
 - The publishing step, in the template and in the workflow of this repo, calls the command. The shell
   lines that wrote the text leave the step.
 - The brief stays as it is. The script decides, so the result does not depend on what the agent reads.
@@ -36,8 +39,8 @@ the middle of the text after a line is left out.
 ## Automatic checks
 
 1. The command prints the closing line one time for a text of the agent that holds a link to the issue of
-   the run, in each form of a link. It keeps a line that links another issue and a sentence that holds
-   the link among other words. A file that is missing, empty, or the closing line alone gives the
+   the run, in each form of a link, also with a list marker or with marks of emphasis. It keeps a line
+   that links another issue and a line that holds more than the link. A file that is missing, empty, or the closing line alone gives the
    sentence.
    test: `tests/test_run.py::Publish.test_the_text_holds_the_closing_line_one_time`
 2. A link in the place of the file of the agent is not followed.

@@ -90,9 +90,12 @@ GIT_AUTHOR = ("-c", f"user.name={AUTHOR_NAME}", "-c", f"user.email={AUTHOR_EMAIL
 
 # The text of the change request. The workflow writes the line that closes the issue. The agent reads in the
 # instructions of the repo that a change request closes its issue, so its text can hold the line too: a line
-# of the agent that only links the issue of the run is left out.
+# of the agent that only links the issue of the run is left out. A list marker before the link, marks of
+# emphasis around it, and a full stop after it do not change what the line is.
 CLOSING_LINE = "Closes #{number}"
-ONLY_A_LINK = re.compile(rf"^\s*{cf.LINKED_ISSUE.pattern}\s*\.?\s*$", re.IGNORECASE)
+ONLY_A_LINK = re.compile(cf.LINKED_ISSUE.pattern, re.IGNORECASE)
+LIST_MARKER = re.compile(r"^[-*+]\s+")
+AROUND_A_LINK = "*_. "
 
 # The outcome on the issue.
 STATE_PUBLISHED, STATE_BLOCKED = "published", "blocked"
@@ -318,7 +321,7 @@ def text(number: int, request: Path) -> str:
     """The text of the change request, before the block of the run: the closing line, then the text of the agent."""
     kept = []
     for line in (regular_text(request) or "").splitlines():
-        link = ONLY_A_LINK.match(line)
+        link = ONLY_A_LINK.fullmatch(LIST_MARKER.sub("", line.strip()).strip(AROUND_A_LINK))
         if not (link and int(link.group(1)) == number):
             kept.append(line)
     written = "\n".join(kept).strip()

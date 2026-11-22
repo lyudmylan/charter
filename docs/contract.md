@@ -236,7 +236,7 @@ run works at a time, and a second one waits.
 charter-run ready   --issue issue.json --root .
 charter-run brief   --issue issue.json --intent intents/<part>.md --out brief.md
 charter-run result  --agent agent.json --root . --base <commit> --issue issue.json --git-dir <copy> --out <folder>
-charter-run text    --number <number> --request .charter-run/change-request.md
+charter-run text    --number <number> --request change-request.md
 charter-run outcome --state published|blocked --reason TEXT --agent agent.json [--url URL]
 ```
 
