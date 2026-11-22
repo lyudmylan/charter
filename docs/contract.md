@@ -198,8 +198,9 @@ python3 charter/scripts/charter_gate.py boundary --contract charter.toml --chang
 writes them at the start of each run and passes them on the command line; they are not a file of the repo.
 They turn the sandbox of the shell on, let no command run outside it, and stop the run when the sandbox
 cannot start. A command that runs inside the sandbox needs no approval, `autoAllowBashIfSandboxed`: its
-limits are the limits of the sandbox. The shell has no network. The tokens of the model and of the code host leave the
-environment of each shell command. A call that would need a question to a person is refused. The file tools
+limits are the limits of the sandbox. The shell has no network. The tokens of the model and of the code
+host leave the environment of each shell command. A call that would need a question to a person is
+refused. The file tools
 stay inside the folder of the repo: the mode `acceptEdits` lets them change a file of that folder with no
 question, a read or a write on a path outside it would need a question and is refused, and
 `blockWritesOutsideWorkingDirectories` refuses such a write in every mode. A run passes no list of allowed

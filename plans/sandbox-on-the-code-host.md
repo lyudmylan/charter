@@ -1,13 +1,14 @@
 # Plan: an agent run runs its commands in the sandbox, on a machine of the code host (#113)
 
-Intent: `intents/sandbox-on-the-code-host.md`, checks 1 to 7.
+Intent: `intents/sandbox-on-the-code-host.md`, checks 1 to 8.
 The intent, the plan, and the code reach the leader together, and her merge approves the three.
 
 ## Steps
 
 1. A test workflow on its own branch, not for the main branch, on machines of the code host. It installs
-   the sandbox in each known way and gives a model a fixed list of commands. Its results decide steps 2
-   and 3, and they are the evidence of check 6. The branch is deleted after the merge.
+   the sandbox in each known way and gives a model a fixed list of commands. Its results decided steps 2
+   and 3 and are the evidence of check 7, copied to a comment on #113. The branch is deleted after the
+   merge.
 2. `charter/templates/run.yml` and `.github/workflows/run.yml`: `runs-on: ubuntu-24.04`, with the reason
    in a comment.
 3. `charter/scripts/charter_check.py`, the function `boundary_settings`: the key
@@ -22,6 +23,7 @@ The intent, the plan, and the code reach the leader together, and her merge appr
    `Brief.test_the_brief_says_which_commands_do_not_run`,
    `Documents.test_the_contract_document_names_the_image_and_the_approval`, and
    `Documents.test_the_version_carries_the_sandbox_correction` in `tests/test_run.py`.
+8. `tests/product.py`: the step "settings of a run", after the contract checks.
 
 ## Files
 
@@ -36,3 +38,4 @@ The intent, the plan, and the code reach the leader together, and her merge appr
 - `plans/sandbox-on-the-code-host.md`
 - `tests/test_boundary.py`
 - `tests/test_run.py`
+- `tests/product.py`

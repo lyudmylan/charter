@@ -25,11 +25,13 @@ with no question to a person, and each limit of the sandbox holds.
   the limits of the sandbox, which the operating system holds: the closed files, the empty network, the
   tokens that leave the environment. No command runs outside the sandbox, `allowUnsandboxedCommands` stays
   false. The name of the key comes from the documentation of Claude Code, the page on the sandbox, read
-  on 2026-11-22.
+  on 2026-11-22. Claude Code gives no message for a key that it does not know: when the name changes, a
+  run refuses its commands again and ends as blocked, and check 8 shows it.
 - The brief of a run says that the commands `charter-gate` and `charter-check`, which `AGENTS.md` names,
   do not run in a run: the machine holds no organization source while the agent works. The agent runs the
   quality commands as the contract writes them, and the checks of the code host run the two commands on
-  the change request.
+  the change request. `AGENTS.md` stays as it is: a run is the exception to its rule "Before a push", and
+  the script that publishes makes the push, not the agent.
 - `docs/contract.md`: the image, the approval, and the two commands.
 - Both manifests: the same version, 0.3.16 or later.
 
@@ -58,18 +60,23 @@ each step of the agent: #83.
    test: `tests/test_run.py::Documents.test_the_contract_document_names_the_image_and_the_approval`
 5. Both manifests name the same version, 0.3.16 or later.
    test: `tests/test_run.py::Documents.test_the_version_carries_the_sandbox_correction`
+6. In the product test, in a repo that the setup step made, the settings that `charter-check boundary`
+   prints hold the key `autoAllowBashIfSandboxed` with the value true and `allowUnsandboxedCommands`
+   with the value false.
+   command: `python3 tests/product.py`, the step "settings of a run"
 
 ## Manual checks
 
-6. On a machine of the code host with the image `ubuntu-24.04`, with the settings of the command and the
+7. On a machine of the code host with the image `ubuntu-24.04`, with the settings of the command and the
    key of this intent, an agent runs the tests of this repo, the two commands of a package manager, and a
    test that starts a child process and calls it on the loopback address. In the same run: a read of
    `.env` is refused, a write to `AGENTS.md` and a write outside the folder are refused, a host is not
    reached, the Unix socket of the Docker service is refused, and no process that the shell sees holds a
    token in its environment.
-   who: the leader, from the log of the test run that #113 names. Not automatic: the check needs a model
-   call and a machine of the code host.
-7. The next agent run at an adopter, with this version, publishes a change request, or ends as blocked for
+   who: the leader, from the results of the test run, which a comment on #113 holds with the address of
+   each run; the comment stays when the branch of the test and the logs are gone. Not automatic: the
+   check needs a model call and a machine of the code host.
+8. The next agent run at an adopter, with this version, publishes a change request, or ends as blocked for
    a reason that is not the sandbox and not a refused approval.
    who: the leader. Not automatic: the check needs a model call, a machine of the code host, and a work
    item of the adopter.

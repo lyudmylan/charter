@@ -66,6 +66,9 @@ def steps(repo: Path, work: Path) -> bool:
     if not step("quality gate", command("charter-gate", "quality", "--contract", CONTRACT, "--repo-only", cwd=repo), 0,
                 f"passed: {PRODUCT_COMMAND}"):
         return False
+    if not step("settings of a run", command("charter-check", "boundary", CONTRACT, *SOURCE, cwd=repo), 0,
+                '"autoAllowBashIfSandboxed": true', '"allowUnsandboxedCommands": false'):
+        return False
     open_list = work / "open.txt"
     open_list.write_text(f"{OPEN_PATH}\n")
     if not step("boundary gate, an open path", command("charter-gate", "boundary", "--contract", CONTRACT, *SOURCE,
