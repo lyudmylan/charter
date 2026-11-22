@@ -1,6 +1,6 @@
 # Intent: the verdict merges the change request of a tier whose approver is `agent`
 
-Work item: #66. Status: done. Approval: a person merges the change request that adds this file.
+Work item: #66. Approval: a person merges the change request that adds this file.
 
 ## Goal
 

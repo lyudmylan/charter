@@ -1,6 +1,6 @@
 # Intent: the setup step
 
-Work item: #38. Status: done. Approval: a person merges the change request that adds this file.
+Work item: #38. Approval: a person merges the change request that adds this file.
 
 ## Goal
 

@@ -1,6 +1,6 @@
 # Intent: each started run waits for its turn
 
-Work item: #120. Status: done. Approval: a person merges the change request that adds this file.
+Work item: #120. Approval: a person merges the change request that adds this file.
 
 ## Goal
 

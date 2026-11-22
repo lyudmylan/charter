@@ -1,6 +1,6 @@
 # Intent: an agent run runs its commands in the sandbox, on a machine of the code host
 
-Work item: #113. Status: done. Approval: a person merges the change request that adds this file.
+Work item: #113. Approval: a person merges the change request that adds this file.
 
 ## Goal
 

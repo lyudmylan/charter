@@ -1,6 +1,6 @@
 # Intent: the plan of a work item lives in `plans/`, and a change request takes the tier of its code
 
-Work item: #65. Status: done. Approval: a person merges the change request that adds this file.
+Work item: #65. Approval: a person merges the change request that adds this file.
 
 ## Goal
 

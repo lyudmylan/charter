@@ -1,6 +1,6 @@
 # Intent: plan.md, the implementation plan of a work item, accepted before the code
 
-Work item: #35. Status: done. Approval: a person merges the change request that adds this file.
+Work item: #35. Approval: a person merges the change request that adds this file.
 
 ## Goal
 

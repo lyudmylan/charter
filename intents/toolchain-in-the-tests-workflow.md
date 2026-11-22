@@ -1,6 +1,6 @@
 # Intent: the workflows have a declared place for the toolchain of the repo
 
-Work item: #88. Status: done. Approval: a person merges the change request that adds this file.
+Work item: #88. Approval: a person merges the change request that adds this file.
 
 ## Goal
 
