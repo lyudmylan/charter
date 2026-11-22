@@ -148,12 +148,14 @@ class Workflow(unittest.TestCase):
 
     def test_the_start_the_stop_switch_and_one_run_at_a_time(self):
         """run-from-an-issue, check 1: the label or a start by hand, from the main branch, one group with no
-        cancel, and no job when the variable CHARTER_RUNS is `off`."""
+        cancel, and no job when the variable CHARTER_RUNS is `off`. runs-wait-in-order, check 1: each run
+        of the group waits, `queue: max`."""
         for name, text in self.files.items():
             with self.subTest(file=name):
                 self.assertIn("on:\n  issues:\n    types: [labeled]\n  workflow_dispatch:\n    inputs:\n      issue:\n", text)
                 self.assertNotIn("pull_request", text)
-                self.assertIn("concurrency:\n  group: charter-run\n  cancel-in-progress: false\n", text)
+                self.assertIn("concurrency:\n  group: charter-run\n  cancel-in-progress: false\n  queue: max\n", text)
+                self.assertEqual(text.count("concurrency:"), 1)
                 self.assertIn("        with:\n          ref: ${{ github.event.repository.default_branch }}\n", text)
                 job_if = re.search(r"^    if: (.*)$", text, re.M).group(1)
                 cases = (
@@ -817,6 +819,13 @@ class Documents(unittest.TestCase):
                     for plugin in ("charter", "charter-practices")]
         self.assertEqual(versions[0], versions[1])
         self.assertGreaterEqual(tuple(int(part) for part in versions[0].split(".")), (0, 3, 16))
+
+    def test_the_contract_document_says_that_each_run_waits(self):
+        """runs-wait-in-order, check 2."""
+        contract = (ROOT / "docs" / "contract.md").read_text()
+        section = one_line(contract[contract.index("## The run\n"):contract.index("## On the code host\n")])
+        self.assertIn("The others wait in the order of their start, up to 100: the option `queue: max`", section)
+        self.assertNotIn("a second one waits", section)
 
     def test_the_documents_and_the_version_carry_the_closing_line(self):
         """one-closing-line, check 4."""
