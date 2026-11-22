@@ -236,6 +236,7 @@ run works at a time, and a second one waits.
 charter-run ready   --issue issue.json --root .
 charter-run brief   --issue issue.json --intent intents/<part>.md --out brief.md
 charter-run result  --agent agent.json --root . --base <commit> --issue issue.json --git-dir <copy> --out <folder>
+charter-run text    --number <number> --request .charter-run/change-request.md
 charter-run outcome --state published|blocked --reason TEXT --agent agent.json [--url URL]
 ```
 
@@ -264,7 +265,8 @@ The steps, in this order:
 9. `charter-gate boundary` on that list, with the contract of the main branch. The step fetches the
    organization source again, with its token.
 10. The publishing, only when the two steps before passed: a script pushes the branch `run/<number>` with
-    no hook and opens the change request, with `Closes #<number>` as its first line. It uses the secret
+    no hook and opens the change request, with `Closes #<number>` as its first line. `text` writes that
+    line and then the text of the agent, without a line of it that only links the same issue. It uses the secret
     `CHARTER_RUN_TOKEN`, a token that a person creates, because a change request that the token of the
     workflow opens starts no workflow. Without the secret nothing is published.
 11. `outcome`, in each case: one comment on the issue with the change request or the reason, and the turns,

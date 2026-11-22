@@ -36,6 +36,8 @@ FACTS = {
     "intents": [{"path": "intents/app.md", "plan": True, "removed": False}],
 }
 SOURCE = ["--source", str(ORG)]
+# What an agent of a run wrote for its change request: a line that links the issue, then its text.
+AGENT_LINK, AGENT_TEXT = "Fixes #1", "The sample change."
 
 
 def command(name: str, *args: str, cwd: Path) -> subprocess.CompletedProcess:
@@ -68,6 +70,12 @@ def steps(repo: Path, work: Path) -> bool:
         return False
     if not step("settings of a run", command("charter-check", "boundary", CONTRACT, *SOURCE, cwd=repo), 0,
                 '"autoAllowBashIfSandboxed": true', '"allowUnsandboxedCommands": false'):
+        return False
+    request = work / "change-request.md"
+    request.write_text(f"{AGENT_LINK}\n\n{AGENT_TEXT}\n")
+    if not step("text of a change request of a run", command("charter-run", "text", "--number", "1", "--request",
+                                                             str(request), cwd=repo), 0,
+                "Closes #1\n\n" + AGENT_TEXT, absent=(AGENT_LINK,)):
         return False
     open_list = work / "open.txt"
     open_list.write_text(f"{OPEN_PATH}\n")

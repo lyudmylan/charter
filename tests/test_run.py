@@ -539,6 +539,7 @@ class Publish(Temp):
         output = self.dir / "output"
         env = {"GH_TOKEN": token, "ISSUE": "7", "BRANCH": "run/7", "MAIN": "main", "GITHUB_REPOSITORY": "owner/name",
                "RUNNER_TEMP": str(self.dir / "runner"), "GITHUB_OUTPUT": str(output), "GH_TITLE": title, "URL": URL,
+               "CHARTER_SCRIPTS": str(ROOT / "charter" / "scripts"),
                "GH_CALLS": str(self.dir / "gh.txt"), "GIT_CALLS": str(self.dir / "git.txt")}
         code, out = run_step(self.step, repo, env, self.dir / "bin")
         self.assertFalse((repo / "pwned").exists(), "the title ran as a command")
@@ -569,6 +570,57 @@ class Publish(Temp):
                 else:
                     self.assertIn("The agent wrote no text for the change request.", body)
                 self.assertEqual(output.read_text(), f"url={URL}\n")
+
+    def test_the_text_holds_the_closing_line_one_time(self):
+        """one-closing-line, check 1: the command leaves out a line of the agent that only links the issue of
+        the run, in each form of a link, and keeps each other line."""
+        request = self.dir / "change-request.md"
+        cases = {
+            "the same line": ("Closes #7\n\nThe change.\n", "Closes #7\n\nThe change.\n"),
+            "other forms": ("fixes: #7.\n  Part of #7\nResolves #7\nThe change.\n", "Closes #7\n\nThe change.\n"),
+            "a line in the middle": ("The change.\n\nCloses #7\n\nMore.\n", "Closes #7\n\nThe change.\n\n\nMore.\n"),
+            "another issue": ("Closes #8\n\nThe change.\n", "Closes #7\n\nCloses #8\n\nThe change.\n"),
+            "a longer number": ("Closes #70\n", "Closes #7\n\nCloses #70\n"),
+            "a sentence with the link": ("This closes #7 and adds a test.\n", "Closes #7\n\nThis closes #7 and adds a test.\n"),
+            "the link alone": ("Closes #7\n", f"Closes #7\n\n{cr.MSG['no_text']}\n"),
+            "an empty file": ("", f"Closes #7\n\n{cr.MSG['no_text']}\n"),
+            "no file": (None, f"Closes #7\n\n{cr.MSG['no_text']}\n"),
+        }
+        for case, (written, expected) in cases.items():
+            with self.subTest(case=case):
+                request.unlink(missing_ok=True)
+                if written is not None:
+                    request.write_text(written)
+                code, out = run_cli(cr.CMD_TEXT, "--number", "7", "--request", str(request))
+                self.assertEqual(code, cc.PASS, out)
+                self.assertEqual(out, expected)
+                self.assertEqual(cf.issue_numbers(out)[0], 7)
+
+    def test_a_link_in_the_place_of_the_text_is_not_followed(self):
+        """one-closing-line, check 2: the agent wrote the file, so a link in its place gives the sentence."""
+        secret = self.dir / "secret"
+        secret.write_text("a value outside the folder of the agent\n")
+        request = self.dir / "change-request.md"
+        request.symlink_to(secret)
+        code, out = run_cli(cr.CMD_TEXT, "--number", "7", "--request", str(request))
+        self.assertEqual(code, cc.PASS, out)
+        self.assertEqual(out, f"Closes #7\n\n{cr.MSG['no_text']}\n")
+
+    def test_the_published_text_closes_the_issue_one_time(self):
+        """one-closing-line, check 3: the step of this workflow and of the template, run with `bash -e`, a fake
+        `gh`, a fake `git`, and the scripts of this repo, on a text of the agent that starts with the line."""
+        for name, text in Workflow.files.items():
+            with self.subTest(file=name):
+                shutil.rmtree(self.dir, ignore_errors=True)
+                self.dir.mkdir()
+                self.step = run_block(text, PUBLISH_STEP)
+                code, out, gh, _, _ = self.publish(RUN_TOKEN, "Closes #7\n\nThe change.\n")
+                self.assertEqual(code, 0, out)
+                create = gh[2]
+                body = Path(create[create.index("--body-file") + 1]).read_text()
+                self.assertEqual(body.splitlines()[:3], ["Closes #7", "", "The change."])
+                self.assertEqual(body.count("Closes #7"), 1)
+                self.assertNotIn("echo \"Closes", self.step)
 
     def test_without_the_token_nothing_is_published(self):
         """run-from-an-issue, check 9: no run token, no push, no change request, and the reason for the issue."""
@@ -762,6 +814,17 @@ class Documents(unittest.TestCase):
                     for plugin in ("charter", "charter-practices")]
         self.assertEqual(versions[0], versions[1])
         self.assertGreaterEqual(tuple(int(part) for part in versions[0].split(".")), (0, 3, 16))
+
+    def test_the_documents_and_the_version_carry_the_closing_line(self):
+        """one-closing-line, check 4."""
+        contract = (ROOT / "docs" / "contract.md").read_text()
+        section = one_line(contract[contract.index("## The run\n"):contract.index("## On the code host\n")])
+        self.assertIn("charter-run text --number <number> --request .charter-run/change-request.md", section)
+        self.assertIn("without a line of it that only links the same issue", section)
+        versions = [json.loads((ROOT / plugin / ".claude-plugin" / "plugin.json").read_text())["version"]
+                    for plugin in ("charter", "charter-practices")]
+        self.assertEqual(versions[0], versions[1])
+        self.assertGreaterEqual(tuple(int(part) for part in versions[0].split(".")), (0, 3, 17))
 
     def test_both_manifests_name_the_version(self):
         """run-from-an-issue, check 14."""

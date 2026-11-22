@@ -20,6 +20,10 @@ Commands:
   outcome --state STATE --reason TEXT --agent FILE [--url URL]
                                        Print the comment for the issue: the outcome, the reason or the change
                                        request, and the turns, the duration, and the cost of the agent.
+  text    --number N --request FILE    Print the text of the change request, before the block of the run: the
+                                       line `Closes #N`, then what the agent wrote in FILE, without a line of
+                                       it that only links the same issue. A FILE that is missing, empty, or a
+                                       link gives one sentence in its place.
   record  --agent FILE --commit COMMIT Print the block of the run for the text of the change request: the marker
                                        line, and one line `Run:` with the commit, the turns, the duration in
                                        seconds, and the cost. A value that the result does not hold is `none`.
@@ -34,6 +38,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import re
 import shutil
 import subprocess
 import sys
@@ -49,9 +54,10 @@ import charter_gate as cg  # noqa: E402
 # ---------------------------------------------------------------------------
 
 CMD_READY, CMD_BRIEF, CMD_RESULT, CMD_OUTCOME, CMD_RECORD = "ready", "brief", "result", "outcome", "record"
+CMD_TEXT = "text"
 ARG_ISSUE, ARG_ROOT, ARG_INTENT, ARG_OUT = "issue", "root", "intent", "out"
 ARG_AGENT, ARG_BASE, ARG_GIT_DIR, ARG_STATE, ARG_REASON, ARG_URL = "agent", "base", "git_dir", "state", "reason", "url"
-ARG_COMMIT = "commit"
+ARG_COMMIT, ARG_NUMBER, ARG_REQUEST = "commit", "number", "request"
 
 # The issue, as JSON of the code host.
 ISSUE_NUMBER, ISSUE_STATE, ISSUE_BODY, ISSUE_TITLE = cg.ISSUE_NUMBER, cg.ISSUE_STATE, cf.ISSUE_BODY, cf.PR_TITLE
@@ -81,6 +87,12 @@ GIT = "git"
 GIT_SAFE = ("-c", "core.hooksPath=/dev/null", "--no-replace-objects")
 AUTHOR_NAME, AUTHOR_EMAIL = "Charter run", "charter-run@example.invalid"
 GIT_AUTHOR = ("-c", f"user.name={AUTHOR_NAME}", "-c", f"user.email={AUTHOR_EMAIL}")
+
+# The text of the change request. The workflow writes the line that closes the issue. The agent reads in the
+# instructions of the repo that a change request closes its issue, so its text can hold the line too: a line
+# of the agent that only links the issue of the run is left out.
+CLOSING_LINE = "Closes #{number}"
+ONLY_A_LINK = re.compile(rf"^\s*{cf.LINKED_ISSUE.pattern}\s*\.?\s*$", re.IGNORECASE)
 
 # The outcome on the issue.
 STATE_PUBLISHED, STATE_BLOCKED = "published", "blocked"
@@ -138,6 +150,7 @@ MSG = {
     "not_reported": "not reported",
     "bad_commit": "the commit is no identifier of git: {commit}",
     "whole": "{value:.0f}",
+    "no_text": "An agent run built this work item. The agent wrote no text for the change request.",
     "cents": "{value:.2f}",
 }
 
@@ -301,6 +314,17 @@ def outcome(state: str, reason: str, agent: Path, url: str | None) -> str:
     return "\n".join(lines) + "\n"
 
 
+def text(number: int, request: Path) -> str:
+    """The text of the change request, before the block of the run: the closing line, then the text of the agent."""
+    kept = []
+    for line in (regular_text(request) or "").splitlines():
+        link = ONLY_A_LINK.match(line)
+        if not (link and int(link.group(1)) == number):
+            kept.append(line)
+    written = "\n".join(kept).strip()
+    return f"{CLOSING_LINE.format(number=number)}\n\n{written or msg('no_text')}\n"
+
+
 def record(agent: Path, commit: str) -> str:
     """The block of the run for the text of the change request. The facts collector reads it back."""
     if not cf.RUN_COMMIT_FORM.match(commit):
@@ -339,6 +363,11 @@ def cmd_outcome(args) -> int:
     return cc.PASS
 
 
+def cmd_text(args) -> int:
+    print(text(args.number, args.request), end="")
+    return cc.PASS
+
+
 def cmd_record(args) -> int:
     print(record(args.agent, args.commit), end="")
     return cc.PASS
@@ -368,11 +397,14 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument(f"--{ARG_REASON}", default="")
     p.add_argument(f"--{ARG_AGENT}", type=Path, required=True)
     p.add_argument(f"--{ARG_URL}", default=None)
+    p = sub.add_parser(CMD_TEXT)
+    p.add_argument(f"--{ARG_NUMBER}", type=int, required=True)
+    p.add_argument(f"--{ARG_REQUEST}", type=Path, required=True)
     p = sub.add_parser(CMD_RECORD)
     p.add_argument(f"--{ARG_AGENT}", type=Path, required=True)
     p.add_argument(f"--{ARG_COMMIT}", required=True)
     commands = {CMD_READY: cmd_ready, CMD_BRIEF: cmd_brief, CMD_RESULT: cmd_result, CMD_OUTCOME: cmd_outcome,
-                CMD_RECORD: cmd_record}
+                CMD_TEXT: cmd_text, CMD_RECORD: cmd_record}
     args = parser.parse_args(argv)
     try:
         return commands[args.command](args)
