@@ -119,6 +119,16 @@ note = "Path patterns. When a file under one of them changes, a necessary docume
 kind = "set"
 note = "Path patterns that the repo must not hold. The contract checks fail when a file is under one of them."
 
+# --- The boundary of a run of an agent without a person ---
+
+[fields."boundary.no_write"]
+kind = "set"
+note = "Path patterns that a run without a person never changes, adds, or deletes. The plan of a work item, intents/<part>.plan.md, passes."
+
+[fields."boundary.no_read"]
+kind = "set"
+note = "Path patterns that a run without a person never reads."
+
 # --- Quality checks ---
 
 [fields."checks.quality"]

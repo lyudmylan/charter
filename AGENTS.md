@@ -13,6 +13,8 @@ source. Each rule below ends with the identifier of its rule in the contract.
 - The contract, the schema, the scripts, the tests, the workflows, and this file are in the high risk
   tier: a deep review, and the leader approves. [tiers.high.paths]
 - A person approves each change to a contract. [change.person_approves_contract]
+- A run of an agent without a person does not change the files that the contract closes to it. A person
+  makes such a change, in its own change request. [boundary.no_write]
 - On GitHub, the workflows `tests` and `verdict` run on each change request. A red check "verdict"
   blocks the merge; its reasons are in the check and in the job log. [checks.quality]
 

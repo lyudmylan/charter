@@ -55,6 +55,8 @@ any of its patterns. The `instructions` and `text` commands read this from the s
 | `documents.text_checked` | set | Files that must contain none of the text-checked patterns |
 | `documents.absent` | set | Path patterns that the repo must not hold: the contract checks fail when a file is under one of them. The setup step writes the folders of decision files. Needs the version 0.3.5 of the core |
 | `instructions.file` | text | The instruction file of the repo |
+| `boundary.no_write` | set | Path patterns that a run of an agent without a person never changes, adds, or deletes. The plan of a work item passes. Needs the version 0.3.6 of the core |
+| `boundary.no_read` | set | Path patterns that a run without a person never reads. Needs the version 0.3.6 of the core |
 | `checks.quality` | set | Commands that must pass before a push. They run on the code of the change. |
 | `charter.version` | text | The version of the core plugin of Charter that the repo uses; the workflows fetch Charter at the tag `charter--v<version>` |
 | `tools.issue_tracker`, `tools.code_host`, `tools.ci` | text | The tools of the repo |
@@ -139,6 +141,36 @@ Three rules of the gates:
   command is shown.
 - **Approvals** are not checked in this version. The merge by the approver of the tier is the approval,
   and the verdict says so. The field `approvals` of the facts file is optional.
+
+## The boundary of a run
+
+A run of an agent with no person present works inside the boundary of the contract. Two parts enforce it.
+
+```
+python3 charter/scripts/charter_check.py boundary charter.toml > settings.json
+python3 charter/scripts/charter_gate.py boundary --contract charter.toml --changed changed.txt
+```
+
+`charter-check boundary` prints the settings of Claude Code for the run, as JSON. The workflow of the run
+writes them at the start of each run and passes them on the command line; they are not a file of the repo.
+They turn the sandbox of the shell on, let no command run outside it, and stop the run when the sandbox
+cannot start. The shell has no network. The tokens of the model and of the code host leave the
+environment of each shell command. A call that would need a question to a person is refused. Each pattern
+of `boundary.no_write` is a deny rule for the edit tools and a write denial of the sandbox; each pattern
+of `boundary.no_read` is a deny rule for the read tool and a read denial of the sandbox. Each path is
+absolute, from the folder of the contract, so the settings are for one checkout.
+
+Two limits come from Claude Code. On Linux the write lists of the sandbox honour a wildcard only as a
+trailing `/**`, so another pattern enters the sandbox as the files that match it at that time. And a deny
+rule for a folder cannot be opened again for one file, so a pattern that covers the plan files, such as
+`intents/**`, is written as the files under it that are no plan. In both cases a new file is not closed
+by the settings. The gate catches it.
+
+`charter-gate boundary` reads the paths that a run changed, one on each line: each added, changed, or
+deleted path, and both names of a rename. It fails when a path is under a pattern of `boundary.no_write`,
+and it names the path. A path with dot segments is read as the path it points to, and a path that leaves
+the repo fails. The plan of a work item, `intents/<part>.plan.md`, passes. The gate runs between the run
+and the push: a failure publishes nothing.
 
 ## On the code host
 
@@ -247,6 +279,7 @@ python3 charter/scripts/charter_check.py instructions AGENTS.md --contract chart
 python3 charter/scripts/charter_check.py text README.md --contract charter.toml
 python3 charter/scripts/charter_check.py source charter.toml
 python3 charter/scripts/charter_check.py all charter.toml
+python3 charter/scripts/charter_check.py boundary charter.toml [--source PATH]
 ```
 
 `all` runs `check`, then `instructions` on `instructions.file`, then `text` on each file in
