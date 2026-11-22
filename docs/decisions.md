@@ -72,6 +72,7 @@ A decision changes only through a reviewed change to this file.
 | D15 | A setup step creates the contract and the first documents in a repository. Later. | The contract format must exist first. | 2026-09-28 |
 | D16 | The lifecycle map names each built-in ability of the runtime that Charter uses. | Nothing is used in silence; an upgrade of the runtime shows what to check. | 2026-09-29 |
 | D17 | The repository instructions are written from the contract and carry lines from all owners. They are advice; the gates enforce. | The file is the location where the agent reads the rules, not the owner of the rules. | 2026-09-29 |
+| D18 | The plan of the intent `intents/<part>.md` is the file `plans/<part>.md`. | The path patterns of a tier have no exclusion, so a file under `intents/` cannot leave the high tier; a folder of its own needs no special rule. The plan is the words of the author, and it is no rule: the intent holds the acceptance checks and stays in the high tier. | 2026-11-20 |
 
 ## E. Agent boundary
 
@@ -86,7 +87,7 @@ A decision changes only through a reviewed change to this file.
 | E7 | A run without a person holds no credential of the code host. A step that is a script pushes the branch and opens the change request, after the gate `boundary` passed. | "A run never pushes to the main branch and never merges" then needs no rule on the text of a command (E2): the agent has nothing to do it with. | 2026-11-20 |
 | E8 | The settings of a run are written from the contract at the start of each run, by `charter-check boundary`. They are not a file of the repo. The workflow of the run checks that the run used them. | A file can differ from the contract, and a change request can change it. Claude Code gives settings from the command line the precedence over the files of a repo, and a sandbox that is set there ignores a file of the repo that loosens it (the pages on settings and on the sandbox). | 2026-11-20 |
 | E9 | For `boundary.no_write` there are two layers. The sandbox and the deny rules stop the agent (E5). The gate `boundary` reads the result, whatever wrote it, and runs between the run and the push; a gate that fails or does not run publishes nothing. | The gate is the layer for a writer that the sandbox and the permission rules do not cover: in Claude Code the sandbox covers the shell, and the permission rules cover the file tools. On Linux the sandbox closes no file that does not exist yet. | 2026-11-20 |
-| E10 | A run can write the plan of a work item, `intents/<part>.plan.md`, also under a pattern of `boundary.no_write`. | The run is the author of the plan. The approved intent holds the acceptance checks, and it stays closed to the run. | 2026-11-20 |
+| E10 | A run can write the plan of a work item, `intents/<part>.plan.md`, also under a pattern of `boundary.no_write`. Replaced by D18: the plan lives in `plans/`, outside the closed patterns. | The run is the author of the plan. The approved intent holds the acceptance checks, and it stays closed to the run. | 2026-11-20 |
 
 ## F. Skills, evals, model upgrades
 

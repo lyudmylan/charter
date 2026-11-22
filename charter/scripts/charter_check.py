@@ -101,11 +101,10 @@ FOLDER_PATTERN_END = "/**"            # `dir/**`: all that is under one folder
 FIELD_NO_WRITE = "boundary.no_write"
 FIELD_NO_READ = "boundary.no_read"
 
-# An intent, `intents/<part>.md`, and its plan, `intents/<part>.plan.md`. A run writes the plan, so the
-# boundary lets a plan pass also under a pattern of boundary.no_write.
-INTENTS_DIR = "intents/"
-INTENT_SUFFIX, PLAN_SUFFIX = ".md", ".plan.md"
-PLAN_PROBE = INTENTS_DIR + "part" + PLAN_SUFFIX     # a pattern that matches it covers the plan files
+# An intent, `intents/<part>.md`, and its plan, `plans/<part>.md`. The plan lives outside `intents/`, so a
+# change with its plan takes the tier of its code. A plan at the old place, `intents/<part>.plan.md`, counts too.
+INTENTS_DIR, PLANS_DIR = "intents/", "plans/"
+INTENT_SUFFIX, OLD_PLAN_SUFFIX = ".md", ".plan.md"
 
 # The settings of Claude Code for a run. The key names are the ones of its documentation: the pages on the
 # sandbox, the permissions, and the settings reference, read on 2026-11-20.
@@ -612,11 +611,6 @@ def absent_hits(e: Effective, root: Path) -> list[str]:
     return [msg("absent_hit", path=path, field=FIELD_ABSENT) for path in sorted(found)]
 
 
-def is_plan(path: str) -> bool:
-    """A plan of a work item: `intents/<part>.plan.md`."""
-    return path.startswith(INTENTS_DIR) and path.endswith(PLAN_SUFFIX)
-
-
 def is_folder_pattern(pattern: str) -> bool:
     """`dir/**` with no other wildcard: the one form that the write lists of the sandbox honour on Linux."""
     return pattern.endswith(FOLDER_PATTERN_END) and not has_wildcard(pattern[:-len(FOLDER_PATTERN_END)])
@@ -624,13 +618,10 @@ def is_folder_pattern(pattern: str) -> bool:
 
 def closed_paths(pattern: str, root: Path, for_sandbox: bool) -> list[str]:
     """One pattern of boundary.no_write as the entries of the settings, from the root of the repo.
-    A path stays a path. A pattern that covers the plan files becomes the files under it that are no
-    plan, because a deny rule for a folder cannot be opened again for one file. For the sandbox, a
-    pattern with a wildcard that is not a trailing `/**` becomes the files that match it now."""
-    if not has_wildcard(pattern):
-        return [] if is_plan(pattern) else [pattern]
-    if matches(PLAN_PROBE, [pattern]) or (for_sandbox and not is_folder_pattern(pattern)):
-        return [path for path in files_under(root, pattern) if not is_plan(path)]
+    For the sandbox, a pattern with a wildcard that is not a trailing `/**` becomes the files that match
+    it now. Each other pattern stays as it is."""
+    if for_sandbox and has_wildcard(pattern) and not is_folder_pattern(pattern):
+        return files_under(root, pattern)
     return [pattern]
 
 

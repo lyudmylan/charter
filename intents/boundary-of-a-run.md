@@ -36,9 +36,10 @@ and checked in #92.
   fails when a path is under a pattern of `boundary.no_write`. The failure names the path and the field,
   and says what to do: a person makes this change, in its own change request. The gate reads a path with
   dot segments as the path it points to, and refuses a path that leaves the repo.
-- The plan of a work item, `intents/<part>.plan.md`: a run writes it, so the gate and the deny rules let
-  it pass also when `intents/**` is in `boundary.no_write`. Each other file under `intents/` stays refused.
-  This is decided here, because the gate needs the answer. How a person accepts the plan stays in #92.
+- The plan of a work item, `plans/<part>.md`: a run writes it, and it is under no pattern of
+  `boundary.no_write`, so it passes. Each file under `intents/` stays refused, a file
+  `intents/<part>.plan.md` among them. The intent `intents/plan-tier.md` (#65) moved the plan out of
+  `intents/`. How a person accepts the plan stays in #92.
 - Four decisions, in `docs/decisions.md`, section E:
   - A run holds no credential of the code host. A step that is a script pushes the branch and opens the
     change request, after the gate passed. So "a run never pushes to the main branch and never merges"
@@ -54,8 +55,9 @@ and checked in #92.
     gate that fails or does not run publishes nothing. The gate is the layer for a writer that the
     sandbox and the permission rules do not cover: in Claude Code the sandbox covers the shell, and the
     permission rules cover the file tools.
-  - A run can write the plan of a work item, also under a pattern of `boundary.no_write`. The run is the
-    author of the plan. The approved intent holds the acceptance checks, and it stays closed to the run.
+  - A run can write the plan of a work item. This was decision E10, with the plan under `intents/`;
+    decision D18 (`intents/plan-tier.md`) replaced it: the plan is in `plans/`, under no pattern of
+    `boundary.no_write`, and the approved intent stays closed to the run.
 - The default, in `charter/templates/charter.toml`, which the setup step writes. `boundary.no_write`: the
   contract, `AGENTS.md`, `CLAUDE.md`, `intents/**`, `.github/**`, `.claude/**`. `boundary.no_read`: `.env`
   and `.env.*`, at the root and in each folder. The contract of this repo carries the same section.
@@ -114,8 +116,9 @@ decision E4: the second decision above replaces it for a run.
    folder pattern, a deleted file, a rename from a path under a pattern, a rename to one, and a path that
    leaves the repo.
    test: `tests/test_boundary.py::Gate.test_the_forms_that_go_around_a_pattern_fail`
-9. With `intents/**` in `boundary.no_write`, the gate passes a changed `intents/<part>.plan.md` and fails
-   a changed `intents/<part>.md`; the deny rules of the settings make the same difference.
+9. With `intents/**` in `boundary.no_write`, the gate passes a changed `plans/<part>.md` and fails each
+   changed file under `intents/`, a file `intents/<part>.plan.md` among them; the deny rules of the
+   settings close `intents/**` as one folder. The place of the plan comes from `intents/plan-tier.md`.
    test: `tests/test_boundary.py::Gate.test_the_plan_file_passes_and_the_intent_fails`
    test: `tests/test_boundary.py::Settings.test_the_plan_file_is_not_denied`
 10. The contract that the setup step writes carries the default patterns, and in a repo that the setup
@@ -125,8 +128,8 @@ decision E4: the second decision above replaces it for a run.
 11. The instruction template and the `AGENTS.md` of this repo carry the rule line with the identifier
     `boundary.no_write`.
     test: `tests/test_boundary.py::Defaults.test_the_instructions_carry_the_rule`
-12. The decision record holds the four decisions in section E, each with its reason, and the row E4
-    names the decision that replaces its conformance check for a run.
+12. The decision record holds the four decisions in section E, each with its reason, E10 marked as
+    replaced by D18, and the row E4 names the decision that replaces its conformance check for a run.
     test: `tests/test_boundary.py::Defaults.test_the_decisions_are_recorded`
 13. The contract of this repo carries the section, and its contract checks pass.
     command: `python3 charter/scripts/charter_check.py all charter.toml`

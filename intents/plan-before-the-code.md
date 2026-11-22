@@ -10,7 +10,7 @@ Anthropic describes for the Build phase.
 ## In scope
 
 - The place: `intents/<part>.plan.md`, next to the intent of the work item. The tests of the intents skip a
-  plan file: a plan is not an intent.
+  plan file: a plan is not an intent. The plan moved to `plans/<part>.md` with `intents/plan-tier.md`.
 - The content: the steps, the files to change, the tests to add, in the words of the author. Written in
   plan mode, accepted by the person who holds the work item, committed before the code.
 - The link: the issue names its intent with one line, `Intent: intents/<part>.md`. The tracker skill

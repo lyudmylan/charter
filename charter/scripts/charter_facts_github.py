@@ -74,8 +74,8 @@ FALSE_FINDING_LINE = re.compile(r"^False finding:\s*(.+?)\s*$", re.IGNORECASE | 
 
 # The text of an issue: the line that names the intent of the work item, `Intent: intents/<part>.md`, or
 # the older form, a heading `## Intent` with the path on the next line. The path keeps its case; a plan
-# file is not an intent.
-INTENT_PATH = (re.escape(cg.INTENTS_DIR) + r"[A-Za-z0-9._/-]+(?<!" + re.escape(cg.PLAN_SUFFIX[:-len(cg.INTENT_SUFFIX)]) + r")"
+# file at the old place, `intents/<part>.plan.md`, is not an intent.
+INTENT_PATH = (re.escape(cg.INTENTS_DIR) + r"[A-Za-z0-9._/-]+(?<!" + re.escape(cg.OLD_PLAN_SUFFIX[:-len(cg.INTENT_SUFFIX)]) + r")"
                + re.escape(cg.INTENT_SUFFIX))
 INTENT_LINE = re.compile(r"^(?:[Ii]ntent:|## Intent\s*\n+)\s*`?(" + INTENT_PATH + r")`?\s*$", re.MULTILINE)
 ISSUE_BODY = "body"
@@ -377,7 +377,9 @@ def collect(repo: str, number: int, given: dict[str, str], run_names: list[str],
                           f"?event={EVENT_PULL_REQUEST}&branch={branch}&per_page={PAGE_SIZE}")
         comments = github.pages(f"/repos/{repo}/issues/{number}/comments")
         review = (review_rounds(runs.get(WORKFLOW_RUNS, []), pr), highest_severity(comments, author))
-    plans = {intent: github.get(f"/repos/{repo}/contents/{cg.plan_of(intent)}?ref={commit}", optional=True) is not None
+    # The plan exists at `plans/<part>.md`, or at the old place `intents/<part>.plan.md`.
+    plans = {intent: any(github.get(f"/repos/{repo}/contents/{place(intent)}?ref={commit}", optional=True) is not None
+                         for place in (cg.plan_of, cg.old_plan_of))
              for intent in intent_paths(issues)}
     return build_facts(pr, files, issues, unresolved, checks, review, plans, removed_paths(files))
 

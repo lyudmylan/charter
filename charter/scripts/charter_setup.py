@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """Set a repo up for Charter: one command writes the contract, the rules, the intents folder, the
-workflows, and the two documents. Python 3.11 or later, standard library only.
+plans folder, the workflows, and the two documents. Python 3.11 or later, standard library only.
 
 Run it in the root of the repo, from the installed plugin (`charter-setup`, on the path of the shell
 while the plugin is enabled) or from a clone of the Charter repo at the version:
@@ -43,6 +43,7 @@ PRODUCT_FILE = "docs/product.md"
 README_FILE = "README.md"
 CLAUDE_FILE = "CLAUDE.md"          # when it exists, Claude Code reads it and not AGENTS.md
 INTENT_TEMPLATE = "intents/_template.md"
+PLAN_TEMPLATE = "plans/_template.md"
 WORKFLOWS = ".github/workflows"
 
 # template name -> written path. The order is the order of writing.
@@ -50,6 +51,7 @@ WRITTEN = {
     "charter.toml": CONTRACT_FILE,
     "AGENTS.md": INSTRUCTIONS_FILE,
     "intent.md": INTENT_TEMPLATE,
+    "plan.md": PLAN_TEMPLATE,
     "tests.yml": f"{WORKFLOWS}/tests.yml",
     "verdict.yml": f"{WORKFLOWS}/verdict.yml",
     "review-intents.yml": f"{WORKFLOWS}/review-intents.yml",

@@ -92,7 +92,7 @@ class Text(unittest.TestCase):
             28: {cf.ISSUE_BODY: "Intent: intents/app.plan.md\nIntent: intents/App.MD", cf.ISSUE_STATE: "open"},   # a plan, a wrong case
         }
         self.assertEqual(cf.intent_paths(issues), ["intents/app.md", "intents/other.md", "intents/older-form.md"])
-        self.assertEqual(cg.plan_of("intents/app.md"), "intents/app.plan.md")
+        self.assertEqual(cg.plan_of("intents/app.md"), "plans/app.md")
         facts = cf.build_facts({cf.PR_NUMBER: 7, cf.PR_TITLE: "t", cf.PR_BODY: ""}, [], {}, 0, {},
                                plans={"intents/app.md": True, "intents/other.md": False})
         self.assertEqual(facts[cg.FACT_INTENTS], [{cg.INTENT_PATH: "intents/app.md", cg.INTENT_PLAN: True, cg.INTENT_REMOVED: False},
@@ -189,6 +189,54 @@ class Facts(unittest.TestCase):
         self.assertEqual(cf.parse_checks(["quality=success", " tests = failure "]), {"quality": "success", "tests": "failure"})
         with self.assertRaises(cc.CannotRun):
             cf.parse_checks(["quality"])
+
+
+class FakeHost:
+    """The code host as data: a change request that links issue 4, whose intent is `intents/app.md`, and the
+    files that exist at the head commit. A missing file is None, as the API answers with optional."""
+    REPO, NUMBER, COMMIT = "o/r", 7, "abc"
+
+    def __init__(self, files_at_head: set[str]):
+        self.files_at_head = files_at_head
+        self.asked: list[str] = []
+
+    def get(self, path: str, optional: bool = False) -> object:
+        self.asked.append(path)
+        if path == f"/repos/{self.REPO}/pulls/{self.NUMBER}":
+            return {cf.PR_NUMBER: self.NUMBER, cf.PR_TITLE: "t", cf.PR_BODY: "Closes #4.", cf.PR_HEAD: {cf.HEAD_SHA: self.COMMIT}}
+        if path == f"/repos/{self.REPO}/issues/4":
+            return {cf.ISSUE_BODY: "Intent: intents/app.md", cf.ISSUE_STATE: "open"}
+        prefix, suffix = f"/repos/{self.REPO}/contents/", f"?ref={self.COMMIT}"
+        if path.startswith(prefix) and path.endswith(suffix):
+            return {} if path[len(prefix):-len(suffix)] in self.files_at_head else None
+        raise AssertionError(f"not expected: {path}")
+
+    def pages(self, path: str) -> list:
+        return [{cf.FILE_NAME: "src/app.py", cf.FILE_STATUS: "modified"}]
+
+    def unresolved_threads(self, owner: str, name: str, number: int) -> int:
+        return 0
+
+
+class PlanPlace(unittest.TestCase):
+    def facts(self, *files_at_head: str) -> dict:
+        host = FakeHost(set(files_at_head))
+        return cf.collect(FakeHost.REPO, FakeHost.NUMBER, {}, [], host)[cg.FACT_INTENTS]
+
+    def test_the_plan_is_found_in_the_plans_folder(self):
+        """plan-tier, check 2."""
+        self.assertEqual(self.facts("plans/app.md"),
+                         [{cg.INTENT_PATH: "intents/app.md", cg.INTENT_PLAN: True, cg.INTENT_REMOVED: False}])
+
+    def test_a_plan_at_the_old_place_still_counts(self):
+        """plan-tier, check 2."""
+        self.assertEqual(self.facts("intents/app.plan.md"),
+                         [{cg.INTENT_PATH: "intents/app.md", cg.INTENT_PLAN: True, cg.INTENT_REMOVED: False}])
+
+    def test_a_plan_at_neither_place_is_missing(self):
+        """plan-tier, check 2."""
+        self.assertEqual(self.facts("intents/app.md", "plans/other.md"),
+                         [{cg.INTENT_PATH: "intents/app.md", cg.INTENT_PLAN: False, cg.INTENT_REMOVED: False}])
 
 
 if __name__ == "__main__":

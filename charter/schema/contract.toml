@@ -75,7 +75,7 @@ note = "The lowest severity of a finding that keeps the review loop open. Below 
 
 [fields."build.plan_before_code"]
 kind = "flag"
-note = "Each work item has its plan, intents/<part>.plan.md, before the code. The verdict checks that the plan exists at the head commit."
+note = "Each work item has its plan, plans/<part>.md, before the code. The verdict checks that the plan exists at the head commit. A plan at the old place, intents/<part>.plan.md, counts too."
 
 # --- Risk tiers. The segment "*" is the name of the tier. ---
 
@@ -123,7 +123,7 @@ note = "Path patterns that the repo must not hold. The contract checks fail when
 
 [fields."boundary.no_write"]
 kind = "set"
-note = "Path patterns that a run without a person never changes, adds, or deletes. The plan of a work item, intents/<part>.plan.md, passes."
+note = "Path patterns that a run without a person never changes, adds, or deletes. A pattern has no exception: the plan of a work item, plans/<part>.md, passes because it is under no pattern."
 
 [fields."boundary.no_read"]
 kind = "set"
