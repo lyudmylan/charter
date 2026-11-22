@@ -23,6 +23,7 @@ APP_TEXT = 'print("the sample product works")\n'
 PRODUCT_COMMAND = f"python3 {APP}"
 OPEN_PATH = APP
 CLOSED_PATH = ".github/workflows/tests.yml"
+INTENT_TEMPLATE = "intents/_template.md"
 SETUP_FLAGS = ["--repo", "sample", "--source", "https://example.com/org/rules", "--source-version", "v1",
                "--leader", "alice", "--code-path", "src/**", "--quality", PRODUCT_COMMAND,
                "--product", PRODUCT_COMMAND]
@@ -61,6 +62,9 @@ def steps(repo: Path, work: Path) -> bool:
     (repo / APP).write_text(APP_TEXT)
     if not step("setup", command("charter-setup", *SETUP_FLAGS, "--target", str(repo), cwd=repo), 0,
                 f"written: {CONTRACT}"):
+        return False
+    template = subprocess.run(["cat", str(repo / INTENT_TEMPLATE)], capture_output=True, text=True, check=False)
+    if not step("template of an intent", template, 0, "Work item: #<number>. Approval:", absent=("Status:",)):
         return False
     if not step("contract checks", command("charter-check", "all", CONTRACT, *SOURCE, cwd=repo), 0,
                 "all contract checks"):

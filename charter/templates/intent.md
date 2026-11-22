@@ -1,6 +1,6 @@
 # Intent: <the part, in a few words>
 
-Work item: #<number>. Status: planned. Approval: a person merges the change request that adds this file.
+Work item: #<number>. Approval: a person merges the change request that adds this file.
 
 ## Goal
 
