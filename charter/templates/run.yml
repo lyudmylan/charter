@@ -33,7 +33,9 @@ jobs:
   run:
     name: run
     if: vars.CHARTER_RUNS != 'off' && (github.event_name == 'workflow_dispatch' || github.event.label.name == 'charter-run')
-    runs-on: ubuntu-latest
+    # The image has a fixed name. On Ubuntu 26.04 the sandbox of Claude Code starts no command; on this
+    # image, with the profile below, it does.
+    runs-on: ubuntu-24.04
     timeout-minutes: 120
     steps:
       - name: Take the main branch

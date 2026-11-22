@@ -123,6 +123,10 @@ SET_BLOCK_WRITES_OUTSIDE = "blockWritesOutsideWorkingDirectories"
 PROCESS_ENVIRONMENTS = "/proc/*/environ"
 SET_SANDBOX, SET_ENABLED, SET_FAIL_IF_UNAVAILABLE = "sandbox", "enabled", "failIfUnavailable"
 SET_ALLOW_UNSANDBOXED = "allowUnsandboxedCommands"
+# A command that runs inside the sandbox needs no approval. Without this key the sandbox is on in the mode
+# in which each command still asks, and a run refuses each question: no test of the repo could run. The
+# limits of the sandbox hold for such a command, and no command runs outside the sandbox.
+SET_AUTO_ALLOW_IN_SANDBOX = "autoAllowBashIfSandboxed"
 SET_FILESYSTEM, SET_DENY_WRITE, SET_DENY_READ = "filesystem", "denyWrite", "denyRead"
 SET_NETWORK, SET_ALLOWED_DOMAINS, SET_STRICT_ALLOWLIST = "network", "allowedDomains", "strictAllowlist"
 SET_CREDENTIALS, SET_ENV_VARS, SET_NAME, SET_MODE, SET_MODE_DENY = "credentials", "envVars", "name", "mode", "deny"
@@ -682,6 +686,7 @@ def boundary_settings(e: Effective, root: Path) -> dict:
             SET_ENABLED: True,
             SET_FAIL_IF_UNAVAILABLE: True,
             SET_ALLOW_UNSANDBOXED: False,
+            SET_AUTO_ALLOW_IN_SANDBOX: True,
             SET_FILESYSTEM: {SET_DENY_WRITE: shell, SET_DENY_READ: no_read + [PROCESS_ENVIRONMENTS]},
             SET_NETWORK: {SET_ALLOWED_DOMAINS: [], SET_STRICT_ALLOWLIST: True},
             SET_CREDENTIALS: {SET_ENV_VARS: [{SET_NAME: name, SET_MODE: SET_MODE_DENY} for name in RUN_TOKENS]},
