@@ -11,8 +11,10 @@ Commands:
   quality   --contract C [--repo-only]  The quality checks of the contract run and pass. With --repo-only
                                        the repo contract is read alone, without its organization source.
   boundary  --contract C --changed F   No path that a run without a person changed is under a pattern of
-                                       boundary.no_write. F lists the changed paths, one on each line:
-                                       each added, changed, or deleted path, and both names of a rename.
+                                       boundary.no_write. F lists the changed paths: each added, changed,
+                                       or deleted path, and both names of a rename. With a NUL character
+                                       between the paths (`-z` of git) any name is read; else one path
+                                       on each line, and a line in the quotes of git fails.
   verdict   --facts F --contract C     One verdict: ready or not ready, with the reasons.
             [--record FILE] [--scripts-version V]   Also write the evidence record, as JSON.
 
@@ -48,6 +50,8 @@ CMD_BOUNDARY = cc.CMD_BOUNDARY
 ARG_FACTS = "facts"
 ARG_CHANGED = "changed"
 PARENT_SEGMENT = ".."
+NUL = "\0"                 # between the paths of a list that git wrote with `-z`: no quotes, no escapes
+GIT_QUOTE = '"'            # git starts a path that holds a special character with it, in a list of lines
 ARG_REPO_ONLY = "repo_only"
 
 # Keys of the facts file.
@@ -146,6 +150,8 @@ MSG = {
     "boundary_closed": "{path}: a run without a person cannot change this path, a pattern of {field}. "
                        "A person makes this change, in its own change request.",
     "boundary_outside": "{path}: the path leaves the repo",
+    "boundary_quoted": "{line}: git wrote this path in quotes, and the gate cannot read it. Write the list with "
+                       "a NUL character between the paths: the option `-z` of git.",
     "boundary_ok": "no changed path is under a pattern of {field} ({count} paths)",
 }
 
@@ -256,14 +262,25 @@ def gate_link(facts: dict) -> GateResult:
     return GateResult(CMD_LINK, True, [msg("link_ok", issues=open_issues)])
 
 
-def gate_boundary(changed: list[str], e: cc.Effective) -> GateResult:
+def changed_paths(text: str) -> tuple[list[str], bool]:
+    """The paths of a list, and whether it is a list of lines. A list with a NUL character holds each
+    name as it is. A list of lines is read without the blanks around a line."""
+    if NUL in text:
+        return [path for path in text.split(NUL) if path], False
+    return [line.strip() for line in text.splitlines() if line.strip()], True
+
+
+def gate_boundary(changed: list[str], e: cc.Effective, lines: bool = True) -> GateResult:
     """The paths that a run changed, against boundary.no_write. A path is read without its dot segments.
-    A plan of a work item passes: the run is its author."""
+    A plan of a work item passes: the run is its author. In a list of lines, a line in the quotes of git
+    fails: its path cannot be read."""
     closed = e.values.get(cc.FIELD_NO_WRITE, []) or []
     reasons: list[str] = []
     for line in changed:
         path = posixpath.normpath(line)
-        if line.startswith(cc.SEGMENT_SEPARATOR) or path == PARENT_SEGMENT or path.startswith(PARENT_SEGMENT + cc.SEGMENT_SEPARATOR):
+        if lines and line.startswith(GIT_QUOTE):
+            reasons.append(msg("boundary_quoted", line=line))
+        elif line.startswith(cc.SEGMENT_SEPARATOR) or path == PARENT_SEGMENT or path.startswith(PARENT_SEGMENT + cc.SEGMENT_SEPARATOR):
             reasons.append(msg("boundary_outside", path=line))
         elif not cc.is_plan(path) and cc.matches(path, closed):
             reasons.append(msg("boundary_closed", path=path, field=cc.FIELD_NO_WRITE))
@@ -472,11 +489,11 @@ def repo_only(args) -> cc.Effective:
 
 def cmd_boundary(args) -> int:
     try:
-        lines = args.changed.read_text().splitlines()
+        text = args.changed.read_text()
     except OSError as error:
         raise cc.CannotRun(cc.msg("no_file", path=args.changed)) from error
-    changed = [line.strip() for line in lines if line.strip()]
-    return report(gate_boundary(changed, effective(args)), args.json)
+    changed, lines = changed_paths(text)
+    return report(gate_boundary(changed, effective(args), lines), args.json)
 
 
 def cmd_quality(args) -> int:
@@ -552,7 +569,7 @@ def main(argv: list[str] | None = None) -> int:
                            help="the version of the scripts that make the record, for example a commit")
         if name == CMD_BOUNDARY:
             p.add_argument(f"--{ARG_CHANGED}", type=Path, required=True,
-                           help="a file with the paths that the run changed, one on each line")
+                           help="a file with the paths that the run changed: with NUL between them, or one on each line")
         if name == CMD_QUALITY:
             p.add_argument(f"--{ARG_REPO_ONLY.replace('_', '-')}", dest=ARG_REPO_ONLY, action="store_true",
                            help="read the repo contract alone, without its organization source")

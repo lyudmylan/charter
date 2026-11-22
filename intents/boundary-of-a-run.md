@@ -31,7 +31,8 @@ and checked in #92.
   permissions, and the settings, read on 2026-11-20). With an empty or absent section the settings hold
   no path rule, and the sandbox, the empty network, and the refusal stay.
 - A gate, `charter-gate boundary --contract C --changed FILE`. The file lists the paths that a run
-  changed, one on each line: each added, changed, or deleted path, and both names of a rename. The gate
+  changed, one on each line, or with a NUL character between them (see
+  `intents/boundary-gate-reads-any-path.md`): each added, changed, or deleted path, and both names of a rename. The gate
   fails when a path is under a pattern of `boundary.no_write`. The failure names the path and the field,
   and says what to do: a person makes this change, in its own change request. The gate reads a path with
   dot segments as the path it points to, and refuses a path that leaves the repo.

@@ -71,6 +71,13 @@ class Temp(unittest.TestCase):
         return run(cg.main, cg.CMD_BOUNDARY, f"--{cc.ARG_CONTRACT}", str(contract), SOURCE, str(ORG),
                    f"--{cg.ARG_CHANGED}", str(listed))
 
+    def gate_nul(self, contract: Path, *changed: str) -> tuple[int, str]:
+        """The gate on a list with a NUL character after each path, as git writes it with `-z`."""
+        listed = self.dir / "changed.bin"
+        listed.write_text("".join(path + "\0" for path in changed))
+        return run(cg.main, cg.CMD_BOUNDARY, f"--{cc.ARG_CONTRACT}", str(contract), SOURCE, str(ORG),
+                   f"--{cg.ARG_CHANGED}", str(listed))
+
 
 class Fields(Temp):
     def test_the_fields_are_in_the_schema_and_in_the_contract_document(self):
@@ -252,6 +259,57 @@ class Gate(Temp):
         self.assertEqual(code, cc.FAIL, out)
         self.assertIn("intents/core-state.md: a run without a person", out)
         self.assertNotIn("core-state.plan.md", out)
+
+
+    SPECIAL = ("caf\u00e9.md", "a b.md", "a\nb.md", '"q".md', "a\\b.md")
+
+    def test_a_list_with_nul_between_the_paths_is_read(self):
+        """boundary-gate-reads-any-path, check 1: a letter outside ASCII, a space, a line break; a name
+        that starts with a double quote and a name with a backslash are read as they are."""
+        contract = self.closed()
+        for name in self.SPECIAL:
+            with self.subTest(name=name):
+                code, out = self.gate_nul(contract, "src/core.py", f"intents/{name}")
+                self.assertEqual(code, cc.FAIL, out)
+                self.assertIn(f"intents/{name}: a run without a person cannot change this path", out)
+                code, out = self.gate_nul(contract, "src/core.py", f"notes/{name}")
+                self.assertEqual(code, cc.PASS, out)
+        self.assertEqual(self.gate_nul(contract, "charter.toml")[0], cc.FAIL)
+        code, out = self.gate_nul(contract, '"q".md', "src/core.py")
+        self.assertEqual(code, cc.PASS, out)
+
+    def test_a_path_in_the_quotes_of_git_fails(self):
+        """boundary-gate-reads-any-path, check 2: git writes `intents/café.md` in this form in a list of
+        lines. The failure names the line and holds the text `-z`."""
+        line = '"intents/caf\\303\\251.md"'
+        code, out = self.gate(self.closed(), "src/core.py", line)
+        self.assertEqual(code, cc.FAIL, out)
+        self.assertIn(line, out)
+        self.assertIn("`-z`", out)
+        self.assertNotIn("src/core.py", out)
+
+    def test_the_contract_document_names_the_two_forms_of_the_list(self):
+        """boundary-gate-reads-any-path, check 4."""
+        text = (ROOT / "docs" / "contract.md").read_text()
+        section = " ".join(text.split("## The boundary of a run")[1].split("\n## ")[0].split())
+        self.assertIn("With a NUL character between the paths, as git writes them with `-z`", section)
+        self.assertIn("a line in the quotes of git fails", section)
+
+    def test_double_star_crosses_a_line_break_in_a_name(self):
+        """boundary-gate-reads-any-path, check 6: the matcher that the tiers, the code paths, the forbidden
+        paths, and the boundary share. A star still stays inside one segment."""
+        self.assertTrue(cc.matches("intents/a\nb.md", ["intents/**"]))
+        self.assertTrue(cc.matches("docs/a\nb/c.md", ["docs/**/c.md"]))
+        self.assertTrue(cc.matches("intents/a.md", ["intents/**"]))
+        self.assertFalse(cc.matches("notes/a\nb.md", ["intents/**"]))
+        self.assertFalse(cc.matches("src/a/b.py", ["src/*.py"]))
+
+    def test_the_version_carries_the_correction(self):
+        """boundary-gate-reads-any-path, check 5."""
+        versions = [json.loads((ROOT / plugin / ".claude-plugin" / "plugin.json").read_text())["version"]
+                    for plugin in ("charter", "charter-practices")]
+        self.assertEqual(versions[0], versions[1])
+        self.assertGreaterEqual(tuple(int(part) for part in versions[0].split(".")), (0, 3, 7))
 
 
 class Defaults(Temp):

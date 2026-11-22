@@ -573,7 +573,8 @@ def glob_to_regex(pattern: str) -> str:
 
 
 def matches(file: str, patterns: list[str]) -> bool:
-    return any(re.match(glob_to_regex(p), file) for p in patterns)
+    """A file name can hold a line break, so `**` crosses it too."""
+    return any(re.match(glob_to_regex(p), file, re.DOTALL) for p in patterns)
 
 
 def has_wildcard(text: str) -> bool:
