@@ -200,7 +200,8 @@ They turn the sandbox of the shell on, let no command run outside it, and stop t
 cannot start. A command that runs inside the sandbox needs no approval, `autoAllowBashIfSandboxed`: its
 limits are the limits of the sandbox. The shell has no network. The tokens of the model and of the code
 host leave the environment of each shell command. A call that would need a question to a person is
-refused. The file tools
+refused. The settings give an empty text for the attribution of a commit and of a change request, so
+Claude Code does not tell the agent to end its text with a line that names the tool. The file tools
 stay inside the folder of the repo: the mode `acceptEdits` lets them change a file of that folder with no
 question, a read or a write on a path outside it would need a question and is refused, and
 `blockWritesOutsideWorkingDirectories` refuses such a write in every mode. A run passes no list of allowed
@@ -267,7 +268,8 @@ The steps, in this order:
    organization source again, with its token.
 10. The publishing, only when the two steps before passed: a script pushes the branch `run/<number>` with
     no hook and opens the change request, with `Closes #<number>` as its first line. `text` writes that
-    line and then the text of the agent, without a line of it that only links the same issue. It uses the secret
+    line and then the text of the agent, without a line of it that only links the same issue and without a
+    line that names a tool as the author. The block of the run says that an agent built the change. It uses the secret
     `CHARTER_RUN_TOKEN`, a token that a person creates, because a change request that the token of the
     workflow opens starts no workflow. Without the secret nothing is published.
 11. `outcome`, in each case: one comment on the issue with the change request or the reason, and the turns,

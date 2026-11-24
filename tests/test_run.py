@@ -601,6 +601,31 @@ class Publish(Temp):
                 self.assertEqual(out, expected)
                 self.assertEqual(cf.issue_numbers(out)[0], 7)
 
+    def test_the_text_holds_no_line_that_names_a_tool_as_the_author(self):
+        """no-attribution-line, check 2: the command leaves out the line of Claude Code for a change request
+        and a trailer that names it as a co-author, in each form, and keeps each other line."""
+        request = self.dir / "change-request.md"
+        line = "Generated with [Claude Code](https://claude.com/claude-code)"
+        cases = {
+            "the line of the tool": (f"The change.\n\n\U0001F916 {line}\n", "Closes #7\n\nThe change.\n"),
+            "without the sign": (f"The change.\n\n{line}\n", "Closes #7\n\nThe change.\n"),
+            "no link, other case": ("The change.\ngenerated with Claude Code\n", "Closes #7\n\nThe change.\n"),
+            "a list marker and emphasis": (f"The change.\n- *{line}*\n", "Closes #7\n\nThe change.\n"),
+            "a trailer": ("The change.\n\nCo-Authored-By: Claude <noreply@anthropic.com>\n", "Closes #7\n\nThe change.\n"),
+            "with the closing line": (f"Closes #7\n\nThe change.\n\n\U0001F916 {line}\n", "Closes #7\n\nThe change.\n"),
+            "the line alone": (f"\U0001F916 {line}\n", f"Closes #7\n\n{cr.MSG['no_text']}\n"),
+            "a sentence about the tool": ("The step installs Claude Code.\nThe file was generated with a script.\n",
+                                          "Closes #7\n\nThe step installs Claude Code.\nThe file was generated with a script.\n"),
+            "a co-author that is a person": ("Co-Authored-By: A Person <person@example.com>\n",
+                                             "Closes #7\n\nCo-Authored-By: A Person <person@example.com>\n"),
+        }
+        for case, (written, expected) in cases.items():
+            with self.subTest(case=case):
+                request.write_text(written)
+                code, out = run_cli(cr.CMD_TEXT, "--number", "7", "--request", str(request))
+                self.assertEqual(code, cc.PASS, out)
+                self.assertEqual(out, expected)
+
     def test_a_link_in_the_place_of_the_text_is_not_followed(self):
         """one-closing-line, check 2: the agent wrote the file, so a link in its place gives the sentence."""
         secret = self.dir / "secret"
@@ -837,6 +862,18 @@ class Documents(unittest.TestCase):
                     for plugin in ("charter", "charter-practices")]
         self.assertEqual(versions[0], versions[1])
         self.assertGreaterEqual(tuple(int(part) for part in versions[0].split(".")), (0, 3, 17))
+
+    def test_the_documents_and_the_version_carry_the_attribution(self):
+        """no-attribution-line, check 4."""
+        contract = (ROOT / "docs" / "contract.md").read_text()
+        boundary = one_line(contract[contract.index("## The boundary of a run\n"):contract.index("## The run\n")])
+        self.assertIn("an empty text for the attribution of a commit and of a change request", boundary)
+        section = one_line(contract[contract.index("## The run\n"):contract.index("## On the code host\n")])
+        self.assertIn("without a line that names a tool as the author", section)
+        versions = [json.loads((ROOT / plugin / ".claude-plugin" / "plugin.json").read_text())["version"]
+                    for plugin in ("charter", "charter-practices")]
+        self.assertEqual(versions[0], versions[1])
+        self.assertGreaterEqual(tuple(int(part) for part in versions[0].split(".")), (0, 3, 18))
 
     def test_both_manifests_name_the_version(self):
         """run-from-an-issue, check 14."""
