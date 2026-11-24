@@ -4,21 +4,34 @@
 # host. Scripts check what it changed and publish the result as a change request. No step after the agent
 # runs a file of the folder that the agent wrote in. The variable CHARTER_RUNS with the value `off` stops
 # the start of every run.
+# The same job answers the findings of the reviewers on the change request of a run. The job `decide` reads
+# the reports and the contract and says whether an answer starts: after a report of a reviewer on a branch
+# `run/<number>`, when the contract lets the factory start it, or when a person names the change request.
+# The agent of an answer works on the branch of the run, under the same settings, and a script pushes its
+# commit to that branch.
 # The scripts come from Charter, fetched at the version that the contract names.
 name: run
 
 on:
   issues:
     types: [labeled]
+  workflow_run:
+    workflows: [review-intents, review-code]
+    types: [completed]
+    branches: ["run/**"]
   workflow_dispatch:
     inputs:
       issue:
-        description: "Number of the issue"
-        required: true
+        description: "Number of the issue, to build its work item"
+        required: false
+      change_request:
+        description: "Number of the change request of a run, to answer the findings of its reviewers"
+        required: false
 
 permissions:
   contents: read
   issues: write
+  pull-requests: write   # the comment of an answer goes on the change request
 
 # One run works at a time. The others wait in the order of their start: without `queue: max` the code host
 # keeps one waiting run, and a new run cancels it.
@@ -34,7 +47,8 @@ env:
 jobs:
   run:
     name: run
-    if: vars.CHARTER_RUNS != 'off' && (github.event_name == 'workflow_dispatch' || github.event.label.name == 'charter-run')
+    needs: decide
+    if: vars.CHARTER_RUNS != 'off' && !cancelled() && (needs.decide.outputs.start == 'true' || (github.event_name == 'workflow_dispatch' && inputs.change_request == '') || (github.event_name == 'issues' && github.event.label.name == 'charter-run'))
     # The image has a fixed name. On Ubuntu 26.04 the sandbox of Claude Code starts no command; on this
     # image, with the profile below, it does.
     runs-on: ubuntu-24.04
@@ -57,7 +71,9 @@ jobs:
         id: ready
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          ISSUE: ${{ inputs.issue || github.event.issue.number }}
+          ISSUE: ${{ needs.decide.outputs.issue || inputs.issue || github.event.issue.number }}
+          CHANGE_REQUEST: ${{ needs.decide.outputs.number }}
+          ANSWER_COMMIT: ${{ needs.decide.outputs.commit }}
         run: |
           RUN="$RUNNER_TEMP/run"
           mkdir -p "$RUN"
@@ -70,6 +86,22 @@ jobs:
           fi
           cat "$RUN/ready.txt"
           cat "$RUN/ready.txt" >> "$GITHUB_OUTPUT"
+          # An answer: the comments of the change request, for the brief, and the branch of the run. The branch
+          # is fetched here and not opened: the steps of the toolchain run on the files of the main branch.
+          if [ -n "${CHANGE_REQUEST:-}" ]; then
+            python3 "$CHARTER_SCRIPTS/charter_facts_github.py" collect --repo "$GITHUB_REPOSITORY" --pr "$CHANGE_REQUEST" \
+              --review-workflow review-intents.yml --code-review-workflow review-code.yml \
+              --comments "$RUN/comments.json" --out "$RUN/facts.json" > /dev/null
+            # The token goes to this one call of git, and no credential stays in the folder.
+            AUTH=$(echo -n "x-access-token:$GITHUB_TOKEN" | base64 -w 0)
+            echo "::add-mask::$AUTH"
+            git -c core.hooksPath=/dev/null -c "http.$GITHUB_SERVER_URL/.extraheader=AUTHORIZATION: basic $AUTH" \
+              fetch --quiet --no-tags --depth 1 origin "+refs/heads/run/$ISSUE:refs/remotes/origin/run/$ISSUE"
+            if [ "$(git -c core.hooksPath=/dev/null rev-parse "refs/remotes/origin/run/$ISSUE")" != "$ANSWER_COMMIT" ]; then
+              echo "the branch of the run moved after the decision on the answer" | tee "$RUN/reason"
+              exit 1
+            fi
+          fi
 
       # The steps of the toolchain of this repo stand between the two marker lines. They run with no secret.
       # charter:toolchain:start
@@ -110,14 +142,21 @@ jobs:
       - name: Write the brief
         env:
           INTENT: ${{ steps.ready.outputs.intent }}
+          ANSWER: ${{ needs.decide.outputs.start }}
+          THRESHOLD: ${{ needs.decide.outputs.threshold }}
         run: |
           RUN="$RUNNER_TEMP/run"
-          python3 "$CHARTER_SCRIPTS/charter_run.py" brief --issue "$RUN/issue.json" --intent "$INTENT" --out "$RUN/brief.md"
+          if [ "${ANSWER:-}" = "true" ]; then
+            python3 "$CHARTER_SCRIPTS/charter_run.py" brief --issue "$RUN/issue.json" --intent "$INTENT" \
+              --reports "$RUN/comments.json" --threshold "$THRESHOLD" --out "$RUN/brief.md"
+          else
+            python3 "$CHARTER_SCRIPTS/charter_run.py" brief --issue "$RUN/issue.json" --intent "$INTENT" --out "$RUN/brief.md"
+          fi
 
       # The one secret of this step is the token of the model. The settings reach Claude Code as text, so the
       # agent cannot change them. The command names no allowed tool: such a list opens a tool for every path,
       # and the settings keep the file tools inside this folder. The copy of .git, made before the agent starts, replaces the .git of the
-      # folder after it.
+      # folder after it. An answer works on the branch of the run, which an earlier step fetched.
       - name: Run the agent
         id: agent
         continue-on-error: true
@@ -125,9 +164,14 @@ jobs:
         env:
           CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
           BRANCH: ${{ steps.ready.outputs.branch }}
+          ANSWER: ${{ needs.decide.outputs.start }}
         run: |
           RUN="$RUNNER_TEMP/run"
-          git -c core.hooksPath=/dev/null switch --quiet -c "$BRANCH"
+          if [ "${ANSWER:-}" = "true" ]; then
+            git -c core.hooksPath=/dev/null switch --quiet -c "$BRANCH" "refs/remotes/origin/$BRANCH"
+          else
+            git -c core.hooksPath=/dev/null switch --quiet -c "$BRANCH"
+          fi
           git rev-parse HEAD > "$RUN/base"
           cp -a .git "$RUN/git"
           SETTINGS=$(cat "$RUN/settings.json")
@@ -135,11 +179,13 @@ jobs:
 
       - name: Take the result of the agent
         id: result
+        env:
+          ANSWER_ROUND: ${{ needs.decide.outputs.round }}
         run: |
           RUN="$RUNNER_TEMP/run"
           BASE=$(cat "$RUN/base")
           if ! python3 "$CHARTER_SCRIPTS/charter_run.py" result --agent "$RUN/agent.json" --root . --base "$BASE" \
-            --issue "$RUN/issue.json" --git-dir "$RUN/git" --out "$RUN/out" > "$RUN/result.txt"; then
+            --issue "$RUN/issue.json" --git-dir "$RUN/git" --out "$RUN/out" ${ANSWER_ROUND:+--answer-round "$ANSWER_ROUND"} > "$RUN/result.txt"; then
             cp "$RUN/result.txt" "$RUN/reason"
             cat "$RUN/result.txt"
             exit 1
@@ -170,7 +216,7 @@ jobs:
       # that was pushed, goes at the end of the text of the change request.
       - name: Publish the change request
         id: publish
-        if: success() && steps.result.outcome == 'success' && steps.gate.outcome == 'success'
+        if: success() && steps.result.outcome == 'success' && steps.gate.outcome == 'success' && needs.decide.outputs.start != 'true'
         env:
           GH_TOKEN: ${{ secrets.CHARTER_RUN_TOKEN }}
           ISSUE: ${{ steps.ready.outputs.number }}
@@ -196,23 +242,142 @@ jobs:
           URL=$(gh pr create --repo "$GITHUB_REPOSITORY" --base "$MAIN" --head "$BRANCH" --title "$TITLE" --body-file "$RUN/body.md")
           echo "url=$URL" >> "$GITHUB_OUTPUT"
 
+      # An answer: the commit of the agent goes to the branch of the run, with no force. The text of the change
+      # request gets each line of a dropped finding and one more block of a run. An answer that changed no
+      # path and dropped no finding publishes nothing.
+      - name: Publish the answer on the change request
+        id: answered
+        if: success() && steps.result.outcome == 'success' && steps.gate.outcome == 'success' && needs.decide.outputs.start == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.CHARTER_RUN_TOKEN }}
+          CHANGE_REQUEST: ${{ needs.decide.outputs.number }}
+          BRANCH: ${{ steps.ready.outputs.branch }}
+        run: |
+          RUN="$RUNNER_TEMP/run"
+          if [ -z "$GH_TOKEN" ]; then
+            echo "the secret CHARTER_RUN_TOKEN is not set, so nothing is published" | tee "$RUN/reason"
+            exit 1
+          fi
+          gh pr view "$CHANGE_REQUEST" --repo "$GITHUB_REPOSITORY" --json body --jq .body > "$RUN/old-body.md"
+          if ! python3 "$CHARTER_SCRIPTS/charter_run.py" body --body "$RUN/old-body.md" --answers "$RUN/out/agent/answers.md" \
+            --changed "$RUN/out/changed" > "$RUN/body.md"; then
+            cp "$RUN/body.md" "$RUN/reason"
+            cat "$RUN/body.md"
+            exit 1
+          fi
+          gh auth setup-git
+          git -c core.hooksPath=/dev/null push --quiet origin "HEAD:refs/heads/$BRANCH"
+          if COMMIT=$(git -c core.hooksPath=/dev/null rev-parse HEAD) \
+            && python3 "$CHARTER_SCRIPTS/charter_run.py" record --agent "$RUN/agent.json" --commit "$COMMIT" > "$RUN/block.md"; then
+            echo >> "$RUN/body.md"
+            cat "$RUN/block.md" >> "$RUN/body.md"
+          else
+            echo "the block of the run is not written"
+          fi
+          gh pr edit "$CHANGE_REQUEST" --repo "$GITHUB_REPOSITORY" --body-file "$RUN/body.md" > /dev/null
+          URL=$(gh pr view "$CHANGE_REQUEST" --repo "$GITHUB_REPOSITORY" --json url --jq .url)
+          echo "url=$URL" >> "$GITHUB_OUTPUT"
+
+      # The outcome of a run goes on the issue. The outcome of an answer goes on the change request, and it
+      # names the head commit whose reports the agent answered, so that the factory starts no second answer
+      # for the same commit.
       - name: Write the outcome on the issue
         if: always()
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          ISSUE: ${{ inputs.issue || github.event.issue.number }}
-          URL: ${{ steps.publish.outputs.url }}
+          ISSUE: ${{ needs.decide.outputs.issue || inputs.issue || github.event.issue.number }}
+          URL: ${{ steps.publish.outputs.url || steps.answered.outputs.url }}
+          ANSWER: ${{ needs.decide.outputs.start }}
+          CHANGE_REQUEST: ${{ needs.decide.outputs.number }}
+          ANSWER_COMMIT: ${{ needs.decide.outputs.commit }}
         run: |
           RUN="$RUNNER_TEMP/run"
           mkdir -p "$RUN"
           if [ -n "$URL" ]; then STATE=published; else STATE=blocked; fi
           REASON=$(cat "$RUN/reason" 2>/dev/null || true)
           [ -n "$REASON" ] || REASON="the run stopped before its result; the log of the job names the cause"
+          TARGET="$ISSUE"
+          ANSWERED=()
+          if [ "${ANSWER:-}" = "true" ]; then
+            TARGET="$CHANGE_REQUEST"
+            ANSWERED=(--answered "$ANSWER_COMMIT" --answers "$RUN/out/agent/answers.md")
+            if [ -n "$URL" ]; then STATE=answered; fi
+          fi
           if ! python3 "$CHARTER_SCRIPTS/charter_run.py" outcome --state "$STATE" --reason="$REASON" \
-            --agent "$RUN/agent.json" --url="$URL" > "$RUN/comment.md"; then
+            --agent "$RUN/agent.json" --url="$URL" "${ANSWERED[@]}" > "$RUN/comment.md"; then
             echo "<!-- charter-run -->" > "$RUN/comment.md"
             echo "Outcome: $STATE" >> "$RUN/comment.md"
+            if [ "${ANSWER:-}" = "true" ]; then echo "Answered commit: $ANSWER_COMMIT" >> "$RUN/comment.md"; fi
             echo "Reason: $REASON" >> "$RUN/comment.md"
           fi
           cat "$RUN/comment.md"
-          gh issue comment "$ISSUE" --repo "$GITHUB_REPOSITORY" --body-file "$RUN/comment.md"
+          gh issue comment "$TARGET" --repo "$GITHUB_REPOSITORY" --body-file "$RUN/comment.md"
+
+  # The decision on an answer. It starts no agent: it finds the change request, reads its facts and the
+  # contract of the main branch with its organization source, and prints whether an answer starts. After a
+  # report of a reviewer, "no answer" ends this job with success, and the job `run` does not start. When a
+  # person named the change request, "no answer" fails this job, so that the person sees the reason.
+  decide:
+    name: decide
+    if: vars.CHARTER_RUNS != 'off' && (inputs.change_request != '' || (github.event_name == 'workflow_run' && github.event.workflow_run.head_repository.full_name == github.repository))
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    outputs:
+      start: ${{ steps.answer.outputs.start }}
+      number: ${{ steps.pr.outputs.number }}
+      issue: ${{ steps.answer.outputs.issue }}
+      commit: ${{ steps.answer.outputs.commit }}
+      round: ${{ steps.answer.outputs.round }}
+      threshold: ${{ steps.answer.outputs.threshold }}
+    steps:
+      - name: Take the main branch, for the decision
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.repository.default_branch }}
+          persist-credentials: false
+
+      - name: Fetch Charter at the version of the contract, for the decision
+        run: |
+          VERSION=$(python3 -c 'import tomllib; print(tomllib.load(open("charter.toml", "rb"))["charter"]["version"])')
+          git clone --quiet --depth 1 --branch "charter--v$VERSION" %{charter_address} "$RUNNER_TEMP/charter"
+          echo "CHARTER_SCRIPTS=$RUNNER_TEMP/charter/charter/scripts" >> "$GITHUB_ENV"
+
+      # After a report of a reviewer, the change request is the open one whose head is the commit of the
+      # report. A commit with no open change request is no error: the change request was merged or closed.
+      - name: Find the change request
+        id: pr
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          INPUT_PR: ${{ inputs.change_request }}
+          RUN_SHA: ${{ github.event.workflow_run.head_sha }}
+        run: |
+          if [ -n "$INPUT_PR" ]; then
+            python3 "$CHARTER_SCRIPTS/charter_facts_github.py" find --repo "$GITHUB_REPOSITORY" --pr "$INPUT_PR" >> "$GITHUB_OUTPUT"
+          elif python3 "$CHARTER_SCRIPTS/charter_facts_github.py" find --repo "$GITHUB_REPOSITORY" --sha "$RUN_SHA" > "$RUNNER_TEMP/found.txt"; then
+            cat "$RUNNER_TEMP/found.txt" >> "$GITHUB_OUTPUT"
+          else
+            cat "$RUNNER_TEMP/found.txt"
+            echo "no answer: no open change request has this head commit"
+          fi
+
+      - name: Decide whether an answer starts
+        id: answer
+        if: steps.pr.outputs.number != ''
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          CHARTER_ORG_TOKEN: ${{ secrets.CHARTER_ORG_TOKEN }}
+          PR_NUMBER: ${{ steps.pr.outputs.number }}
+          BY: ${{ inputs.change_request != '' && 'person' || 'factory' }}
+        run: |
+          SOURCE=$(python3 "$CHARTER_SCRIPTS/charter_check.py" source charter.toml) || { echo "$SOURCE"; exit 2; }
+          readarray -t S <<< "$SOURCE"
+          git clone --quiet "${S[0]/https:\/\//https://x-access-token:${CHARTER_ORG_TOKEN}@}" "${S[3]}"
+          python3 "$CHARTER_SCRIPTS/charter_facts_github.py" collect --repo "$GITHUB_REPOSITORY" --pr "$PR_NUMBER" \
+            --review-workflow review-intents.yml --code-review-workflow review-code.yml --out "$RUNNER_TEMP/facts.json"
+          python3 "$CHARTER_SCRIPTS/charter_gate.py" answer --facts "$RUNNER_TEMP/facts.json" --contract charter.toml \
+            --by "$BY" > "$RUNNER_TEMP/answer.txt"
+          cat "$RUNNER_TEMP/answer.txt"
+          cat "$RUNNER_TEMP/answer.txt" >> "$GITHUB_OUTPUT"
+          if [ "$BY" = person ] && ! grep -qx "start=true" "$RUNNER_TEMP/answer.txt"; then
+            exit 1
+          fi

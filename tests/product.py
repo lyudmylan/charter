@@ -37,6 +37,20 @@ FACTS = {
     "intents": [{"path": "intents/app.md", "plan": True, "removed": False}],
 }
 SOURCE = ["--source", str(ORG)]
+# The change request of a run, with an open finding of the reviewer of the code on its head commit.
+HEAD = "a" * 40
+ANSWER_FACTS = {
+    **FACTS,
+    "changed_files": [APP],
+    "head_commit": HEAD,
+    "code_review_reports": ["medium"],
+    "code_review_commit": HEAD,
+    "run": {"commit": HEAD, "turns": 20, "duration_seconds": 84, "cost_usd": 0.35},
+    "answered_commits": [],
+    "head_branch": "run/1",
+    "state": "open",
+    "from_fork": False,
+}
 # What an agent of a run wrote for its change request: a line that links the issue, then its text.
 AGENT_LINK, AGENT_TEXT = "Fixes #1", "The sample change."
 AGENT_ATTRIBUTION = "\U0001F916 Generated with [Claude Code](https://claude.com/claude-code)"
@@ -101,6 +115,15 @@ def steps(repo: Path, work: Path) -> bool:
                                                         "--changed", str(both), cwd=repo), 1,
                 f"fail: boundary: {CLOSED_PATH}: a run without a person cannot change this path",
                 absent=(f"{OPEN_PATH}:",)):
+        return False
+    answer = work / "answer.json"
+    answer.write_text(json.dumps(ANSWER_FACTS))
+    decision = ["answer", "--facts", str(answer), "--contract", CONTRACT, *SOURCE]
+    if not step("answer to a finding, the factory", command("charter-gate", *decision, cwd=repo), 0,
+                "start=false", "the contract says that a person starts an answer"):
+        return False
+    if not step("answer to a finding, a person", command("charter-gate", *decision, "--by", "person", cwd=repo), 0,
+                "start=true", "issue=1", "branch=run/1", "round=1", absent=("start=false",)):
         return False
     facts = work / "facts.json"
     facts.write_text(json.dumps(FACTS))

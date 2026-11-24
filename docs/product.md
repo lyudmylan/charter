@@ -54,7 +54,9 @@ its reviewer. A larger organization changes who holds a role, not the rules.
 An agent that works with no person present cannot change the contract, the instructions, an approved
 intent, or the workflows, and it holds no credential of the code host. A script publishes its result
 after a check of what it changed. A person starts such a run with the label `charter-run` on a ready
-issue; the workflow `run` builds the work item and opens its change request.
+issue; the workflow `run` builds the work item and opens its change request. An agent also answers the
+findings of the reviewers on that change request, within the limit of rounds of the contract. The contract
+says what starts an answer: the factory, or a person.
 
 ## The lifecycle map
 

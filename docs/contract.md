@@ -46,6 +46,7 @@ any of its patterns. The `instructions` and `text` commands read this from the s
 | `limits.refusals` | limit | Refusals in sequence before the agent stops |
 | `review.threshold` | choice | `blocker`, `high`, `medium`, or `low`: the lowest severity of a finding that keeps the review loop open. Without a value: `medium` |
 | `review.code_blocks` | flag | An open finding of the reviewer of the code makes the change request not ready. Without it, or with `false`: the shadow period, the verdict prints the state of the code review and blocks nothing. Needs the version 0.3.10 of the core |
+| `run.answer_start` | choice | `factory` or `person`: what starts the agent that answers the findings of the reviewers on the change request of a run. With `factory`, the workflow `run` starts an answer after the reports of the reviewers. With `person`, or without a value, a person starts each answer. The organization sets the value for its repos, and a repo can move it toward `person` |
 | `build.plan_before_code` | flag | Each work item has its plan, `plans/<part>.md`, before the code; the verdict checks that it exists |
 | `tiers.<tier>.paths` | set | Path patterns of the files in the tier |
 | `tiers.<tier>.review` | choice | `light` or `deep` |
@@ -229,7 +230,8 @@ The gate runs between the run and the push: a failure publishes nothing.
 
 The workflow `run` takes a ready issue and runs an agent on it, with no person present. It always runs
 from the main branch. A person starts it: the label `charter-run` on an issue, or a start by hand with the
-number of an issue. Only a person with write access can do either. The variable `CHARTER_RUNS` of the repo
+number of an issue. Only a person with write access can do either. The same workflow answers the findings
+of the reviewers on the change request that a run built; the section below says what starts that. The variable `CHARTER_RUNS` of the repo
 with the value `off` stops the start of every run; the cancel of the code host stops a run that works. One
 run works at a time. The others wait in the order of their start, up to 100: the option `queue: max` of the
 group. Without it the code host keeps one waiting run, and a new run cancels it.
@@ -277,8 +279,70 @@ The steps, in this order:
 
 No step after the agent runs a file of the folder that the agent wrote in: the scripts come from the copy,
 and the quality commands run in the workflow `tests` of the change request. The change request then goes
-through `tests`, the reviewers, and `verdict` as any other, and the merge follows the tier. A finding of a
-reviewer on it is for a person in this version.
+through `tests`, the reviewers, and `verdict` as any other, and the merge follows the tier.
+
+### The answer to the findings of the reviewers
+
+An agent answers the findings of the reviewers on the change request of a run, with no session of a person:
+a correction, or a dropped finding with its reason. Its commit goes to the same change request, on the
+branch `run/<number>`.
+
+The start is a rule of the contract, `run.answer_start`. With `factory`, the workflow `run` starts after
+each run of a reviewer workflow on a branch `run/**`, and its job `decide` says whether an answer starts.
+With `person`, or without a value, a person starts each answer: a start of the workflow by hand with the
+number of the change request. A repo that moves to this version gets no new use of a subscription without
+that written choice. The variable `CHARTER_RUNS` with the value `off` stops each answer too.
+
+```
+charter-gate answer --facts facts.json --contract charter.toml [--by factory|person]
+```
+
+The command reads the facts of the change request and the contract of the main branch, and prints
+`start=true` or `start=false` with the reason. An answer starts when each line below holds:
+
+- The change request is open, its branch is `run/<number>` in this repo and not in a fork, its text holds
+  the block of a run, and it links the open issue of that number.
+- Each reviewer that takes part has its newest report on the head commit. The reviewer of intents takes
+  part when the change request changes a file under `intents/` or `plans/`, and the reviewer of the code
+  when it changes another file. Else the answer waits for the report.
+- A report is open: its highest open severity is at `review.threshold` or above, or it has no severity
+  line. The shadow period of the reviewer of the code changes nothing here: its findings get an answer.
+- No open loop is at `limits.review_loop`. At the limit a person decides. With the limit 3, an agent
+  answers a change request two times at most in one loop.
+- No answer handled this head commit before. A person can start a second answer for the same commit.
+
+The job `decide` starts no agent. After a report of a reviewer, "no answer" ends it with success, and the
+job `run` does not start. For a start by a person, "no answer" fails it, so that the person sees the reason.
+
+The job `run` then works as for an issue, with these differences:
+
+1. The step that reads the issue fetches the branch of the run and stops when the branch moved after the
+   decision. It opens no file of the branch. The steps of the toolchain run on the files of the main
+   branch, and the settings come from the contract of the main branch.
+2. The brief of an answer: the fixed text, then the newest report of each reviewer and the text of the
+   issue, under a line that marks them as data. The agent corrects a finding at the threshold or above, or
+   drops it with the reason. A finding that needs a change of a closed path, the intent among them, is for a
+   person. It marks no finding as false. It writes one line for each finding to `.charter-run/answers.md`.
+3. The step of the agent opens the branch of the run. `result --answer-round <n>` commits with the message
+   `Answer the findings of review round <n> (#<number>)`. No changed path is a result too: the agent can
+   drop each finding. The gate checks the paths that this answer changed.
+4. The publishing: a script pushes the commit to the branch, with no force, and changes the text of the
+   change request. `body` keeps the text and adds each line `Dropped finding:` of the answers that the text
+   does not hold yet; no other line of the agent reaches the text. One more block of a run follows. An
+   answer that changed no path and dropped no finding publishes nothing.
+5. The outcome goes on the change request, not on the issue: `answered` or `blocked`, the line
+   `Answered commit:` with the head commit whose reports the agent answered, the three numbers, and the
+   lines of the answers. The facts collector reads that line back into the fact `answered_commits`.
+
+```
+charter-run brief  --issue issue.json --intent intents/<part>.md --reports comments.json --threshold <severity> --out brief.md
+charter-run body --body body.md --answers answers.md [--changed <file>]
+charter-run outcome --state answered|blocked --agent agent.json --url URL --answered <commit> --answers answers.md
+```
+
+The push starts the reviewers again, and their reports start the next decision. The loop ends when no
+report is open at the threshold, or at the limit of the contract, or when the stop switch is off. A script
+counts the rounds from the reports of the reviewers; the agent does not.
 
 ## The record of a run
 
@@ -295,10 +359,13 @@ charter-run record --agent agent.json --commit <commit>
 Run: commit=<the commit that the run published> turns=<n> duration_seconds=<n> cost_usd=<n>
 ```
 
-A value that Claude Code did not report is `none`. The facts collector reads the last block of the text
-into the fact `run`: the marker line, then the line `Run:` right after it, with the four values in any order.
-A block with a missing or unknown name, a value that is no number, or a commit that is no identifier gives
-no run, and the collection goes on. A change request without the block has no fact `run`.
+A value that Claude Code did not report is `none`. The facts collector reads the blocks of the text into the
+fact `run`: the marker line, then the line `Run:` right after it, with the four values in any order. The
+first block is the run that built the change request, and each answer of an agent adds one. The commit is
+the one of the last block. Each number is the sum of the blocks that hold it, and with more than one block
+`agent_runs` is their number. A last block with a missing or unknown name, a value that is no number, or a
+commit that is no identifier gives no run, and the collection goes on. A change request without the block
+has no fact `run`.
 
 The verdict decides the outcome, one of three:
 
@@ -310,7 +377,8 @@ The verdict decides the outcome, one of three:
 
 A run that opened no change request is `blocked`; that outcome stays on the issue. The verdict prints one
 line after the line `merge: ...`: `run: <outcome>, <turns> turns, <duration>, cost <cost> (an estimate of
-Claude Code)`, or `run: none, no agent run built this change request`. The cost is the estimate that
+Claude Code)`, or `run: none, no agent run built this change request`. With more than one block the line
+names their number, `<n> runs of an agent`, before the turns. The cost is the estimate that
 Claude Code prints, not a bill. The block is text of the change request, so a person can write one: the
 record says what the text says, and the outcome decides nothing. It changes no readiness and no merge.
 Needs the version 0.3.14 of the core.
