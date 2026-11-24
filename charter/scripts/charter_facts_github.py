@@ -17,6 +17,8 @@ Commands:
                                                         the commit of the newest.
           [--code-review-workflow FILE]                 The repo has this reviewer of the code: read the severity
                                                         line of each of its reports, and the commit of the newest.
+          [--comments FILE]                             With a reviewer workflow: write the comments of the change
+                                                        request to FILE, as JSON, for the brief of an answer.
 
 The token comes from the environment variable GITHUB_TOKEN. The workflow of GitHub sets it.
 
@@ -94,6 +96,8 @@ REVIEW_MARKER = "<!-- charter-intent-review -->"
 # A report of the reviewer of the code: the same form, with its own marker, so that the two reviews stay apart.
 CODE_REVIEW_MARKER = "<!-- charter-code-review -->"
 COMMIT_LINE = re.compile(r"^Commit:\s*([0-9a-fA-F]+)\s*$", re.MULTILINE)
+# The comment of an answer of an agent on a change request names the head commit whose reports it answered.
+ANSWERED_LINE = re.compile(r"^Answered commit:\s*([0-9a-fA-F]{7,64})\s*$", re.MULTILINE)
 SEVERITY_LINE = re.compile(r"^Highest open severity:\s*(" + "|".join(cg.SEVERITIES) + r")\b", re.IGNORECASE | re.MULTILINE)
 
 # The record comment on a change request.
@@ -111,6 +115,7 @@ CHECK_FAIL, CHECK_PENDING = "fail", "pending"
 # Keys of the API responses that this script reads.
 PR_BODY, PR_TITLE, PR_NUMBER, PR_HEAD, HEAD_SHA = "body", "title", "number", "head", "sha"
 PR_STATE, PR_OPEN, PR_BASE, BASE_REF, COMPARE_FILES = "state", "open", "base", "ref", "files"
+REPO, FULL_NAME = "repo", "full_name"
 FILE_NAME, FILE_STATUS, FILE_PREVIOUS = "filename", "status", "previous_filename"
 STATUS_REMOVED, STATUS_RENAMED = "removed", "renamed"
 ISSUE_STATE, ISSUE_IS_PR = "state", "pull_request"
@@ -165,15 +170,21 @@ def finding_lines(text: str) -> tuple[list[str], list[str]]:
     return DROPPED_FINDING_LINE.findall(text or ""), FALSE_FINDING_LINE.findall(text or "")
 
 
-def run_block(text: str) -> dict | None:
-    """The fact `run` from the last block of an agent run in the text, or None. The four values may come in any
-    order, each once; `none` gives no value. A missing or unknown name, a value that is no number, or a commit
-    that is no identifier gives None."""
+def run_blocks(text: str) -> list[dict | None]:
+    """Each block of an agent run in the text, in order: the marker line, then the line `Run:`. The four values
+    may come in any order, each once; `none` gives no value. A marker whose next line is no line `Run:`, or
+    whose line has a missing or unknown name, a value that is no number, or a commit that is no identifier,
+    gives None for its place."""
     lines = [line.strip() for line in (text or "").splitlines()]
-    starts = [i for i, line in enumerate(lines) if line == cg.RUN_MARKER]
-    if not starts or starts[-1] + 1 >= len(lines):
-        return None
-    line = lines[starts[-1] + 1]
+    blocks: list[dict | None] = []
+    for i, marker in enumerate(lines):
+        if marker == cg.RUN_MARKER:
+            blocks.append(one_run(lines[i + 1]) if i + 1 < len(lines) else None)
+    return blocks
+
+
+def one_run(line: str) -> dict | None:
+    """The values of one line `Run:`, or None when the line has not the right form."""
     if not line.startswith(cg.RUN_LINE):
         return None
     values: dict[str, str] = {}
@@ -193,6 +204,25 @@ def run_block(text: str) -> dict | None:
             run[key] = float(value) if "." in value else int(value)
         else:
             return None
+    return run
+
+
+def run_block(text: str) -> dict | None:
+    """The fact `run`, or None when the text holds no block of an agent run or its last block has not the right
+    form. The first block is the run that built the change request, and each later one is an answer of an
+    agent to the reviewers. The commit is the one of the last block. Each number is the sum of the blocks in
+    the right form that hold it, or no value when none holds it. With more than one such block, `agent_runs`
+    is their number."""
+    blocks = run_blocks(text)
+    if not blocks or blocks[-1] is None:
+        return None
+    good = [block for block in blocks if block is not None]
+    run: dict = {cg.RUN_COMMIT: good[-1][cg.RUN_COMMIT]}
+    for key in cg.RUN_NUMBERS:
+        held = [block[key] for block in good if block[key] is not None]
+        run[key] = (sum(held) if len(held) > 1 else held[0]) if held else None
+    if len(good) > 1:
+        run[cg.RUN_COUNT] = len(good)
     return run
 
 
@@ -238,6 +268,28 @@ def review_reports(comments: list[dict], author: str, marker: str = REVIEW_MARKE
             match = SEVERITY_LINE.search(body)
             out.append(match.group(1).lower() if match else None)
     return out
+
+
+def answered_commits(comments: list[dict], author: str) -> list[str]:
+    """The head commits that an answer of an agent handled: the line `Answered commit:` of each comment of
+    the author that holds the marker of a run, oldest first, each commit once."""
+    out: list[str] = []
+    for comment in comments:
+        body = comment.get(COMMENT_BODY) or ""
+        if (comment.get(COMMENT_USER) or {}).get(USER_LOGIN) == author and cg.RUN_MARKER in body:
+            for commit in ANSWERED_LINE.findall(body):
+                if commit.lower() not in out:
+                    out.append(commit.lower())
+    return out
+
+
+def newest_report(comments: list[dict], author: str, marker: str) -> str | None:
+    """The text of the newest report with the marker, or None before the first report."""
+    for comment in reversed(comments):
+        body = comment.get(COMMENT_BODY) or ""
+        if (comment.get(COMMENT_USER) or {}).get(USER_LOGIN) == author and marker in body:
+            return body
+    return None
 
 
 def report_commit(comments: list[dict], author: str, marker: str) -> str | None:
@@ -304,11 +356,27 @@ def conclusions(runs: list[dict], names: list[str]) -> dict[str, str | None]:
     return out
 
 
+def branch_facts(pr: dict) -> dict:
+    """The branch of the change request, its state, and whether it comes from a fork. A value that the API
+    data does not hold is left out."""
+    head, base = pr.get(PR_HEAD) or {}, pr.get(PR_BASE) or {}
+    out: dict = {}
+    if isinstance(head.get(BASE_REF), str):
+        out[cg.FACT_HEAD_BRANCH] = head[BASE_REF]
+    if isinstance(pr.get(PR_STATE), str):
+        out[cg.FACT_STATE] = pr[PR_STATE]
+    names = [(side.get(REPO) or {}).get(FULL_NAME) for side in (head, base)]
+    if all(isinstance(name, str) for name in names):
+        out[cg.FACT_FROM_FORK] = names[0] != names[1]
+    return out
+
+
 def build_facts(pr: dict, files: list[dict], issues: dict[int, dict | None], unresolved: int,
                 checks: dict[str, str | None], review: list[str | None] | None = None,
                 plans: dict[str, bool] | None = None, removed: set[str] | None = None,
                 code_review: list[str | None] | None = None, code_commit: str | None = None,
-                head: str | None = None, review_commit: str | None = None) -> dict:
+                head: str | None = None, review_commit: str | None = None,
+                answered: list[str] | None = None) -> dict:
     """The facts file, from the API data. Numbers that are not issues are left out. The review loop
     facts are written only when the caller named a reviewer workflow: `review` holds the severity line of each
     report, oldest first; the round count and the newest severity come from it; `review_commit` is the line
@@ -318,7 +386,8 @@ def build_facts(pr: dict, files: list[dict], issues: dict[int, dict | None], unr
     The facts of the code review are written only when the caller named the reviewer of the code: `code_review`
     holds the severity line of each of its reports, oldest first, and `code_commit` the commit of the newest.
     `head` is the commit that the facts describe. The fact `run` is written only when the text of the change
-    request holds a block of an agent run in the right form."""
+    request holds a block of an agent run in the right form. `answered` holds the head commits that an answer
+    of an agent handled; it is written when the caller read the comments."""
     linked = [
         {cg.ISSUE_NUMBER: number, cg.ISSUE_STATE: issue[ISSUE_STATE]}
         for number, issue in issues.items()
@@ -346,6 +415,8 @@ def build_facts(pr: dict, files: list[dict], issues: dict[int, dict | None], unr
         **loop,
         **code,
         **({} if run is None else {cg.FACT_RUN: run}),
+        **({} if answered is None else {cg.FACT_ANSWERED: answered}),
+        **branch_facts(pr),
     }
 
 
@@ -426,9 +497,10 @@ def find(repo: str, github: GitHub, number: int | None, sha: str | None) -> tupl
 
 def collect(repo: str, number: int, given: dict[str, str], run_names: list[str], github: GitHub,
             sha: str | None = None, review_workflow: str | None = None, author: str = RECORD_AUTHOR,
-            code_review_workflow: str | None = None) -> dict:
+            code_review_workflow: str | None = None, comments_out: Path | None = None) -> dict:
     """The facts of a change request. With a commit, the files and the check runs are those of that commit,
-    so that they agree with the check that is published on it."""
+    so that they agree with the check that is published on it. With `comments_out`, the comments of the change
+    request go to that file as JSON, for the brief of an answer."""
     owner, name = repo.split("/", 1)
     pr = github.get(f"/repos/{repo}/pulls/{number}")
     commit = sha or pr[PR_HEAD][HEAD_SHA]
@@ -443,9 +515,12 @@ def collect(repo: str, number: int, given: dict[str, str], run_names: list[str],
     if run_names:
         runs = github.get(f"/repos/{repo}/commits/{commit}/check-runs?per_page={PAGE_SIZE}")
         checks.update(conclusions(runs.get(RUNS, []), run_names))
-    review, review_commit, code_review, code_commit = None, None, None, None
+    review, review_commit, code_review, code_commit, answered = None, None, None, None, None
     if review_workflow or code_review_workflow:
         comments = github.pages(f"/repos/{repo}/issues/{number}/comments")
+        answered = answered_commits(comments, author)
+        if comments_out is not None:
+            comments_out.write_text(json.dumps(comments), encoding="utf-8")
         if review_workflow:
             review = review_reports(comments, author)
             review_commit = report_commit(comments, author, REVIEW_MARKER)
@@ -457,7 +532,7 @@ def collect(repo: str, number: int, given: dict[str, str], run_names: list[str],
                          for place in (cg.plan_of, cg.old_plan_of))
              for intent in intent_paths(issues)}
     return build_facts(pr, files, issues, unresolved, checks, review, plans, removed_paths(files),
-                       code_review, code_commit, commit, review_commit)
+                       code_review, code_commit, commit, review_commit, answered)
 
 
 def put_record(repo: str, number: int, record: dict, github: GitHub, author: str) -> str:
@@ -532,6 +607,7 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--review-workflow", help="the file name of the reviewer workflow: the repo has a reviewer")
     p.add_argument("--code-review-workflow", help="the file name of the workflow of the reviewer of the code")
     p.add_argument("--author", default=RECORD_AUTHOR, help="the account whose comment carries the review")
+    p.add_argument("--comments", type=Path, help="write the comments of the change request to this file, as JSON")
     p.add_argument("--out", type=Path, required=True)
     args = parser.parse_args(argv)
     try:
@@ -559,7 +635,7 @@ def main(argv: list[str] | None = None) -> int:
                           false=len(record.get(cg.RECORD_KEYS[4]) or [])))
             return cc.PASS
         facts = collect(args.repo, args.pr, parse_checks(args.check), args.check_run, github, args.sha,
-                        args.review_workflow, args.author, args.code_review_workflow)
+                        args.review_workflow, args.author, args.code_review_workflow, args.comments)
         args.out.write_text(json.dumps(facts, indent=2))
         print(msg("written", path=args.out, files=len(facts[cg.FACT_CHANGED_FILES]),
                   issues=len(facts[cg.FACT_LINKED_ISSUES]), threads=facts[cg.FACT_UNRESOLVED_THREADS],

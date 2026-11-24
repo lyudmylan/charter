@@ -357,7 +357,7 @@ class RunRecord(unittest.TestCase):
 
     def test_the_block_is_read_from_the_text(self):
         """record-of-a-run, check 2: the marker line, then the line `Run:` right after it, with the four values
-        in any order; `none` gives no value; the last block of the text counts."""
+        in any order; `none` gives no value; the last block of the text gives the commit."""
         expected = {cg.RUN_COMMIT: self.COMMIT, cg.RUN_TURNS: 12, cg.RUN_DURATION: 65, cg.RUN_COST: 1.5}
         facts = self.facts(f"Closes #4\n\nThe change.\n\n{cg.RUN_MARKER}\n{self.LINE}\n")
         self.assertEqual(facts[cg.FACT_RUN], expected)
@@ -365,8 +365,10 @@ class RunRecord(unittest.TestCase):
         crlf = f"Closes #4\r\n{cg.RUN_MARKER}\r\nRun: cost_usd=none turns=3 commit={self.COMMIT.upper()}  duration_seconds=none\r\n"
         self.assertEqual(self.facts(crlf)[cg.FACT_RUN],
                          {cg.RUN_COMMIT: self.COMMIT, cg.RUN_TURNS: 3, cg.RUN_DURATION: None, cg.RUN_COST: None})
+        # answer-findings, check 3: the last block gives the commit, and the numbers are the sums of the blocks.
         older = f"{cg.RUN_MARKER}\nRun: commit=1234567 turns=1 duration_seconds=1 cost_usd=1\n"
-        self.assertEqual(cf.run_block(f"{older}\nText.\n{cg.RUN_MARKER}\n{self.LINE}\n"), expected)
+        self.assertEqual(cf.run_block(f"{older}\nText.\n{cg.RUN_MARKER}\n{self.LINE}\n"),
+                         {cg.RUN_COMMIT: self.COMMIT, cg.RUN_TURNS: 13, cg.RUN_DURATION: 66, cg.RUN_COST: 2.5, cg.RUN_COUNT: 2})
 
     def test_no_block_and_a_wrong_block_give_no_run(self):
         """record-of-a-run, check 2: a wrong block gives no run, and the collection goes on."""

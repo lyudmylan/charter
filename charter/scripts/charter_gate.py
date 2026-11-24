@@ -22,6 +22,11 @@ Commands:
             [--record FILE] [--scripts-version V]   Also write the evidence record, as JSON.
   tier      --contract C --changed F   The tier of the changed paths in F, and the depth of its review, one on
             [--repo-only]              each line. F is read as for boundary.
+  answer    --facts F --contract C     Whether an agent answers the findings of the reviewers on the change
+            [--by factory|person]      request of a run now. Prints `start=true` or `start=false`, the reason,
+                                       and for a start the issue, the branch, the head commit, the round, and
+                                       the threshold, one `name=value` on each line. The factory starts an
+                                       answer only when the contract says so, `run.answer_start`.
 
 Options:
   --schema PATH, --source PATH, --cache-dir DIR   As in charter_check.
@@ -36,6 +41,7 @@ import argparse
 import datetime
 import json
 import posixpath
+import re
 import shlex
 import subprocess
 import sys
@@ -54,12 +60,14 @@ CMD_PLAN = "plan"      # a part of the verdict, not a command of its own
 CMD_PRODUCT = "product"
 CMD_BOUNDARY = cc.CMD_BOUNDARY
 CMD_TIER = "tier"
+CMD_ANSWER = "answer"
 ARG_FACTS = "facts"
 ARG_CHANGED = "changed"
 PARENT_SEGMENT = ".."
 NUL = "\0"                 # between the paths of a list that git wrote with `-z`: no quotes, no escapes
 GIT_QUOTE = '"'            # git starts a path that holds a special character with it, in a list of lines
 ARG_REPO_ONLY = "repo_only"
+ARG_BY = "by"   # who starts the answer: the factory, after a report, or a person
 
 # Keys of the facts file.
 FACT_CHANGE_REQUEST = "change_request"
@@ -105,6 +113,23 @@ DEFAULT_REVIEW_THRESHOLD = "medium"
 # The reviewer of the code. It reviews a change of a file outside intents/ and plans/. Without the flag, or with
 # false, it is in its shadow period: the verdict prints its state and blocks nothing.
 FIELD_CODE_BLOCKS = "review.code_blocks"
+# The answer to the findings of the reviewers on the change request of a run. The factory starts it only when
+# the contract says so; without a value a person starts each answer.
+FIELD_ANSWER_START = "run.answer_start"
+ANSWER_BY_FACTORY, ANSWER_BY_PERSON = "factory", "person"
+# A dropped finding of an agent of a run starts with these words, after `Dropped finding:`. The script that
+# writes the text of the change request puts them there, so a person tells such a line from the line of a
+# person, and the verdict merges no change request that holds one. The command `body` of the run script is
+# the one writer of such a line.
+AGENT_DROP = "by the agent of a run: "
+FACT_ANSWERED = "answered_commits"   # optional: [commit], the head commits that an answer of an agent already handled
+# Facts on the branch of the change request, for the answer of an agent: all optional.
+FACT_HEAD_BRANCH, FACT_STATE, FACT_FROM_FORK = "head_branch", "state", "from_fork"
+# The branch of a run, `run/<number of the issue>`, and the lines that the command `answer` prints.
+RUN_BRANCH_FORM = "run/{number}"
+RUN_BRANCH = re.compile(r"^run/([1-9][0-9]*)$")
+OUT_START, OUT_REASON, OUT_ISSUE, OUT_BRANCH, OUT_COMMIT, OUT_ROUND, OUT_THRESHOLD = (
+    "start", "reason", "issue", "branch", "commit", "round", "threshold")
 
 # The merge by the verdict. Only a tier whose approver is this role is merged by the verdict; a person merges
 # every other tier, and also this one when a condition of the merge does not hold or a fact is missing.
@@ -118,6 +143,7 @@ RUN_MARKER = "<!-- charter-run -->"
 RUN_LINE = "Run:"
 RUN_COMMIT, RUN_TURNS, RUN_DURATION, RUN_COST = "commit", "turns", "duration_seconds", "cost_usd"
 RUN_NUMBERS = (RUN_TURNS, RUN_DURATION, RUN_COST)
+RUN_COUNT = "agent_runs"   # in the fact `run` with more than one block: the number of the blocks; the three numbers are their sums
 RUN_NONE = "none"
 RUN_SUCCESS, RUN_FLAWED, RUN_MANUAL = "success", "flawed", "manual"
 RUN_OUTCOME = "outcome"
@@ -213,6 +239,24 @@ MSG = {
     "merge_plan_open": "a file under {plans} changed, and the newest report of the intent reviewer is open at {severity}, at {threshold} or above",
     "merge_plan_commit": "a file under {plans} changed, and the newest report of the intent reviewer names the commit {commit}, not the head commit {head}",
     "run": "run: {outcome}, {turns} turns, {duration}, cost {cost} (an estimate of Claude Code)",
+    "run_many": "run: {outcome}, {count} runs of an agent, {turns} turns, {duration}, cost {cost} (an estimate of Claude Code)",
+    "answer_not_factory": "no answer: the contract says that a person starts an answer ({field} is {value})",
+    "answer_no_run": "no answer: no agent run built this change request",
+    "answer_no_head": "no answer: the facts name no head commit",
+    "answer_wait": "no answer yet: the newest report of {reviewer} is not for the head commit {head}",
+    "answer_closed": "no answer: no reviewer has an open finding at {threshold} or above",
+    "answer_limit": "no answer: {reviewer} is at round {rounds} of {limit}: a person decides",
+    "answer_done": "no answer: an agent answered the reports for the head commit {head} already",
+    "answer_start": "answer: round {rounds} of {limit}, open at {threshold} or above: {reviewers}",
+    "answer_start_no_limit": "answer: round {rounds}, no limit in the contract, open at {threshold} or above: {reviewers}",
+    "answer_no_limit": "no answer: the contract holds no limit of rounds, {field}, so only a person starts an answer",
+    "merge_agent_drop": "an agent of a run dropped a finding, and a person reads the reason",
+    "answer_not_open": "no answer: the change request is not open, its state is {state}",
+    "answer_fork": "no answer: the change request is not known to come from a branch of this repo",
+    "answer_no_branch": "no answer: the branch {branch} is not the branch of a run, {form}",
+    "answer_no_issue": "no answer: the change request does not link the open issue {number} of its branch",
+    "reviewer_intents": "the reviewer of intents",
+    "reviewer_code": "the reviewer of the code",
     "run_none": "run: none, no agent run built this change request",
     "run_seconds": "{value:.0f} s",
     "run_dollars": "{value:.2f} USD",
@@ -312,6 +356,9 @@ def load_facts(path: Path) -> dict:
             raise cc.CannotRun(msg("facts_bad_value", key=key, path=path))
     if FACT_RUN in facts and not _is_run(facts[FACT_RUN]):
         raise cc.CannotRun(msg("facts_bad_value", key=FACT_RUN, path=path))
+    answered = facts.get(FACT_ANSWERED, [])
+    if not (isinstance(answered, list) and all(isinstance(c, str) for c in answered)):
+        raise cc.CannotRun(msg("facts_bad_value", key=FACT_ANSWERED, path=path))
     return facts
 
 
@@ -320,9 +367,11 @@ def _is_number(value: object) -> bool:
 
 
 def _is_run(value: object) -> bool:
-    """The fact `run`: a table with the commit as text and the three numbers, each a number or null."""
+    """The fact `run`: a table with the commit as text and the three numbers, each a number or null, and
+    optionally the number of the runs of an agent that the numbers sum."""
     return (isinstance(value, dict) and isinstance(value.get(RUN_COMMIT), str) and bool(value.get(RUN_COMMIT))
-            and all(key in value and (value[key] is None or _is_number(value[key])) for key in RUN_NUMBERS))
+            and all(key in value and (value[key] is None or _is_number(value[key])) for key in RUN_NUMBERS)
+            and (RUN_COUNT not in value or (_is_number(value[RUN_COUNT]) and value[RUN_COUNT] >= 1)))
 
 
 def _is_intent(value: object) -> bool:
@@ -537,6 +586,53 @@ def review_loop_state(facts: dict, e: cc.Effective) -> str:
     return msg("review_open", **values)
 
 
+def answer_state(facts: dict, e: cc.Effective, by_person: bool) -> tuple[bool, str, int]:
+    """Whether an agent answers the findings of the reviewers on the change request of a run now, the reason,
+    and the round of the answer. A reviewer takes part when the change request changes a file that it reviews.
+    Each reviewer that takes part has its newest report on the head commit; else the answer waits. An answer
+    starts when a report is open at the threshold or has no severity line, no open loop is at the limit of
+    the contract, and no answer handled this head commit before. The factory starts an answer only when the
+    contract says so, and only under a limit of rounds: without one nothing ends the loop. A person can start
+    an answer in each of these cases, also a second one for the same commit."""
+    start = e.values.get(FIELD_ANSWER_START, ANSWER_BY_PERSON)
+    if not by_person and start != ANSWER_BY_FACTORY:
+        return False, msg("answer_not_factory", field=FIELD_ANSWER_START, value=start), 0
+    if facts.get(FACT_RUN) is None:
+        return False, msg("answer_no_run"), 0
+    head = facts.get(FACT_HEAD_COMMIT)
+    if not head:
+        return False, msg("answer_no_head"), 0
+    threshold = e.values.get(FIELD_REVIEW_THRESHOLD, DEFAULT_REVIEW_THRESHOLD)
+    limit = e.values.get(FIELD_REVIEW_LOOP)
+    changed = facts[FACT_CHANGED_FILES]
+    reviewers = []
+    if any(not is_code(f) for f in changed):
+        reviewers.append((msg("reviewer_intents"), FACT_REVIEW_REPORTS, FACT_REVIEW_COMMIT))
+    if any(is_code(f) for f in changed):
+        reviewers.append((msg("reviewer_code"), FACT_CODE_REVIEW_REPORTS, FACT_CODE_REVIEW_COMMIT))
+    if limit is None and not by_person:
+        return False, msg("answer_no_limit", field=FIELD_REVIEW_LOOP), 0
+    open_loops: list[tuple[str, int]] = []
+    for name, reports_key, commit_key in reviewers:
+        reports = facts.get(reports_key) or []
+        if not reports or (facts.get(commit_key) or "").lower() != head.lower():
+            return False, msg("answer_wait", reviewer=name, head=head), 0
+        if reports[-1] is None or SEVERITIES.index(reports[-1]) >= SEVERITIES.index(threshold):
+            open_loops.append((name, current_round(reports, threshold)))
+    if not open_loops:
+        return False, msg("answer_closed", threshold=threshold), 0
+    for name, rounds in open_loops:
+        if limit is not None and rounds >= limit:
+            return False, msg("answer_limit", reviewer=name, rounds=rounds, limit=limit), 0
+    if not by_person and head.lower() in [str(c).lower() for c in facts.get(FACT_ANSWERED) or []]:
+        return False, msg("answer_done", head=head), 0
+    rounds = max(r for _, r in open_loops)
+    names = ", ".join(name for name, _ in open_loops)
+    if limit is None:
+        return True, msg("answer_start_no_limit", rounds=rounds, threshold=threshold, reviewers=names), rounds
+    return True, msg("answer_start", rounds=rounds, limit=limit, threshold=threshold, reviewers=names), rounds
+
+
 def is_code(path: str) -> bool:
     """A changed path that the reviewer of the code reviews: a path outside intents/ and plans/."""
     return not (path.startswith(INTENTS_DIR) or path.startswith(PLANS_DIR))
@@ -598,6 +694,8 @@ def merge_decision(facts: dict, e: cc.Effective, ready: bool, spec: dict) -> tup
     head = facts.get(FACT_HEAD_COMMIT)
     if not head:
         return person("merge_no_head")
+    if any(str(reason).lower().startswith(AGENT_DROP.strip().lower()) for reason in facts.get(FACT_DROPPED_FINDINGS) or []):
+        return person("merge_agent_drop")
     threshold = e.values.get(FIELD_REVIEW_THRESHOLD, DEFAULT_REVIEW_THRESHOLD)
     changed = facts[FACT_CHANGED_FILES]
     if any(f.startswith(INTENTS_DIR) for f in changed):
@@ -649,7 +747,9 @@ def run_line(facts: dict, outcome: str | None) -> str:
         return msg("run_none")
     run = facts[FACT_RUN]
     turns, duration, cost = (run.get(key) for key in RUN_NUMBERS)
-    return msg("run", outcome=outcome, turns=RUN_NONE if turns is None else f"{turns:.0f}",
+    count = run.get(RUN_COUNT) or 1
+    return msg("run_many" if count > 1 else "run", outcome=outcome, count=count,
+               turns=RUN_NONE if turns is None else f"{turns:.0f}",
                duration=RUN_NONE if duration is None else msg("run_seconds", value=duration),
                cost=RUN_NONE if cost is None else msg("run_dollars", value=cost))
 
@@ -658,7 +758,9 @@ def run_record(facts: dict, outcome: str | None) -> dict | None:
     """The run in the evidence record: the outcome and the three numbers, or None."""
     if outcome is None:
         return None
-    return {RUN_OUTCOME: outcome, **{key: facts[FACT_RUN].get(key) for key in RUN_NUMBERS}}
+    run = facts[FACT_RUN]
+    return {RUN_OUTCOME: outcome, **{key: run.get(key) for key in RUN_NUMBERS},
+            **({RUN_COUNT: run[RUN_COUNT]} if run.get(RUN_COUNT) else {})}
 
 
 def gate_plan(facts: dict, e: cc.Effective) -> GateResult | None:
@@ -860,6 +962,44 @@ def cmd_verdict(args) -> int:
     return cc.PASS if passed else cc.FAIL
 
 
+def answer_of(facts: dict, e: cc.Effective, by_person: bool) -> tuple[bool, str, dict]:
+    """The decision on an answer of an agent, for a change request as the facts describe it: whether it starts,
+    the reason, and the values of the answer. Before the state of the review loops, the change request is
+    open, comes from a branch of this repo, its branch is the branch of a run, and it links the open issue
+    that the branch names."""
+    state = facts.get(FACT_STATE)
+    if state != STATE_OPEN:
+        return False, msg("answer_not_open", state=state), {}
+    if facts.get(FACT_FROM_FORK) is not False:
+        return False, msg("answer_fork"), {}
+    branch = facts.get(FACT_HEAD_BRANCH)
+    match = RUN_BRANCH.match(branch) if isinstance(branch, str) else None
+    if not match:
+        return False, msg("answer_no_branch", branch=branch, form=RUN_BRANCH_FORM.format(number="<number>")), {}
+    number = int(match.group(1))
+    if not any(i.get(ISSUE_NUMBER) == number and str(i.get(ISSUE_STATE)).lower() == STATE_OPEN
+               for i in facts[FACT_LINKED_ISSUES]):
+        return False, msg("answer_no_issue", number=number), {}
+    start, reason, rounds = answer_state(facts, e, by_person)
+    values = {OUT_ISSUE: number, OUT_BRANCH: branch, OUT_COMMIT: facts.get(FACT_HEAD_COMMIT), OUT_ROUND: rounds,
+              OUT_THRESHOLD: e.values.get(FIELD_REVIEW_THRESHOLD, DEFAULT_REVIEW_THRESHOLD)}
+    return start, reason, values if start else {}
+
+
+def cmd_answer(args) -> int:
+    """Print the decision as lines `name=value`, for the outputs of a step: `start`, `reason`, and, when the
+    answer starts, the issue, the branch, the head commit, the round, and the threshold. A decision ends with
+    0 in both cases; only a command that could not run ends with another code."""
+    start, reason, values = answer_of(load_facts(args.facts), effective(args), args.by == ANSWER_BY_PERSON)
+    out = {OUT_START: "true" if start else "false", OUT_REASON: reason, **values}
+    if args.json:
+        print(json.dumps(out, indent=2))
+    else:
+        for name, value in out.items():
+            print(f"{name}={value}")
+    return cc.PASS
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="charter_gate", description=__doc__,
                                      formatter_class=argparse.RawDescriptionHelpFormatter)
@@ -873,6 +1013,7 @@ def main(argv: list[str] | None = None) -> int:
         CMD_BOUNDARY: (cmd_boundary, False, True),
         CMD_VERDICT: (cmd_verdict, True, True),
         CMD_TIER: (cmd_tier, False, True),
+        CMD_ANSWER: (cmd_answer, True, True),
     }
     for name, (_, needs_facts, needs_contract) in specs.items():
         p = sub.add_parser(name)
@@ -888,6 +1029,9 @@ def main(argv: list[str] | None = None) -> int:
             p.add_argument(f"--{ARG_RECORD}", type=Path, default=None, help="write the evidence record to this file")
             p.add_argument(f"--{ARG_SCRIPTS_VERSION.replace('_', '-')}", dest=ARG_SCRIPTS_VERSION, default="",
                            help="the version of the scripts that make the record, for example a commit")
+        if name == CMD_ANSWER:
+            p.add_argument(f"--{ARG_BY}", choices=(ANSWER_BY_FACTORY, ANSWER_BY_PERSON), default=ANSWER_BY_FACTORY,
+                           help="who starts the answer; the factory starts one only when the contract says so")
         if name in (CMD_BOUNDARY, CMD_TIER):
             p.add_argument(f"--{ARG_CHANGED}", type=Path, required=True,
                            help="a file with the paths that the run changed: with NUL between them, or one on each line")

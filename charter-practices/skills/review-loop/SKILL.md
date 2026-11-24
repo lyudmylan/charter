@@ -8,7 +8,9 @@ description: Runs the author side of the review loop on a change request. After 
 You are the author. The reviewer is another agent, in CI; at each run it posts a new comment that begins with
 `<!-- charter-intent-review -->` and ends with `Highest open severity: <level>`. The contract gives the stop rule: `review.threshold`
 (default `medium`) and `limits.review_loop`. Read both with `python3 charter/scripts/charter_check.py check charter.toml --json`, or
-from the installed plugin's scripts when this repo has none.
+from the installed plugin's scripts when this repo has none. On a branch `run/<number>`, which a run of an agent built, read `run.answer_start`
+in the contract first: with `factory`, an agent of the factory answers the findings, so answer none and push nothing there; its comment on the
+change request says what it did with each finding. With `person` or no value, answer here, or start it: `gh workflow run run.yml -f change_request=<number>`.
 
 ## One round
 
@@ -17,13 +19,11 @@ from the installed plugin's scripts when this repo has none.
    `gh api repos/<owner>/<repo>/issues/<number>/comments --jq '[.[] | select(.body | startswith("<!-- charter-intent-review -->"))] | last | .body'`.
 2. Decide each finding at the threshold or above, in the order of the report:
    - correct: change the intent, in the smallest way that answers the finding;
-   - drop: when the finding contradicts a decision of the leader or a fact of the code, add one line
-     `Dropped finding: <reason>` to the text of the change request with `gh pr edit <number> --body-file`;
-     name the finding in the reason, so that the reviewer and the leader recognize it.
+   - drop: when the finding contradicts a decision of the leader or a fact of the code, add one line `Dropped finding: <reason>` to the
+     text of the change request with `gh pr edit <number> --body-file`; name the finding in the reason, so that the reviewer and the leader recognize it.
    A finding below the threshold: correct it when it is one line of work; else leave it.
    Mark nothing as false: only the leader writes `False finding: <reason>`.
-3. Run the two commands of `AGENTS.md` ("Before a push"). Commit: `Answer the findings of review
-   round <n>`. Push. The reviewer runs again on the push.
+3. Run the two commands of `AGENTS.md` ("Before a push"). Commit: `Answer the findings of review round <n>`. Push. The reviewer runs again.
 
 ## The stop rule
 

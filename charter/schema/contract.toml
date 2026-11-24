@@ -133,6 +133,13 @@ note = "Path patterns that a run without a person never changes, adds, or delete
 kind = "set"
 note = "Path patterns that a run without a person never reads."
 
+# --- The run of an agent ---
+
+[fields."run.answer_start"]
+kind = "choice"
+order = ["factory", "person"]
+note = "What starts the agent that answers the findings of the reviewers on the change request of a run. With factory, the run workflow starts it after the reports of the reviewers. With person, or without a value, a person starts each answer."
+
 # --- Quality checks ---
 
 [fields."checks.quality"]

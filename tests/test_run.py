@@ -42,9 +42,15 @@ READY_STEP, INSTALL_STEP, SETTINGS_STEP = ("Read the issue and decide whether it
 BRIEF_STEP, AGENT_STEP, RESULT_STEP = "Write the brief", "Run the agent", "Take the result of the agent"
 GATE_STEP, PUBLISH_STEP, OUTCOME_STEP = ("Check the result against the boundary", "Publish the change request",
                                          "Write the outcome on the issue")
+# answer-findings: the step that publishes an answer, and the steps of the job that decides on one.
+ANSWER_PUBLISH_STEP = "Publish the answer on the change request"
+DECIDE_MAIN_STEP, FIND_STEP, DECIDE_STEP = ("Take the main branch, for the decision", "Find the change request",
+                                            "Decide whether an answer starts")
+FOR_THE_DECISION = ", for the decision"
 ORDER = ["Take the main branch", None, READY_STEP, INSTALL_STEP, SETTINGS_STEP, BRIEF_STEP, AGENT_STEP,
-         RESULT_STEP, GATE_STEP, PUBLISH_STEP, OUTCOME_STEP]
-AFTER_AGENT = [RESULT_STEP, GATE_STEP, PUBLISH_STEP, OUTCOME_STEP]
+         RESULT_STEP, GATE_STEP, PUBLISH_STEP, ANSWER_PUBLISH_STEP, OUTCOME_STEP,
+         DECIDE_MAIN_STEP, FOR_THE_DECISION, FIND_STEP, DECIDE_STEP]
+AFTER_AGENT = [RESULT_STEP, GATE_STEP, PUBLISH_STEP, ANSWER_PUBLISH_STEP, OUTCOME_STEP]
 HOOKS_OFF = "-c core.hooksPath=/dev/null"
 RUN_TOKEN, WORKFLOW_TOKEN = "run-secret-value", "workflow-secret-value"
 URL = "https://example.invalid/owner/name/pull/8"
@@ -68,11 +74,13 @@ def if_of(block: str) -> str | None:
 
 
 def evaluate(expression: str, context: dict[str, object]) -> bool:
-    """An expression of the code host, as Python: the names of the context, `&&`, `||`, `!=`, `==`, and the
-    functions `success()` and `always()`. A name that the context does not hold is an empty text."""
+    """An expression of the code host, as Python: the names of the context, `&&`, `||`, `!=`, `==`, the
+    functions `success()` and `always()`, and `!cancelled()`. A name that the context does not hold is an empty
+    text, and a run is not cancelled when the context does not say so."""
     text = expression.replace("&&", " and ").replace("||", " or ")
+    text = text.replace("!cancelled()", repr(not context.get("cancelled", False)))
     text = re.sub(r"\b(success|always|failure)\(\)", lambda m: repr(context[m.group(1)]), text)
-    text = re.sub(r"\b(?:vars|github|steps|inputs)(?:\.[\w-]+)+", lambda m: repr(context.get(m.group(0), "")), text)
+    text = re.sub(r"\b(?:vars|github|steps|inputs|needs)(?:\.[\w-]+)+", lambda m: repr(context.get(m.group(0), "")), text)
     return bool(eval(text, {"__builtins__": {}}, {}))  # noqa: S307: the text is the workflow of this repo
 
 
@@ -152,7 +160,8 @@ class Workflow(unittest.TestCase):
         of the group waits, `queue: max`."""
         for name, text in self.files.items():
             with self.subTest(file=name):
-                self.assertIn("on:\n  issues:\n    types: [labeled]\n  workflow_dispatch:\n    inputs:\n      issue:\n", text)
+                self.assertIn("on:\n  issues:\n    types: [labeled]\n  workflow_run:\n", text)
+                self.assertIn("  workflow_dispatch:\n    inputs:\n      issue:\n", text)
                 self.assertNotIn("pull_request", text)
                 self.assertIn("concurrency:\n  group: charter-run\n  cancel-in-progress: false\n  queue: max\n", text)
                 self.assertEqual(text.count("concurrency:"), 1)
@@ -165,6 +174,7 @@ class Workflow(unittest.TestCase):
                     ({"github.event_name": "issues", "github.event.label.name": "bug"}, False),
                     ({"vars.CHARTER_RUNS": "off", "github.event_name": "workflow_dispatch"}, False),
                     ({"vars.CHARTER_RUNS": "off", "github.event_name": "issues", "github.event.label.name": "charter-run"}, False),
+                    ({"github.event_name": "workflow_dispatch", "cancelled": True}, False),
                 )
                 for context, runs in cases:
                     with self.subTest(context=context):
@@ -176,7 +186,7 @@ class Workflow(unittest.TestCase):
         for name, text in self.files.items():
             with self.subTest(file=name):
                 own = OWN_STEP if name == "this workflow" else FETCH_STEP
-                self.assertEqual(steps_of(text), [own if s is None else s for s in ORDER])
+                self.assertEqual(steps_of(text), [own if s is None else own + s if s == FOR_THE_DECISION else s for s in ORDER])
                 lines = text.replace("%{toolchain}", "").splitlines()
                 start, end = lines.index(cs.STEP_INDENT + cs.TOOLCHAIN_START), lines.index(cs.STEP_INDENT + cs.TOOLCHAIN_END)
                 self.assertLess(lines.index(f"      - name: {READY_STEP}"), start)
@@ -196,6 +206,7 @@ class Workflow(unittest.TestCase):
                             with self.subTest(result=result, gate=gate, success=success):
                                 self.assertEqual(evaluate(publish_if, context),
                                                  success and result == "success" and gate == "success", publish_if)
+                                self.assertFalse(evaluate(publish_if, {**context, "needs.decide.outputs.start": "true"}))
                 self.assertEqual(if_of(step_text(text, OUTCOME_STEP)), "always()")
 
     def test_each_secret_is_in_one_step(self):
@@ -211,12 +222,15 @@ class Workflow(unittest.TestCase):
                 top = re.search(r"^env:\n((?:  .*\n)+)", text, re.M).group(1)
                 self.assertNotRegex(top, r"(?i)secret|token")
                 self.assertNotRegex(text, r"(?m)^    env:")
-                self.assertEqual(text.count("secrets.CHARTER_RUN_TOKEN"), 1)
-                self.assertIn("secrets.CHARTER_RUN_TOKEN", step_text(text, PUBLISH_STEP))
+                # The token of a person: in the step that publishes a run, and in the one that publishes an answer.
+                self.assertEqual(text.count("secrets.CHARTER_RUN_TOKEN"), 2)
+                for step in (PUBLISH_STEP, ANSWER_PUBLISH_STEP):
+                    self.assertEqual(step_text(text, step).count("secrets.CHARTER_RUN_TOKEN"), 1)
                 # The organization source: in the two steps that read the contract with it, and its clone is
-                # gone before the agent starts, because the shell of the agent can read most of the disk.
-                self.assertEqual(text.count("secrets.CHARTER_ORG_TOKEN"), 2)
-                for step in (SETTINGS_STEP, GATE_STEP):
+                # gone before the agent starts, because the shell of the agent can read most of the disk. The
+                # job of the decision reads the contract with it too, on a machine of its own.
+                self.assertEqual(text.count("secrets.CHARTER_ORG_TOKEN"), 3)
+                for step in (SETTINGS_STEP, GATE_STEP, DECIDE_STEP):
                     self.assertIn("secrets.CHARTER_ORG_TOKEN", step_text(text, step))
                 settings = run_block(text, SETTINGS_STEP)
                 self.assertLess(settings.index("charter_check.py\" boundary"), settings.index('rm -rf "${S[3]}"'))
@@ -225,10 +239,11 @@ class Workflow(unittest.TestCase):
                 for step in steps_of(text):
                     block = step_text(text, step)
                     if "secrets.GITHUB_TOKEN" in block:
-                        self.assertIn(step, (READY_STEP, OUTCOME_STEP))
+                        self.assertIn(step, (READY_STEP, OUTCOME_STEP, FIND_STEP, DECIDE_STEP))
                 uses = re.findall(r"uses: (\S+)", text)
-                self.assertEqual(uses, ["actions/checkout@v4"])
-                self.assertIn("          persist-credentials: false\n", step_text(text, "Take the main branch"))
+                self.assertEqual(uses, ["actions/checkout@v4", "actions/checkout@v4"])
+                for step in ("Take the main branch", DECIDE_MAIN_STEP):
+                    self.assertIn("          persist-credentials: false\n", step_text(text, step))
 
     def test_no_step_after_the_agent_runs_a_file_of_the_folder(self):
         """run-from-an-issue, check 4: each step after the agent calls the copy of the scripts of Charter, `git`,
@@ -308,7 +323,7 @@ class Workflow(unittest.TestCase):
         """sandbox-on-the-code-host, check 2: a name that moves to a later image is not in the workflow."""
         for name, text in self.files.items():
             with self.subTest(file=name):
-                self.assertEqual(re.findall(r"(?m)^    runs-on: (.+)$", text), ["ubuntu-24.04"])
+                self.assertEqual(re.findall(r"(?m)^    runs-on: (.+)$", text), ["ubuntu-24.04", "ubuntu-24.04"])
 
     def test_the_workflow_of_this_repo_follows_the_template(self):
         """run-from-an-issue, check 11: the two files differ only in the place of the scripts of Charter, which
@@ -323,7 +338,8 @@ class Workflow(unittest.TestCase):
         header = ("# The scripts come from Charter, fetched at the version that the contract names.\n",
                   "# The scripts come from the main branch, in a git worktree outside the folder of the agent.\n")
         expected = self.template
-        for old, new in ((fetch, base), header, ("%{toolchain}", "")):
+        for_the_decision = tuple(part.replace("\n", FOR_THE_DECISION + "\n", 1) for part in (fetch, base))
+        for old, new in ((fetch, base), for_the_decision, header, ("%{toolchain}", "")):
             self.assertEqual(expected.count(old), 1, old)
             expected = expected.replace(old, new)
         self.assertEqual(self.text, expected)
