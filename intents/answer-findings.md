@@ -29,11 +29,13 @@ correction, or a dropped finding with its reason.
   main branch, and prints whether an answer starts, with the reason. An answer starts for the open change
   request of a run of this repo, when each reviewer that takes part has its newest report on the head
   commit, a report is open at the threshold or has no severity line, no open loop is at the limit, and no
-  answer handled that head commit before. The findings of the reviewer of the code get an answer also in
+  answer handled that head commit before. Without a limit of rounds in the contract nothing ends the loop,
+  so the factory starts no answer. The findings of the reviewer of the code get an answer also in
   its shadow period. A person can start an answer in each case but the limit.
 - The facts collector: the branch, the state, and the fork of the change request; the head commits that an
   answer handled, from the comments; and the fact `run` as the sum of the blocks of the text, one for the
-  run and one for each answer.
+  run and one for each answer. The line of the verdict and the record of a run name the number of the runs
+  of an agent. This is a count, not the state of an answer.
 - The workflow `run`, in the template and in this repo. It starts also after a run of a reviewer workflow
   on a branch `run/**`, and by hand with the number of a change request. A job `decide` reads the facts
   and says whether an answer starts; it starts no agent. The job `run` then works as for an issue: the
@@ -49,6 +51,10 @@ correction, or a dropped finding with its reason.
 - The publishing: a push to the branch of the run with no force; the text of the change request keeps its
   lines and gets each new line `Dropped finding:` and one more block of a run. No other line of the agent
   reaches the text. An answer that changed no path and dropped no finding publishes nothing.
+- A finding that the agent dropped. The reviewers read a line `Dropped finding:` as a closed finding, and a
+  sentence in a report or in the issue could lead the agent to drop a finding that is right. So the script
+  writes the words `by the agent of a run:` into each such line, and the verdict merges no change request
+  that holds one: a person reads the reason before the merge.
 - The outcome: a comment on the change request, with the head commit that the agent answered, the three
   numbers, and the lines of its answers.
 - The skill `review-loop`: on the branch of a run with `factory`, a session answers no finding.
@@ -76,6 +82,7 @@ that the leader marks as false. A line of the verdict on the state of the answer
    test: `tests/test_answer.py::Decision.test_each_other_state_starts_no_answer_and_names_its_reason`
    test: `tests/test_answer.py::Decision.test_the_factory_starts_an_answer_only_when_the_contract_says_so`
    test: `tests/test_answer.py::Decision.test_a_facts_file_that_cannot_be_read_is_no_decision`
+   test: `tests/test_answer.py::Decision.test_without_a_limit_of_rounds_the_factory_starts_no_answer`
 3. The facts hold the branch, the state, the fork, and the answered commits. The fact `run` sums the
    blocks, and the verdict and the record name the number of the runs of an agent.
    test: `tests/test_answer.py::Facts.test_the_facts_hold_the_branch_and_the_answered_commits`
@@ -88,11 +95,13 @@ that the leader marks as false. A line of the verdict on the state of the answer
 5. The commit of an answer names its round, and an answer with no changed path is a result.
    test: `tests/test_answer.py::Result.test_the_commit_of_an_answer_names_its_round`
    test: `tests/test_answer.py::Result.test_an_answer_with_no_changed_path_is_a_result`
-6. The text of the change request gets each new dropped finding and no other line of the agent. No changed
-   path and no dropped finding is no answer. A link in the place of the answers is not followed.
+6. The text of the change request gets each new dropped finding, with the words that name the agent of a
+   run, and no other line of the agent. No changed path and no dropped finding is no answer. A link in the
+   place of the answers is not followed. The verdict merges no change request with such a dropped finding.
    test: `tests/test_answer.py::Text.test_the_text_gets_each_new_dropped_finding_and_no_other_line`
    test: `tests/test_answer.py::Text.test_no_changed_path_and_no_dropped_finding_is_no_answer`
    test: `tests/test_answer.py::Text.test_the_answers_file_is_read_as_data`
+   test: `tests/test_answer.py::Merge.test_the_verdict_merges_no_change_request_with_a_finding_that_an_agent_dropped`
 7. The comment of an answer names the answered commit, in the form that the facts collector reads back,
    and the answers of the agent.
    test: `tests/test_answer.py::Outcome.test_the_comment_of_an_answer_names_the_commit_and_the_answers`

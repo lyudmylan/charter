@@ -117,6 +117,10 @@ FIELD_CODE_BLOCKS = "review.code_blocks"
 # the contract says so; without a value a person starts each answer.
 FIELD_ANSWER_START = "run.answer_start"
 ANSWER_BY_FACTORY, ANSWER_BY_PERSON = "factory", "person"
+# A dropped finding of an agent of a run starts with these words, after `Dropped finding:`. The script that
+# writes the text of the change request puts them there, so a person tells such a line from the line of a
+# person, and the verdict merges no change request that holds one.
+AGENT_DROP = "by the agent of a run: "
 FACT_ANSWERED = "answered_commits"   # optional: [commit], the head commits that an answer of an agent already handled
 # Facts on the branch of the change request, for the answer of an agent: all optional.
 FACT_HEAD_BRANCH, FACT_STATE, FACT_FROM_FORK = "head_branch", "state", "from_fork"
@@ -244,6 +248,8 @@ MSG = {
     "answer_done": "no answer: an agent answered the reports for the head commit {head} already",
     "answer_start": "answer: round {rounds} of {limit}, open at {threshold} or above: {reviewers}",
     "answer_start_no_limit": "answer: round {rounds}, no limit in the contract, open at {threshold} or above: {reviewers}",
+    "answer_no_limit": "no answer: the contract holds no limit of rounds, {field}, so only a person starts an answer",
+    "merge_agent_drop": "an agent of a run dropped a finding, and a person reads the reason",
     "answer_not_open": "no answer: the change request is not open, its state is {state}",
     "answer_fork": "no answer: the change request is not known to come from a branch of this repo",
     "answer_no_branch": "no answer: the branch {branch} is not the branch of a run, {form}",
@@ -585,7 +591,8 @@ def answer_state(facts: dict, e: cc.Effective, by_person: bool) -> tuple[bool, s
     Each reviewer that takes part has its newest report on the head commit; else the answer waits. An answer
     starts when a report is open at the threshold or has no severity line, no open loop is at the limit of
     the contract, and no answer handled this head commit before. The factory starts an answer only when the
-    contract says so; a person can start one in each case, also a second one for the same commit."""
+    contract says so, and only under a limit of rounds: without one nothing ends the loop. A person can start
+    an answer in each of these cases, also a second one for the same commit."""
     start = e.values.get(FIELD_ANSWER_START, ANSWER_BY_PERSON)
     if not by_person and start != ANSWER_BY_FACTORY:
         return False, msg("answer_not_factory", field=FIELD_ANSWER_START, value=start), 0
@@ -602,6 +609,8 @@ def answer_state(facts: dict, e: cc.Effective, by_person: bool) -> tuple[bool, s
         reviewers.append((msg("reviewer_intents"), FACT_REVIEW_REPORTS, FACT_REVIEW_COMMIT))
     if any(is_code(f) for f in changed):
         reviewers.append((msg("reviewer_code"), FACT_CODE_REVIEW_REPORTS, FACT_CODE_REVIEW_COMMIT))
+    if limit is None and not by_person:
+        return False, msg("answer_no_limit", field=FIELD_REVIEW_LOOP), 0
     open_loops: list[tuple[str, int]] = []
     for name, reports_key, commit_key in reviewers:
         reports = facts.get(reports_key) or []
@@ -684,6 +693,8 @@ def merge_decision(facts: dict, e: cc.Effective, ready: bool, spec: dict) -> tup
     head = facts.get(FACT_HEAD_COMMIT)
     if not head:
         return person("merge_no_head")
+    if any(str(reason).lower().startswith(AGENT_DROP.strip().lower()) for reason in facts.get(FACT_DROPPED_FINDINGS) or []):
+        return person("merge_agent_drop")
     threshold = e.values.get(FIELD_REVIEW_THRESHOLD, DEFAULT_REVIEW_THRESHOLD)
     changed = facts[FACT_CHANGED_FILES]
     if any(f.startswith(INTENTS_DIR) for f in changed):

@@ -315,7 +315,9 @@ jobs:
   # The decision on an answer. It starts no agent: it finds the change request, reads its facts and the
   # contract of the main branch with its organization source, and prints whether an answer starts. After a
   # report of a reviewer, "no answer" ends this job with success, and the job `run` does not start. When a
-  # person named the change request, "no answer" fails this job, so that the person sees the reason.
+  # person named the change request, "no answer" fails this job, so that the person sees the reason. A run
+  # whose machine stops before its last step writes no comment with the answered commit; the next report on
+  # the same head commit then starts one more answer, inside the limit of rounds.
   decide:
     name: decide
     if: vars.CHARTER_RUNS != 'off' && (inputs.change_request != '' || (github.event_name == 'workflow_run' && github.event.workflow_run.head_repository.full_name == github.repository))

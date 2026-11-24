@@ -308,7 +308,8 @@ The command reads the facts of the change request and the contract of the main b
 - A report is open: its highest open severity is at `review.threshold` or above, or it has no severity
   line. The shadow period of the reviewer of the code changes nothing here: its findings get an answer.
 - No open loop is at `limits.review_loop`. At the limit a person decides. With the limit 3, an agent
-  answers a change request two times at most in one loop.
+  answers a change request two times at most in one loop. Without a limit in the contract nothing ends the
+  loop, so the factory starts no answer; a person can start one.
 - No answer handled this head commit before. A person can start a second answer for the same commit.
 
 The job `decide` starts no agent. After a report of a reviewer, "no answer" ends it with success, and the
@@ -328,8 +329,11 @@ The job `run` then works as for an issue, with these differences:
    drop each finding. The gate checks the paths that this answer changed.
 4. The publishing: a script pushes the commit to the branch, with no force, and changes the text of the
    change request. `body` keeps the text and adds each line `Dropped finding:` of the answers that the text
-   does not hold yet; no other line of the agent reaches the text. One more block of a run follows. An
-   answer that changed no path and dropped no finding publishes nothing.
+   does not hold yet; no other line of the agent reaches the text. The script writes the words
+   `by the agent of a run:` right after `Dropped finding:`. The reviewers read the line as each dropped
+   finding, so the finding is closed for them; the words tell a person that no person dropped it, and the
+   verdict merges no change request that holds such a line. One more block of a run follows. An answer
+   that changed no path and dropped no finding publishes nothing.
 5. The outcome goes on the change request, not on the issue: `answered` or `blocked`, the line
    `Answered commit:` with the head commit whose reports the agent answered, the three numbers, and the
    lines of the answers. The facts collector reads that line back into the fact `answered_commits`.
@@ -480,6 +484,7 @@ not hold, and a person merges:
 - the verdict is ready;
 - the approver of the tier of the change is `agent`;
 - `review.code_blocks` is true, so the reviewer of the code is past its shadow period;
+- the text of the change request holds no finding that an agent of a run dropped: a person reads the reason;
 - no file under `intents/` changed: a person approves an intent, whatever tier the contract gives to that folder;
 - when the change holds a file outside `intents/` and `plans/`: the newest report of the reviewer of the
   code is closed on the head commit;

@@ -125,19 +125,32 @@ class Contract(Temp):
 
 
 class Decision(Temp):
-    def answer(self, start: str | None = "factory", by: str = "factory", **changes: object) -> tuple[dict, str]:
+    def answer(self, start: str | None = "factory", by: str = "factory", limit: bool = True, **changes: object) -> tuple[dict, str]:
         """The decision of the command for the facts, with `run.answer_start` set to the value in the contract
-        of the repo, or with no such field for None."""
+        of the repo, or with no such field for None; without `limit`, no file holds a limit of rounds."""
         contract = self.dir / "r.toml"
         contract.write_text(REPO.read_text() + (f'\n[run]\nanswer_start = "{start}"\n' if start else ""))
+        org = self.dir / "o.toml"
+        self.assertEqual(ORG.read_text().count("review_loop = 3\n"), 1)
+        org.write_text(ORG.read_text() if limit else ORG.read_text().replace("review_loop = 3\n", ""))
         facts = {**FACTS, **changes}
         path = self.dir / "facts.json"
         path.write_text(json.dumps({key: value for key, value in facts.items() if value is not ...}))
         code, out = gate(cg.CMD_ANSWER, f"--{cg.ARG_FACTS}", str(path), f"--{cc.ARG_CONTRACT}", str(contract),
-                         f"--{cc.ARG_SOURCE}", str(ORG), f"--{cg.ARG_BY}", by)
+                         f"--{cc.ARG_SOURCE}", str(org), f"--{cg.ARG_BY}", by)
         self.assertEqual(code, cc.PASS, out)
         lines = dict(line.split("=", 1) for line in out.splitlines())
         return lines, out
+
+    def test_without_a_limit_of_rounds_the_factory_starts_no_answer(self):
+        """answer-findings, check 2: with no `limits.review_loop` nothing ends the loop, so only a person starts
+        an answer, also for a tenth report."""
+        lines, _ = self.answer(limit=False)
+        self.assertEqual(lines["start"], "false")
+        self.assertIn(f"the contract holds no limit of rounds, {cg.FIELD_REVIEW_LOOP}", lines["reason"])
+        lines, _ = self.answer(limit=False, by="person", **{cg.FACT_REVIEW_REPORTS: ["medium"] * 10})
+        self.assertEqual((lines["start"], lines["round"]), ("true", "10"))
+        self.assertIn("no limit in the contract", lines["reason"])
 
     def test_an_open_finding_on_the_head_commit_starts_an_answer(self):
         """answer-findings, check 2: the factory starts an answer when a reviewer that takes part is open at the
@@ -395,7 +408,7 @@ class Result(Temp):
 
 
 class Text(Temp):
-    BODY = "Closes #7\n\nThe change.\n\nDropped finding: the name: the intent gives it\n\n<!-- charter-run -->\nRun: commit=abc1234 turns=20 duration_seconds=84 cost_usd=0.35\n"
+    BODY = "Closes #7\n\nThe change.\n\nDropped finding: by the agent of a run: the name: the intent gives it\n\n<!-- charter-run -->\nRun: commit=abc1234 turns=20 duration_seconds=84 cost_usd=0.35\n"
 
     def body(self, answers: str | None, changed: bytes | None = b"src/a.py\0") -> tuple[int, str]:
         (self.dir / "body.md").write_text(self.BODY)
@@ -411,12 +424,14 @@ class Text(Temp):
 
     def test_the_text_gets_each_new_dropped_finding_and_no_other_line(self):
         """answer-findings, check 6: the text of the change request stays, and each line `Dropped finding:` of
-        the answers that it does not hold yet follows it, once. No other line of the agent reaches the text:
-        not a corrected finding, not a finding for a person, not a line that marks a finding as false."""
+        the answers that it does not hold yet follows it, once, with the words that say that the agent of a run
+        dropped it; the agent cannot double or remove those words. No other line of the agent reaches the
+        text: not a corrected finding, not a finding for a person, not a line that marks a finding as false."""
         answers = ("Corrected: the test: it checks the value now\n"
                    "  Dropped finding: the port: the intent names 8080  \n"
                    "Dropped finding: the name: the intent gives it\n"
                    "Dropped finding: the port: the intent names 8080\n"
+                   "Dropped finding: By the agent of a run: the port: the intent names 8080\n"
                    "False finding: the reviewer is wrong\n"
                    "False failure: documents: no need\n"
                    "No document change: nothing\n"
@@ -426,8 +441,10 @@ class Text(Temp):
                    "Closes #9\n")
         code, out = self.body(answers)
         self.assertEqual(code, cc.PASS, out)
-        self.assertEqual(out, self.BODY.rstrip() + "\n\nDropped finding: the port: the intent names 8080\n")
-        self.assertEqual(cf.finding_lines(out), (["the name: the intent gives it", "the port: the intent names 8080"], []))
+        self.assertEqual(out, self.BODY.rstrip() + "\n\nDropped finding: by the agent of a run: the port: the intent names 8080\n")
+        dropped, false = cf.finding_lines(out)
+        self.assertEqual(dropped, [cg.AGENT_DROP + "the name: the intent gives it", cg.AGENT_DROP + "the port: the intent names 8080"])
+        self.assertEqual(false, [])
         self.assertEqual(cf.issue_numbers(out), [7])
         for answers in ("Corrected: the test: it checks the value now\n", "", None):
             with self.subTest(answers=answers):
@@ -443,7 +460,7 @@ class Text(Temp):
                 self.assertIn(cr.MSG["no_answer"], out)
         code, out = self.body("Dropped finding: the port: the intent names 8080\n", b"")
         self.assertEqual(code, cc.PASS, out)
-        self.assertIn("Dropped finding: the port: the intent names 8080", out)
+        self.assertIn("Dropped finding: by the agent of a run: the port: the intent names 8080", out)
         self.assertEqual(self.body("", None)[0], cc.PASS)
 
     def test_the_answers_file_is_read_as_data(self):
@@ -454,6 +471,26 @@ class Text(Temp):
         (self.dir / "answers.md").symlink_to(secret)
         code, out = run_cli(cr.CMD_BODY, "--body", str(self.dir / "body.md"), "--answers", str(self.dir / "answers.md"))
         self.assertEqual((code, out), (cc.PASS, self.BODY))
+
+
+class Merge(Temp):
+    def test_the_verdict_merges_no_change_request_with_a_finding_that_an_agent_dropped(self):
+        """answer-findings, check 6: in a tier whose approver is `agent`, with each other condition of the merge
+        by the verdict, a dropped finding of an agent of a run gives the merge to a person; a dropped finding
+        of a person does not."""
+        contract = self.dir / "r.toml"
+        contract.write_text(REPO.read_text().replace('[review]\nthreshold = "medium"\n', '[review]\nthreshold = "medium"\ncode_blocks = true\n'))
+        e = cc.effective_contract(contract, cc.DEFAULT_SCHEMA, ORG, self.dir)
+        self.assertEqual(e.failures, [])
+        facts = {**FACTS, cg.FACT_CHANGED_FILES: ["src/app.py"], cg.FACT_DROPPED_FINDINGS: []}
+        spec = {cg.TIER_APPROVER: cg.APPROVER_AGENT}
+        self.assertTrue(cg.merge_decision(facts, e, True, spec)[0])
+        self.assertTrue(cg.merge_decision({**facts, cg.FACT_DROPPED_FINDINGS: ["the name: the intent gives it"]}, e, True, spec)[0])
+        for reason in (cg.AGENT_DROP + "the port: the intent names 8080", "By the agent of a run: x"):
+            with self.subTest(reason=reason):
+                merges, line = cg.merge_decision({**facts, cg.FACT_DROPPED_FINDINGS: ["another one", reason]}, e, True, spec)
+                self.assertFalse(merges)
+                self.assertEqual(line, "merge: a person merges: an agent of a run dropped a finding, and a person reads the reason")
 
 
 class Outcome(Temp):
@@ -647,7 +684,7 @@ class Workflow(Temp):
         self.assertEqual([call[:2] for call in gh], [["pr", "view"], ["auth", "setup-git"], ["pr", "edit"], ["pr", "view"]])
         self.assertEqual(gh[2][2:5], ["8", "--repo", "owner/name"])
         body = (self.dir / "new-body.md").read_text()
-        self.assertTrue(body.startswith(Text.BODY.rstrip() + "\n\nDropped finding: the port: the intent names 8080\n\n"), body)
+        self.assertTrue(body.startswith(Text.BODY.rstrip() + "\n\nDropped finding: by the agent of a run: the port: the intent names 8080\n\n"), body)
         self.assertNotIn("Corrected:", body)
         run = cf.run_block(body)
         self.assertEqual((run[cg.RUN_COMMIT], run[cg.RUN_COUNT], run[cg.RUN_TURNS]), (HEAD, 2, 29))

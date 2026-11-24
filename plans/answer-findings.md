@@ -9,13 +9,14 @@ The intent, the plan, and the code reach the leader together, and the merge of t
 2. `charter/scripts/charter_gate.py`: the function `answer_state` on the review loops, the function
    `answer_of` on the change request, and the command `answer`, which prints `name=value` lines and ends
    with 0 for each decision. The fact `run` can hold `agent_runs`; the line of the verdict and the record
-   name it.
+   name it. The merge by the verdict gets one more condition: no finding that an agent of a run dropped.
 3. `charter/scripts/charter_facts_github.py`: `run_block` reads each block and sums them; the facts
    `head_branch`, `state`, `from_fork`, and `answered_commits`; the option `--comments` of `collect`.
 4. `charter/scripts/charter_run.py`: the brief of an answer, `brief --reports`; `result --answer-round`;
-   the command `body`; the outcome of an answer, `outcome --answered --answers`.
+   the command `body`, which marks each dropped finding as one of the agent of a run; the outcome of an
+   answer, `outcome --answered --answers`.
 5. `charter/templates/run.yml` and `.github/workflows/run.yml`: the trigger after a reviewer workflow on a
-   branch `run/**` and the input `change_request`; the job `decide`, after the job `run` in the file; in
+   branch `run/**` and the input `change_request`; the job `decide`, which `run` needs, written after it in the file; in
    the job `run`, the fetch of the branch in the step that reads the issue, the brief of an answer, the
    open of the branch in the step of the agent, the round for `result`, a step that publishes an answer,
    and the outcome on the change request.

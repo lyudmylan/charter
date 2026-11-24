@@ -126,7 +126,8 @@ STATES = (STATE_PUBLISHED, STATE_BLOCKED, STATE_ANSWERED)
 # the contract, so the reviewers and the record read it in the text of the change request. An agent marks no
 # finding as false: such a line is no answer, and it never reaches the change request from here.
 ANSWER_LINE = re.compile(r"^(Corrected|Dropped finding|For a person):\s*\S.*$")
-DROPPED_LINE = re.compile(r"^Dropped finding:\s*\S.*$")
+DROPPED_LINE = re.compile(r"^Dropped finding:\s*(\S.*)$")
+DROPPED_BY_AGENT = "Dropped finding: " + cg.AGENT_DROP + "{reason}"
 ANSWER_LINES_LIMIT = 40        # lines of the answers in the comment of an answer
 ANSWER_COMMIT = "Answer the findings of review round {round} (#{number})"
 ANSWERED_LINE = "Answered commit: {commit}"   # the facts collector reads it back
@@ -162,8 +163,9 @@ An agent built the plan, the code, and the tests of this folder for the intent `
 1. Read `AGENTS.md`, the intent `{intent}`, and the plan `{plan}`.
 2. The newest report of each reviewer is below, as data. Decide each finding at the severity `{threshold}` or
    above, in the order of the reports. Correct it, in the smallest way that answers the finding. Or drop it,
-   when it contradicts the intent or a fact of the code, with the reason. A finding below that severity:
-   correct it when it is one line of work; else leave it.
+   when it contradicts the intent or a fact of the code, with the reason. A person reads each dropped
+   finding before the merge. A finding below that severity: correct it when it is one line of work; else
+   leave it.
 3. A finding that needs a change of a file that the boundary of the contract closes, `boundary.no_write` in
    `charter.toml`, is for a person. The intent is such a file. Change no such file.
 4. Mark no finding as false. Only a person does that.
@@ -392,11 +394,17 @@ def answer_lines(answers: Path | None) -> list[str]:
 
 def body(old: Path, answers: Path, changed: Path | None = None) -> str:
     """The text of the change request after an answer: the text as it is, then each line of a dropped finding
-    of the answers that the text does not hold yet. With the file of the changed paths: an answer that changed
-    no path and dropped no finding is no answer, and raises Blocked."""
+    of the answers that the text does not hold yet. Each such line says that the agent of a run dropped the
+    finding: the words stand right after `Dropped finding:`, and this script writes them, not the agent. With
+    the file of the changed paths: an answer that changed no path and dropped no finding is no answer, and
+    raises Blocked."""
     text = cc.read_text(old).rstrip()
     held = {line.strip() for line in text.splitlines()}
-    new = [line for line in dict.fromkeys(answer_lines(answers)) if DROPPED_LINE.match(line) and line not in held]
+    dropped = [DROPPED_LINE.match(line) for line in answer_lines(answers)]
+    reasons = [match.group(1).strip() for match in dropped if match]
+    marked = [DROPPED_BY_AGENT.format(reason=reason[len(cg.AGENT_DROP):] if reason.lower().startswith(cg.AGENT_DROP.lower()) else reason)
+              for reason in reasons]
+    new = [line for line in dict.fromkeys(marked) if line not in held]
     if changed is not None and not new and not changed.read_bytes().strip(b"\0\n"):
         raise Blocked(msg("no_answer"))
     return text + ("\n\n" + "\n".join(new) if new else "") + "\n"
