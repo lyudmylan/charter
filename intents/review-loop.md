@@ -1,6 +1,6 @@
 # Intent: the review loop, with a severity, a stop rule, an orchestrator, and a visible round count
 
-Work item: #52, and #51 for the lock of a limit. Status: done. Approval: a person merges the change request that adds this file.
+Work item: #52, and #51 for the lock of a limit. Approval: a person merges the change request that adds this file.
 
 ## Goal
 

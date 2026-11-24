@@ -1,6 +1,6 @@
 # Intent: an agent that is not the author reviews the code of a change request
 
-Work item: #95. Status: done. Approval: a person merges the change request that adds this file.
+Work item: #95. Approval: a person merges the change request that adds this file.
 
 ## Goal
 

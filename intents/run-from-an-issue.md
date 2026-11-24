@@ -1,6 +1,6 @@
 # Intent: a ready issue starts an agent run, and the run ends as a change request
 
-Work item: #92. Status: done. Approval: a person merges the change request that adds this file.
+Work item: #92. Approval: a person merges the change request that adds this file.
 
 ## Goal
 

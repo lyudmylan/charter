@@ -1,6 +1,6 @@
 # Intent: the architecture map holds each choice with its reason, and no file holds one decision
 
-Work item: #84. Status: done. Approval: a person merges the change request that adds this file.
+Work item: #84. Approval: a person merges the change request that adds this file.
 
 ## Goal
 

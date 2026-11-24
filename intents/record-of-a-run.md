@@ -1,6 +1,6 @@
 # Intent: the evidence record holds the outcome and the cost of an agent run
 
-Work item: #93. Status: done. Approval: a person merges the change request that adds this file.
+Work item: #93. Approval: a person merges the change request that adds this file.
 
 ## Goal
 

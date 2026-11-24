@@ -1,6 +1,6 @@
 # Intent: the intent reviewer says what changed since its last report, from the diff
 
-Work item: #86. Status: done. Approval: a person merges the change request that adds this file.
+Work item: #86. Approval: a person merges the change request that adds this file.
 
 ## Goal
 

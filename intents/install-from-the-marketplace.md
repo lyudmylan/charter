@@ -1,6 +1,6 @@
 # Intent: the core as a plugin, and the marketplace of the two plugins
 
-Work item: #36. Status: done. Approval: a person merges the change request that adds this file.
+Work item: #36. Approval: a person merges the change request that adds this file.
 
 ## Goal
 

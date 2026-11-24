@@ -1,6 +1,6 @@
 # Intent: the contract names the test of the product as a whole, and a change request needs its result
 
-Work item: #99. Status: done. Approval: a person merges the change request that adds this file.
+Work item: #99. Approval: a person merges the change request that adds this file.
 
 ## Goal
 

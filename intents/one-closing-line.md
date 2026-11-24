@@ -1,6 +1,6 @@
 # Intent: the change request of a run holds the line that closes its issue one time
 
-Work item: #116. Status: done. Approval: a person merges the change request that adds this file.
+Work item: #116. Approval: a person merges the change request that adds this file.
 
 ## Goal
 

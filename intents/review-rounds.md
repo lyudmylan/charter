@@ -1,6 +1,6 @@
 # Intent: a round of the review loop is a report in the current loop, and each report stays on the change request
 
-Work item: #61. Status: done. Approval: a person merges the change request that adds this file.
+Work item: #61. Approval: a person merges the change request that adds this file.
 
 ## Goal
 
