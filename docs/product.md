@@ -56,7 +56,8 @@ intent, or the workflows, and it holds no credential of the code host. A script 
 after a check of what it changed. A person starts such a run with the label `charter-run` on a ready
 issue; the workflow `run` builds the work item and opens its change request. An agent also answers the
 findings of the reviewers on that change request, within the limit of rounds of the contract. The contract
-says what starts an answer: the factory, or a person.
+says what starts an answer: the factory, or a person. When that agent drops a finding, a person reads the
+reason before the merge: the verdict merges no such change request.
 
 ## The lifecycle map
 

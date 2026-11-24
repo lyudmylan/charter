@@ -119,7 +119,8 @@ FIELD_ANSWER_START = "run.answer_start"
 ANSWER_BY_FACTORY, ANSWER_BY_PERSON = "factory", "person"
 # A dropped finding of an agent of a run starts with these words, after `Dropped finding:`. The script that
 # writes the text of the change request puts them there, so a person tells such a line from the line of a
-# person, and the verdict merges no change request that holds one.
+# person, and the verdict merges no change request that holds one. The command `body` of the run script is
+# the one writer of such a line.
 AGENT_DROP = "by the agent of a run: "
 FACT_ANSWERED = "answered_commits"   # optional: [commit], the head commits that an answer of an agent already handled
 # Facts on the branch of the change request, for the answer of an agent: all optional.

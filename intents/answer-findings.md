@@ -54,7 +54,9 @@ correction, or a dropped finding with its reason.
 - A finding that the agent dropped. The reviewers read a line `Dropped finding:` as a closed finding, and a
   sentence in a report or in the issue could lead the agent to drop a finding that is right. So the script
   writes the words `by the agent of a run:` into each such line, and the verdict merges no change request
-  that holds one: a person reads the reason before the merge.
+  that holds one: a person reads the reason before the merge. The condition acts only in a tier whose
+  approver is `agent`. In a tier that a person merges, the line of the verdict on the merge and the
+  readiness stay as they are, and the person reads the line in the text of the change request.
 - The outcome: a comment on the change request, with the head commit that the agent answered, the three
   numbers, and the lines of its answers.
 - The skill `review-loop`: on the branch of a run with `factory`, a session answers no finding.
@@ -63,8 +65,9 @@ correction, or a dropped finding with its reason.
 
 ## Out of scope
 
-The start of a run after the merge of an intent with no step by hand. The merge by the verdict. A file for
-a team between the organization and the repo. A value of `run.answer_start` for one risk tier. A finding
+The start of a run after the merge of an intent with no step by hand. The merge by the verdict, except the
+one condition on a finding that an agent of a run dropped. A file for a team between the organization and
+the repo. A value of `run.answer_start` for one risk tier. A finding
 that the leader marks as false. A line of the verdict on the state of the answer.
 
 ## Acceptance checks
@@ -98,6 +101,8 @@ that the leader marks as false. A line of the verdict on the state of the answer
 6. The text of the change request gets each new dropped finding, with the words that name the agent of a
    run, and no other line of the agent. No changed path and no dropped finding is no answer. A link in the
    place of the answers is not followed. The verdict merges no change request with such a dropped finding.
+   The product test has no step for this condition: the repo that the setup step makes has no tier whose
+   approver is `agent`, so the test of the function is the check.
    test: `tests/test_answer.py::Text.test_the_text_gets_each_new_dropped_finding_and_no_other_line`
    test: `tests/test_answer.py::Text.test_no_changed_path_and_no_dropped_finding_is_no_answer`
    test: `tests/test_answer.py::Text.test_the_answers_file_is_read_as_data`
