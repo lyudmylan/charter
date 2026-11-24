@@ -11,7 +11,8 @@ The intent, the plan, and the code reach the leader together, and the merge of t
    plan for each intent that it touches.
 3. `intents/planned-intents.md` is removed.
 4. `tests/test_intents.py`: the function `built` in the place of `status_of`; `problems_of` gets the fact
-   as an argument; the closed list of the thirteen older intents; the three tests of the intent.
+   as an argument; the closed list of the older intents; the three tests of the intent,
+   one of them with a plan that is merged before its code.
 5. `tests/product.py`: the step "template of an intent", after the setup step.
 
 ## Files

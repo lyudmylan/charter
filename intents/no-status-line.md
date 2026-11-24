@@ -18,15 +18,17 @@ agent.
   item is built.
 - The test of the intents of this repo used the line: an intent with `planned` may name a test that does
   not exist yet. The test now reads a fact that no person writes by hand: the plan of the intent exists,
-  `plans/<part>.md`, or `intents/<part>.plan.md` for the one plan at the old place. A plan arrives
-  together with the code, in a session and in a run. An intent with no plan is not built yet, and its
-  named tests may be missing.
-- Thirteen intents of this repo are older than the plans and have none. The test holds their names in a
-  closed list and treats them as built. It fails when an intent with no plan is not on the list, so a new
-  intent cannot hide there.
+  `plans/<part>.md`, or `intents/<part>.plan.md` for the one plan at the old place. An intent with no plan
+  is not built yet, and its named tests may be missing.
+- In this repo a plan reaches the main branch in the change request that holds its code. In a run, the
+  agent writes both. In a session, the person accepts the plan in the conversation before the code, and
+  one change request holds the plan, the tests, and the code. A plan that is merged before its code makes
+  its intent count as built: the test then fails and names each test that does not exist.
+- Some intents of this repo are older than the plans and have none. The test holds their names in a
+  closed list and treats them as built. The list cannot grow: the test holds its size, and each name on it
+  is an intent with no plan. A new intent with no plan is not on the list, so it is not built.
 - `intents/planned-intents.md` leaves the repo: it described the status line, and this intent holds the
   check on an intent that is not built yet.
-- The version stays 0.3.17: no tag names it yet.
 
 ## Out of scope
 
@@ -41,8 +43,9 @@ past step: they are records of that work.
 1. An intent whose work item is not built passes with a test that does not exist yet. The same intent
    fails when its work item is built.
    test: `tests/test_intents.py::PlannedIntents.test_an_intent_that_is_not_built_needs_no_existing_test`
-2. An intent with a plan is built, at the place of today or at the old place. An intent with no plan is
-   not built. The thirteen older intents are built, and no other intent of this repo lacks a plan.
+2. An intent with a plan is built, at the place of today or at the old place, and then a named test that
+   does not exist is a fault. The same intent with no plan is not built and has no fault. The older
+   intents are built; their list has a fixed size, and each name on it is an intent with no plan.
    test: `tests/test_intents.py::PlannedIntents.test_the_plan_says_that_a_work_item_is_built`
 3. No intent of this repo holds a status line, and the template holds none.
    test: `tests/test_intents.py::PlannedIntents.test_no_intent_holds_a_status_line`

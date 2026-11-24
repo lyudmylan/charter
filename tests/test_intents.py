@@ -5,6 +5,7 @@ whose script exists. Intent: intent-files, check 1. Run: python3 -m unittest dis
 import importlib.util
 import re
 import shlex
+import tempfile
 import unittest
 from pathlib import Path
 
@@ -32,12 +33,16 @@ def intent_files() -> list:
     return [p for p in sorted(INTENTS.glob("*.md")) if not p.name.endswith(PLAN_SUFFIX)]
 
 
-def built(intent: Path) -> bool:
-    """The work item of the intent is built: its plan exists, at the place of today or at the old place, or
-    the intent is older than the plans. The plan arrives together with the code, so no line of the intent
-    says it. An intent that is not built yet may name a test that does not exist."""
-    plans = (PLANS / intent.name, intent.with_name(intent.stem + PLAN_SUFFIX))
-    return intent.name in BEFORE_THE_PLAN or any(plan.is_file() for plan in plans)
+def has_a_plan(intent: Path, plans: Path = PLANS) -> bool:
+    """The plan of the intent exists, at the place of today or at the old place, next to the intent."""
+    return (plans / intent.name).is_file() or intent.with_name(intent.stem + PLAN_SUFFIX).is_file()
+
+
+def built(intent: Path, plans: Path = PLANS) -> bool:
+    """The work item of the intent is built: its plan exists, or the intent is older than the plans. In
+    this repo a plan reaches the main branch in the change request that holds its code, so no line of the
+    intent says it. An intent that is not built yet may name a test that does not exist."""
+    return intent.name in BEFORE_THE_PLAN or has_a_plan(intent, plans)
 
 
 def check_blocks(section: str) -> list[tuple[str, str]]:
@@ -153,16 +158,33 @@ class PlannedIntents(unittest.TestCase):
 
     def test_the_plan_says_that_a_work_item_is_built(self):
         """no-status-line, check 2: an intent with a plan is built, at the place of today or at the old
-        place; an intent with no plan is not; an intent that is older than the plans is. The list of the
-        older intents is closed: each name on it is an intent with no plan, and no other intent lacks a plan."""
+        place, and then a named test that does not exist is a fault; the same intent with no plan is not
+        built and has no fault. An intent that is older than the plans is built. The list of the older
+        intents is closed: its size is fixed, and each name on it is an intent with no plan."""
+        with tempfile.TemporaryDirectory() as folder:
+            intents, plans = Path(folder) / "intents", Path(folder) / "plans"
+            intents.mkdir()
+            plans.mkdir()
+            intent = intents / "an-intent-of-tomorrow.md"
+            intent.write_text(INTENT_WITH_A_FUTURE_TEST)
+            self.assertFalse(built(intent, plans))
+            self.assertEqual(problems_of(intent.name, intent.read_text(), built(intent, plans)), [])
+            (plans / intent.name).write_text("# Plan\n")
+            self.assertTrue(built(intent, plans))
+            merged_first = problems_of(intent.name, intent.read_text(), built(intent, plans))
+            self.assertEqual(len(merged_first), 1)
+            self.assertIn("missing test file", merged_first[0])
+            (plans / intent.name).unlink()
+            intent.with_name(intent.stem + PLAN_SUFFIX).write_text("# Plan\n")
+            self.assertTrue(built(intent, plans))
         self.assertTrue(built(INTENTS / "no-status-line.md"))
         self.assertTrue(built(INTENTS / "plan-tier.md"))
         self.assertTrue(built(INTENTS / "contract.md"))
-        self.assertFalse(built(INTENTS / "an-intent-of-tomorrow.md"))
-        no_plan = {p.name for p in intent_files()
-                   if not ((PLANS / p.name).is_file() or p.with_name(p.stem + PLAN_SUFFIX).is_file())}
-        self.assertEqual(no_plan, set(BEFORE_THE_PLAN))
         self.assertEqual(len(BEFORE_THE_PLAN), 13)
+        for name in sorted(BEFORE_THE_PLAN):
+            with self.subTest(intent=name):
+                self.assertTrue((INTENTS / name).is_file())
+                self.assertFalse(has_a_plan(INTENTS / name))
 
     def test_no_intent_holds_a_status_line(self):
         """no-status-line, check 3: no intent of this repo and no line of the template holds a status."""

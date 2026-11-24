@@ -45,6 +45,13 @@ def command(name: str, *args: str, cwd: Path) -> subprocess.CompletedProcess:
     return subprocess.run([str(BIN / name), *args], cwd=cwd, capture_output=True, text=True, check=False)
 
 
+def file(path: Path) -> subprocess.CompletedProcess:
+    """The text of a file that a step wrote, in the form of a result: code 1 and the path when it is absent."""
+    if path.is_file():
+        return subprocess.CompletedProcess([], 0, path.read_text(), "")
+    return subprocess.CompletedProcess([], 1, "", f"no file: {path}")
+
+
 def step(name: str, result: subprocess.CompletedProcess, code: int, *expected: str, absent: tuple = ()) -> bool:
     """One step: the exit code, the texts that the output holds, and the texts that it does not hold."""
     output = result.stdout + result.stderr
@@ -63,8 +70,8 @@ def steps(repo: Path, work: Path) -> bool:
     if not step("setup", command("charter-setup", *SETUP_FLAGS, "--target", str(repo), cwd=repo), 0,
                 f"written: {CONTRACT}"):
         return False
-    template = subprocess.run(["cat", str(repo / INTENT_TEMPLATE)], capture_output=True, text=True, check=False)
-    if not step("template of an intent", template, 0, "Work item: #<number>. Approval:", absent=("Status:",)):
+    if not step("template of an intent", file(repo / INTENT_TEMPLATE), 0, "Work item: #<number>. Approval:",
+                absent=("Status:",)):
         return False
     if not step("contract checks", command("charter-check", "all", CONTRACT, *SOURCE, cwd=repo), 0,
                 "all contract checks"):
