@@ -616,8 +616,15 @@ class Publish(Temp):
             "the line alone": (f"\U0001F916 {line}\n", f"Closes #7\n\n{cr.MSG['no_text']}\n"),
             "a sentence about the tool": ("The step installs Claude Code.\nThe file was generated with a script.\n",
                                           "Closes #7\n\nThe step installs Claude Code.\nThe file was generated with a script.\n"),
+            "a trailer with a model name": ("The change.\nCo-Authored-By: Claude Opus 5 <noreply@anthropic.com>\n",
+                                            "Closes #7\n\nThe change.\n"),
+            "a trailer with the name alone": ("The change.\nCo-authored-by: Claude\n", "Closes #7\n\nThe change.\n"),
             "a co-author that is a person": ("Co-Authored-By: A Person <person@example.com>\n",
                                              "Closes #7\n\nCo-Authored-By: A Person <person@example.com>\n"),
+            "a person with the same first name": ("Co-Authored-By: Claude Monet <monet@example.com>\n",
+                                                  "Closes #7\n\nCo-Authored-By: Claude Monet <monet@example.com>\n"),
+            "more than the line": ("Generated with Claude Code, the fix is in the parser.\n",
+                                   "Closes #7\n\nGenerated with Claude Code, the fix is in the parser.\n"),
         }
         for case, (written, expected) in cases.items():
             with self.subTest(case=case):

@@ -98,10 +98,13 @@ ONLY_A_LINK = re.compile(cf.LINKED_ISSUE.pattern, re.IGNORECASE)
 LIST_MARKER = re.compile(r"^[-*+]\s+")
 AROUND_A_LINK = "*_. "
 # A line with which a tool names itself as the author: the line of Claude Code for a change request, with
-# its sign before it or without, and a trailer that names a co-author. The settings of a run take the
-# instruction for such a line away; this is the second guard, for a line that the agent still writes.
-ATTRIBUTION_LINE = re.compile(r"generated with \[?claude code\b.*|co-authored-by:.*\b(claude|anthropic)\b.*", re.IGNORECASE)
-BEFORE_AN_ATTRIBUTION = "*_ \U0001F916\uFE0F"
+# its link or without, and a trailer whose co-author is Claude by name or has an address of Anthropic. The
+# line holds nothing more, so a sentence that begins with the same words stays. The settings of a run take
+# the instruction for such a line away; this is the second guard, for a line that the agent still writes.
+ATTRIBUTION_LINE = re.compile(
+    r"generated with (\[claude code\]\([^()\s]*\)|claude code)\.?"
+    r"|co-authored-by:\s*(claude|.*<[^<>\s]*@anthropic\.com>)", re.IGNORECASE)
+AROUND_AN_ATTRIBUTION = "*_ \U0001F916\uFE0F"
 
 # The outcome on the issue.
 STATE_PUBLISHED, STATE_BLOCKED = "published", "blocked"
@@ -330,7 +333,7 @@ def text(number: int, request: Path) -> str:
     for line in (regular_text(request) or "").splitlines():
         bare = LIST_MARKER.sub("", line.strip())
         link = ONLY_A_LINK.fullmatch(bare.strip(AROUND_A_LINK))
-        attribution = ATTRIBUTION_LINE.fullmatch(bare.lstrip(BEFORE_AN_ATTRIBUTION))
+        attribution = ATTRIBUTION_LINE.fullmatch(bare.strip(AROUND_AN_ATTRIBUTION))
         if not (link and int(link.group(1)) == number) and not attribution:
             kept.append(line)
     written = "\n".join(kept).strip()
