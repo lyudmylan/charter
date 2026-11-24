@@ -22,8 +22,9 @@ Commands:
                                        request, and the turns, the duration, and the cost of the agent.
   text    --number N --request FILE    Print the text of the change request, before the block of the run: the
                                        line `Closes #N`, then what the agent wrote in FILE, without a line of
-                                       it that only links the same issue. A FILE that is missing, empty, or a
-                                       link gives one sentence in its place.
+                                       it that only links the same issue and without a line that names a
+                                       tool as the author. A FILE that is missing, empty, or a link gives one
+                                       sentence in its place.
   record  --agent FILE --commit COMMIT Print the block of the run for the text of the change request: the marker
                                        line, and one line `Run:` with the commit, the turns, the duration in
                                        seconds, and the cost. A value that the result does not hold is `none`.
@@ -96,6 +97,14 @@ CLOSING_LINE = "Closes #{number}"
 ONLY_A_LINK = re.compile(cf.LINKED_ISSUE.pattern, re.IGNORECASE)
 LIST_MARKER = re.compile(r"^[-*+]\s+")
 AROUND_A_LINK = "*_. "
+# A line with which a tool names itself as the author: the line of Claude Code for a change request, with
+# its link or without, and a trailer whose co-author is Claude by name or has an address of Anthropic. The
+# line holds nothing more, so a sentence that begins with the same words stays. The settings of a run take
+# the instruction for such a line away; this is the second guard, for a line that the agent still writes.
+ATTRIBUTION_LINE = re.compile(
+    r"generated with (\[claude code\]\([^()\s]*\)|claude code)\.?"
+    r"|co-authored-by:\s*(claude|.*<[^<>\s]*@anthropic\.com>)", re.IGNORECASE)
+AROUND_AN_ATTRIBUTION = "*_ \U0001F916\uFE0F"
 
 # The outcome on the issue.
 STATE_PUBLISHED, STATE_BLOCKED = "published", "blocked"
@@ -318,11 +327,14 @@ def outcome(state: str, reason: str, agent: Path, url: str | None) -> str:
 
 
 def text(number: int, request: Path) -> str:
-    """The text of the change request, before the block of the run: the closing line, then the text of the agent."""
+    """The text of the change request, before the block of the run: the closing line, then the text of the
+    agent without a line that only links the issue of the run and without a line that names a tool as the author."""
     kept = []
     for line in (regular_text(request) or "").splitlines():
-        link = ONLY_A_LINK.fullmatch(LIST_MARKER.sub("", line.strip()).strip(AROUND_A_LINK))
-        if not (link and int(link.group(1)) == number):
+        bare = LIST_MARKER.sub("", line.strip())
+        link = ONLY_A_LINK.fullmatch(bare.strip(AROUND_A_LINK))
+        attribution = ATTRIBUTION_LINE.fullmatch(bare.strip(AROUND_AN_ATTRIBUTION))
+        if not (link and int(link.group(1)) == number) and not attribution:
             kept.append(line)
     written = "\n".join(kept).strip()
     return f"{CLOSING_LINE.format(number=number)}\n\n{written or msg('no_text')}\n"

@@ -144,6 +144,15 @@ class Settings(Temp):
         self.assertIs(sandbox["failIfUnavailable"], True)
         self.assertIs(self.settings(boundary([], []))["sandbox"]["autoAllowBashIfSandboxed"], True)
 
+    def test_the_settings_switch_the_attribution_off(self):
+        """no-attribution-line, check 1: an empty text for the commit and for the change request, also with
+        an empty boundary; the command prints the same."""
+        for settings in (self.full(), self.settings(boundary([], []))):
+            self.assertEqual(settings["attribution"], {"commit": "", "pr": ""})
+        code, out = run(cc.main, cc.CMD_BOUNDARY, str(self.dir / cs.CONTRACT_FILE), SOURCE, str(ORG))
+        self.assertEqual(code, cc.PASS, out)
+        self.assertEqual(json.loads(out)["attribution"], {"commit": "", "pr": ""})
+
     def test_the_shell_has_no_network(self):
         """boundary-of-a-run, check 3."""
         network = self.full()["sandbox"]["network"]

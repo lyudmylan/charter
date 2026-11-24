@@ -39,6 +39,7 @@ FACTS = {
 SOURCE = ["--source", str(ORG)]
 # What an agent of a run wrote for its change request: a line that links the issue, then its text.
 AGENT_LINK, AGENT_TEXT = "Fixes #1", "The sample change."
+AGENT_ATTRIBUTION = "\U0001F916 Generated with [Claude Code](https://claude.com/claude-code)"
 
 
 def command(name: str, *args: str, cwd: Path) -> subprocess.CompletedProcess:
@@ -80,13 +81,14 @@ def steps(repo: Path, work: Path) -> bool:
                 f"passed: {PRODUCT_COMMAND}"):
         return False
     if not step("settings of a run", command("charter-check", "boundary", CONTRACT, *SOURCE, cwd=repo), 0,
-                '"autoAllowBashIfSandboxed": true', '"allowUnsandboxedCommands": false'):
+                '"autoAllowBashIfSandboxed": true', '"allowUnsandboxedCommands": false', '"attribution": {',
+                '"commit": ""', '"pr": ""'):
         return False
     request = work / "change-request.md"
-    request.write_text(f"{AGENT_LINK}\n\n{AGENT_TEXT}\n")
+    request.write_text(f"{AGENT_LINK}\n\n{AGENT_TEXT}\n\n{AGENT_ATTRIBUTION}\n")
     if not step("text of a change request of a run", command("charter-run", "text", "--number", "1", "--request",
                                                              str(request), cwd=repo), 0,
-                "Closes #1\n\n" + AGENT_TEXT, absent=(AGENT_LINK,)):
+                "Closes #1\n\n" + AGENT_TEXT, absent=(AGENT_LINK, "Generated with")):
         return False
     open_list = work / "open.txt"
     open_list.write_text(f"{OPEN_PATH}\n")

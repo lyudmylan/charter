@@ -128,6 +128,10 @@ SET_ALLOW_UNSANDBOXED = "allowUnsandboxedCommands"
 # limits of the sandbox hold for such a command, and no command runs outside the sandbox.
 SET_AUTO_ALLOW_IN_SANDBOX = "autoAllowBashIfSandboxed"
 SET_FILESYSTEM, SET_DENY_WRITE, SET_DENY_READ = "filesystem", "denyWrite", "denyRead"
+# Claude Code tells the agent to end the text of a commit and of a change request with a line that names
+# the tool. An empty text takes that line out of what the agent reads. The block of the run in the change
+# request says that an agent built the change.
+SET_ATTRIBUTION, SET_ATTRIBUTION_COMMIT, SET_ATTRIBUTION_PR, NO_ATTRIBUTION = "attribution", "commit", "pr", ""
 SET_NETWORK, SET_ALLOWED_DOMAINS, SET_STRICT_ALLOWLIST = "network", "allowedDomains", "strictAllowlist"
 SET_CREDENTIALS, SET_ENV_VARS, SET_NAME, SET_MODE, SET_MODE_DENY = "credentials", "envVars", "name", "mode", "deny"
 RULE_EDIT, RULE_READ = "Edit(/{path})", "Read(/{path})"     # `//` and the path: absolute, from the root of the disk
@@ -691,6 +695,7 @@ def boundary_settings(e: Effective, root: Path) -> dict:
             SET_NETWORK: {SET_ALLOWED_DOMAINS: [], SET_STRICT_ALLOWLIST: True},
             SET_CREDENTIALS: {SET_ENV_VARS: [{SET_NAME: name, SET_MODE: SET_MODE_DENY} for name in RUN_TOKENS]},
         },
+        SET_ATTRIBUTION: {SET_ATTRIBUTION_COMMIT: NO_ATTRIBUTION, SET_ATTRIBUTION_PR: NO_ATTRIBUTION},
     }
 
 
