@@ -88,6 +88,9 @@ def steps(repo: Path, work: Path) -> bool:
     if not step("template of an intent", file(repo / INTENT_TEMPLATE), 0, "Work item: #<number>. Approval:",
                 absent=("Status:",)):
         return False
+    if not step("update of a repo", command("charter-update", "--old-templates", str(ROOT / "charter" / "templates"),
+                                            cwd=repo), 0, "nothing to change", absent=("updated", "refused")):
+        return False
     if not step("contract checks", command("charter-check", "all", CONTRACT, *SOURCE, cwd=repo), 0,
                 "all contract checks"):
         return False

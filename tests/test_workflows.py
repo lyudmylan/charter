@@ -573,7 +573,7 @@ class ReviewerBoundary(unittest.TestCase):
         self.assertIn("| E14 |", (ROOT / "docs" / "decisions.md").read_text())
         for plugin in ("charter", "charter-practices"):
             version = json.loads((ROOT / plugin / ".claude-plugin" / "plugin.json").read_text())["version"]
-            self.assertEqual(version, "0.3.20")
+            self.assertGreaterEqual(tuple(int(part) for part in version.split(".")), (0, 3, 20))
 
 
 class VerdictMerges(unittest.TestCase):

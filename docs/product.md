@@ -91,7 +91,7 @@ production and back.
 Charter ships as two plugins.
 
 - `charter` holds the contract, the gates, the agent boundary, the stop rules, the
-  evidence record, and the setup step: one command sets a repo up.
+  evidence record, and the setup step: one command sets a repo up. A second command, `charter-update`, moves a repo that is set up to a new version of Charter.
 - `charter-practices` holds a small number of light skills. It needs `charter`, because
   its skills read the contract.
 - An organization with its own skills installs `charter` and maps its skills to the
