@@ -1,0 +1,33 @@
+# The test of the boundary of a reviewer, intent reviewer-boundary, check 6. It runs Claude Code with the
+# flags of the reviewer template on a machine of the code host. A local server stands in the place of the
+# model, so the run makes no model call, and it holds no secret: each token is a false value.
+name: reviewer-boundary
+
+on:
+  pull_request:
+    paths:
+      - "charter/templates/review-*.yml"
+      - ".github/workflows/review-*.yml"
+      - ".github/workflows/reviewer-boundary.yml"
+      - "tests/probe/**"
+
+permissions:
+  contents: read
+
+jobs:
+  reviewer-boundary:
+    name: reviewer-boundary
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - name: Install Claude Code
+        run: |
+          curl -fsSL https://claude.ai/install.sh | bash
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+      - name: Test the boundary of a reviewer
+        run: |
+          claude --version
+          python3 tests/probe/reviewer_probe.py
