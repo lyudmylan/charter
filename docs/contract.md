@@ -613,9 +613,12 @@ charter-update [--target DIR] [--check] [--old-templates DIR]
   command names each field that the contract template of the new version adds, and each rule that its
   rules file cites and the rules file of the repo does not.
 - `--check` prints the same lines and writes no file.
+- `--old-templates DIR` gives the folder `charter/templates` of the old version, and the command fetches
+  nothing. It serves a computer with no network, and the tests.
 
-The command refuses a contract that names a newer version than the installed Charter. After it, the
-person runs `charter-check all charter.toml`.
+The command refuses a contract that names a newer version than the installed Charter, and a contract
+whose version line it cannot change. A refusal comes before the first write, so a refused update changes
+no file. After the update, the person runs `charter-check all charter.toml`.
 
 ## The checker
 

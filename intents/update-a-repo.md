@@ -20,7 +20,8 @@ workflow is copied by hand, and no change that the repo made by hand is lost wit
   file, the documents. The command names each field that the contract template of the new version adds and
   each rule that its rules file adds.
 - A form that writes nothing, `--check`.
-- The command refuses a contract that names a newer version than the installed Charter.
+- The command refuses a contract that names a newer version than the installed Charter, and one whose
+  version line it cannot change. A refusal comes before the first write.
 - `docs/contract.md`, `docs/product.md`, `README.md`, and both manifests: 0.3.21.
 
 ## Out of scope
@@ -41,13 +42,16 @@ workflow is copied by hand, and no change that the repo made by hand is lost wit
 3. In the contract only the version line moves; the rules file and the documents stay; the new field and the
    new rule are named. test: `tests/test_update.py::Update.test_a_file_with_content_of_the_repo_keeps_it`
 4. The check form writes no file. test: `tests/test_update.py::Update.test_the_check_form_writes_no_file`
-5. Nothing to change after an update; a newer contract is refused; a folder with no contract cannot run. test: `tests/test_update.py::Update.test_the_command_refuses_and_ends`
+5. Nothing to change after an update; a newer contract and a version line that cannot be changed are
+   refused before the first write; a folder with no contract and a version that is no row of numbers
+   cannot run. test: `tests/test_update.py::Update.test_the_command_refuses_and_ends`
 6. Without the older templates each changed file is named as not compared. test: `tests/test_update.py::Update.test_without_the_older_templates_each_changed_file_is_named`
 7. The command is in `charter/bin/`, and the documents and both manifests carry it. test: `tests/test_update.py::Update.test_the_command_the_documents_and_the_version`
-8. The installed command runs on a new repo and finds nothing to change. command: `python3 tests/product.py`
+8. The installed command runs on a new repo and finds nothing to change. command: `python3 tests/product.py`, step "update of a repo".
 
 ### Manual checks
 
 9. Two adopters move from 0.3.20 to this version with the command, each in one change request. The leader
    reads that each change request holds the version line and the changed workflows only, and that its
-   verdict is ready. It is manual because it runs in other repos, after the release of this version.
+   verdict is ready. It is manual because it runs in other repos, after the release of this version. The
+   check follows the merge; a failure opens a new issue and does not reopen this change request.

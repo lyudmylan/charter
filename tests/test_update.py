@@ -86,7 +86,13 @@ class Update(unittest.TestCase):
                 block = TOOLCHAIN_STEP + "\n" if name in cs.TOOLCHAIN_TEMPLATES else ""
                 self.assertEqual((self.repo / written).read_text(), cu.text_of(cs.TEMPLATES, name, block))
         for name in ("tests.yml", "run.yml"):
-            self.assertIn(f"{cs.STEP_INDENT}{TOOLCHAIN_STEP}\n", (self.repo / WORKFLOWS / name).read_text())
+            lines = (self.repo / WORKFLOWS / name).read_text().splitlines()
+            start = lines.index(cs.STEP_INDENT + cs.TOOLCHAIN_START)
+            self.assertEqual(lines[start + 1], cs.STEP_INDENT + TOOLCHAIN_STEP)
+            self.assertEqual(lines[start + 2], cs.STEP_INDENT + cs.TOOLCHAIN_END)
+        # A fixed anchor, with no function of the command: the template of today with its one value.
+        self.assertEqual((self.repo / WORKFLOWS / "verdict.yml").read_text(),
+                         (cs.TEMPLATES / "verdict.yml").read_text().replace("%{charter_address}", cs.CHARTER_ADDRESS))
         self.assertIn(f"updated: {WORKFLOWS}/verdict.yml\n", out)
         self.assertIn(f"updated: {WORKFLOWS}/review-code.yml\n", out)
         self.assertIn(f"same: {WORKFLOWS}/tests.yml\n", out)
@@ -148,6 +154,20 @@ class Update(unittest.TestCase):
         self.assertEqual(code, 1, out)
         self.assertIn("refused: the contract names Charter 99.0.0", out)
         self.assertEqual(self.files(), before)
+        # A version line that the command cannot change, here in single quotes: refused, and no file is written.
+        contract.write_text(contract.read_text().replace('version = "99.0.0"', f"version = '{OLD_VERSION}'"))
+        workflow = self.repo / WORKFLOWS / "verdict.yml"
+        workflow.write_text(workflow.read_text() + HAND_LINE + "\n")
+        before = self.files()
+        code, out = run(*self.flags)
+        self.assertEqual(code, 1, out)
+        self.assertIn("refused: the version line of the table [charter] cannot be changed", out)
+        self.assertEqual(self.files(), before)
+        contract.write_text(contract.read_text().replace(f"version = '{OLD_VERSION}'", 'version = "0.3.21-rc1"'))
+        code, out = run(*self.flags)
+        self.assertEqual(code, 2, out)
+        self.assertIn("is not a row of numbers with points: 0.3.21-rc1", out)
+        self.assertEqual(self.files()[f"{WORKFLOWS}/verdict.yml"], before[f"{WORKFLOWS}/verdict.yml"])
         empty = self.work / "empty"
         empty.mkdir()
         code, out = run("--target", str(empty))
@@ -174,9 +194,10 @@ class Update(unittest.TestCase):
             self.assertIn(part, contract)
         self.assertIn("`charter-update`", (ROOT / "README.md").read_text())
         self.assertIn("`charter-update`", (ROOT / "docs" / "product.md").read_text())
-        for plugin in ("charter", "charter-practices"):
-            version = json.loads((ROOT / plugin / ".claude-plugin" / "plugin.json").read_text())["version"]
-            self.assertGreaterEqual(tuple(int(part) for part in version.split(".")), (0, 3, 21))
+        versions = [json.loads((ROOT / plugin / ".claude-plugin" / "plugin.json").read_text())["version"]
+                    for plugin in ("charter", "charter-practices")]
+        self.assertEqual(versions[0], versions[1])
+        self.assertGreaterEqual(tuple(int(part) for part in versions[0].split(".")), (0, 3, 21))
 
 
 if __name__ == "__main__":

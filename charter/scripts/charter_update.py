@@ -41,6 +41,7 @@ GIT_TIMEOUT_SECONDS = 120
 MSG = {
     "no_contract": "no contract in this folder: {path}. Run the command in the root of a repo that is set up.",
     "no_version": "the contract names no version of Charter: {path}",
+    "bad_version": "the version of Charter is not a row of numbers with points: {version}",
     "newer": "refused: the contract names Charter {old}, and this Charter is {new}. Update the plugin first.",
     "version_line": "refused: the version line of the table [charter] cannot be changed in {path}",
     "version": "version: {old} -> {new} in {path}",
@@ -64,8 +65,14 @@ def msg(message_id: str, **values: object) -> str:
     return MSG[message_id].format(**values)
 
 
+NUMBERS = re.compile(r"[0-9]+(\.[0-9]+)*")
+
+
 def number(version: str) -> tuple:
-    return tuple(int(part) if part.isdigit() else 0 for part in version.split("."))
+    """The version as numbers, for the comparison. Another form, such as a version before a release, cannot run."""
+    if not isinstance(version, str) or not NUMBERS.fullmatch(version):
+        raise cc.CannotRun(msg("bad_version", version=version))
+    return tuple(int(part) for part in version.split("."))
 
 
 def with_version(text: str, new: str) -> str | None:
@@ -205,6 +212,11 @@ def update(target: Path, new: Path, version: str, old_dir: Path | None, address:
     if number(old_version) > number(version):
         print(msg("newer", old=old_version, new=version), file=out)
         return cc.FAIL
+    # Each refusal comes before the first write: a refused update changes no file.
+    moved = None if old_version == version else with_version(text, version)
+    if old_version != version and moved is None:
+        print(msg("version_line", path=cs.CONTRACT_FILE), file=out)
+        return cc.FAIL
     with tempfile.TemporaryDirectory() as folder:
         old, reason = (old_dir, "") if old_dir else old_templates(old_version, address, Path(folder) / "old")
         if old is not None and not old.is_dir():
@@ -216,10 +228,6 @@ def update(target: Path, new: Path, version: str, old_dir: Path | None, address:
     if old_version == version:
         print(msg("same_version", new=version), file=out)
     else:
-        moved = with_version(text, version)
-        if moved is None:
-            print(msg("version_line", path=cs.CONTRACT_FILE), file=out)
-            return cc.FAIL
         if write:
             path.write_text(moved)
         print(msg("version", old=old_version, new=version, path=cs.CONTRACT_FILE), file=out)
