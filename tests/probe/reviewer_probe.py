@@ -83,6 +83,17 @@ def cases(temp: str) -> list:
         bash(f"git log --out={WRITTEN} -1", REFUSED),
         bash("git diff --no-index /dev/null README.md", REFUSED),
         bash("git diff --no-ind /dev/null README.md", REFUSED),
+        # A quoted form of a refused flag: the shell removes the quotes, and git reads the flag.
+        bash(f'git diff "--output={WRITTEN}" HEAD', REFUSED),
+        bash(f"git diff '--output={WRITTEN}' HEAD", REFUSED),
+        bash(f'git diff --o""utput={WRITTEN} HEAD', REFUSED),
+        bash(f"git diff --ou''tput={WRITTEN} HEAD", REFUSED),
+        bash(f"git diff $'--output={WRITTEN}' HEAD", REFUSED),
+        bash(f"git diff --out\\put={WRITTEN} HEAD", REFUSED),
+        bash(f'git log -1 "--output={WRITTEN}"', REFUSED),
+        bash(f'git log -1 --format=x --o"utpu"t={WRITTEN}', REFUSED),
+        bash('git diff "--no-index" /dev/null README.md', REFUSED),
+        bash(f"git  diff  --output={WRITTEN}  HEAD", REFUSED),
         bash(f"echo x > {WRITTEN}", REFUSED),
         ("Write", {"file_path": f"{root}/{WRITTEN}", "content": "x"}, REFUSED),
         # An allowed command opens no second command.

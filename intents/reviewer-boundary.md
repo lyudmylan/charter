@@ -4,8 +4,8 @@ Work item: #131. Approval: a person merges the change request that adds this fil
 
 ## Goal
 
-A reviewer in CI can do what its prompt allows and no more: it reads the change and the skill, and it posts
-one report. No token is in a file that it can read.
+A reviewer in CI can do what its prompt allows and no more: it reads the change and the skill, and it gives
+one report as its final answer, which a later step posts. No token is in a file that it can read.
 
 ## In scope
 
@@ -26,7 +26,8 @@ one report. No token is in a file that it can read.
   - the report is the final answer of the reviewer. A step after the reviewer takes the text from the
     marker line on and posts it; a step before the reviewer writes the earlier reports to a file;
   - a list of refused patterns: the output file of `git diff` and `git log`, and `git diff` with no index,
-    from the first letters that git can take for the flag;
+    from the first letters that git can take for the flag, with no space before the flag, so that a flag
+    in quotes is refused too;
   - the checkout with `persist-credentials: false`.
 - The later steps of the job run no file that the reviewer wrote: the reviewer can write no file.
 - A test that repeats the cases: `tests/probe/reviewer_probe.py`, with its local server, and in this repo
@@ -60,7 +61,7 @@ one report. No token is in a file that it can read.
 5. The documents and both manifests carry the boundary. test: `tests/test_workflows.py::ReviewerBoundary.test_the_documents_and_the_version_carry_the_boundary`
 6. With the flags of the template, on a machine of the code host, each read and each command that a review
    needs passes; each case of a write, of a read outside the three folders, of a read of the environment,
-   and of a second command is refused; no result holds a token; no file is written. The workflow
+   of a refused flag in quotes, and of a second command is refused; no result holds a token; no file is written. The workflow
    `reviewer-boundary` of this repo runs it. command: `python3 tests/probe/reviewer_probe.py`
 
 ### Manual checks

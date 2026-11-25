@@ -44,6 +44,7 @@ jobs:
           echo "tier=$(echo "$TIER" | head -n 1)" >> "$GITHUB_OUTPUT"
           echo "depth=$(echo "$TIER" | tail -n 1)" >> "$GITHUB_OUTPUT"
       # The reviewer has no command of the code host that reads comments: this step gives it the earlier reports.
+      # A report is a comment of the workflow: a comment of another author that starts with the marker is left out.
       - name: Give the earlier reports to the reviewer
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -51,7 +52,7 @@ jobs:
         run: |
           mkdir -p "$RUNNER_TEMP/review"
           gh api "repos/$GITHUB_REPOSITORY/issues/$PR_NUMBER/comments?per_page=100" \
-            --jq '.[] | select(.body | startswith("<!-- charter-code-review -->")) | .body, "", "=====", ""' > "$RUNNER_TEMP/review/earlier-reports.md"
+            --jq '.[] | select(.user.login == "github-actions[bot]") | select(.body | startswith("<!-- charter-code-review -->")) | .body, "", "=====", ""' > "$RUNNER_TEMP/review/earlier-reports.md"
       - name: Note the report before the review
         id: before
         env:
@@ -97,7 +98,7 @@ jobs:
             --max-turns 40
             --permission-mode dontAsk
             --allowedTools "Read(./**),Read(/${{ runner.temp }}/charter/**),Read(/${{ runner.temp }}/review/**),Glob(./**),Grep(./**),Bash(git diff:*),Bash(git log:*),Bash(gh issue view:*),Bash(gh issue list:*),Bash(gh pr view:*)"
-            --disallowedTools "Read(//proc/**),Read(./.git/**),Bash(git diff* --ou*),Bash(git log* --ou*),Bash(git diff* --no-i*)"
+            --disallowedTools "Read(//proc/**),Read(./.git/**),Bash(git diff*--ou*),Bash(git log*--ou*),Bash(git diff*--no-i*)"
       # The report is the final answer of the reviewer. This step posts it, so the reviewer needs no command
       # that writes to the code host. It takes the text from the marker line on; with no marker it posts nothing,
       # and the next step fails the run.

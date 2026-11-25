@@ -33,7 +33,8 @@ READ_ONLY = {"Read(./**)", "Read(/${{ runner.temp }}/charter/**)", "Read(/${{ ru
 # file by itself for a flag such as `--body-file` or `--input`.
 SHELL = ("Bash(git diff:*)", "Bash(git log:*)", "Bash(gh issue view:*)", "Bash(gh issue list:*)", "Bash(gh pr view:*)")
 # The output file of `git diff` and `git log`, and `git diff` with no index, also in a short form of the flag.
-REFUSED = ("Read(//proc/**)", "Read(./.git/**)", "Bash(git diff* --ou*)", "Bash(git log* --ou*)", "Bash(git diff* --no-i*)")
+# No space stands before the flag in a pattern, so that a flag in quotes is refused too.
+REFUSED = ("Read(//proc/**)", "Read(./.git/**)", "Bash(git diff*--ou*)", "Bash(git log*--ou*)", "Bash(git diff*--no-i*)")
 REVIEWERS = ("review-intents.yml", "review-code.yml")
 EARLIER_STEP, POST_STEP = "Give the earlier reports to the reviewer", "Post the report of the reviewer"
 ALLOWED_COMMANDS = re.compile("^(" + "|".join(re.escape(command) for command in SHELL) + ")$")
@@ -505,7 +506,8 @@ class ReviewerBoundary(unittest.TestCase):
         patterns = [re.compile("^" + ".*".join(re.escape(part) for part in rule[5:-1].split("*")) + "$", re.S)
                     for rule in REFUSED if rule.startswith("Bash(")]
         for command in ("git diff --output=x HEAD", "git diff HEAD --output x", "git diff --outpu=x HEAD", "git diff --ou=x",
-                        "git log -1 --output=x", "git log --out x -1", "git diff --no-index a b", "git diff --no-ind a b"):
+                        "git log -1 --output=x", "git log --out x -1", "git diff --no-index a b", "git diff --no-ind a b",
+                        'git diff "--output=x" HEAD', "git diff HEAD '--no-index' a b", 'git log -1 "--output=x"'):
             with self.subTest(command=command):
                 self.assertTrue(any(pattern.match(command) for pattern in patterns), command)
         for command in ("git log --oneline -3", "git diff origin/main...HEAD", "git diff --name-only HEAD~1", "git log -1 --format=%s"):
@@ -532,6 +534,7 @@ class ReviewerBoundary(unittest.TestCase):
             self.assertLess(text.index("- name: " + POST_STEP), text.index("- name: " + GUARD_STEP))
             self.assertLess(text.index("- name: " + EARLIER_STEP), text.index("uses: anthropics/claude-code-action"))
             self.assertIn(marker, run_block(text, EARLIER_STEP))
+            self.assertIn('select(.user.login == "github-actions[bot]")', run_block(text, EARLIER_STEP))
             report = f"{marker}\nCommit: {HEAD}\n\nA line with `code` and \"quotes\" and $HOME in it.\nHighest open severity: low"
             cases = ((json.dumps([{"type": "system"}, {"type": "result", "result": "Here is the report.\n" + report}]), report),
                      (json.dumps({"type": "result", "result": report}), report),
