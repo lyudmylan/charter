@@ -17,14 +17,23 @@ one report. No token is in a file that it can read.
   process, and the shell refuses a variable that it cannot check.
 - The two reviewer workflows, `review-intents` and `review-code`, as templates and in this repo:
   - the flag `--permission-mode dontAsk`, which refuses each tool call that the list does not allow;
-  - the read tools with their folder: the folder of the change, and the folder of the Charter scripts,
-    where the skill is;
-  - a list of refused patterns for the allowed commands: an output file of `git diff` and `git log`,
-    `git diff --no-index`, `gh pr comment` with `--edit-last` or `--delete-last`, and `gh api` with a
-    method, a field, or an input file;
+  - the read tools with their folder: the folder of the change, the folder of the Charter scripts, where
+    the skill is, and the folder of the earlier reports;
+  - a shell of five commands that read: `git diff`, `git log`, `gh issue view`, `gh issue list`,
+    `gh pr view`. The reviewer has no command that writes to the code host, and none that reads a file by
+    itself for a flag, such as `gh pr comment --body-file <path>`: a pattern cannot refuse each form of
+    such a flag;
+  - the report is the final answer of the reviewer. A step after the reviewer takes the text from the
+    marker line on and posts it; a step before the reviewer writes the earlier reports to a file;
+  - a list of refused patterns: the output file of `git diff` and `git log`, and `git diff` with no index,
+    from the first letters that git can take for the flag;
   - the checkout with `persist-credentials: false`.
-- `docs/contract.md`, the section "The intent reviewer", and one row in `docs/decisions.md`.
-- Both manifests: the same version, 0.3.20 or later.
+- The later steps of the job run no file that the reviewer wrote: the reviewer can write no file.
+- A test that repeats the cases: `tests/probe/reviewer_probe.py`, with its local server, and in this repo
+  the workflow `reviewer-boundary`, which runs it on each change of a reviewer workflow. It needs no secret.
+- `docs/contract.md`, the section "The intent reviewer", and one row in `docs/decisions.md`. The section
+  names the page of the official documentation of the action on the files that come from the base branch.
+- Both manifests: 0.3.20.
 
 ## Out of scope
 
@@ -33,25 +42,29 @@ one report. No token is in a file that it can read.
   request. Today each party that can push a branch can change the file. It is a change of design, with
   its own work item.
 - The outside actions by a full commit and not by a tag: its own work item.
-- A test through the action `claude-code-action`: it starts on no push of a branch. The test ran the
-  program that the action runs, with the same flags.
+- A test through the action `claude-code-action`: it starts on no push of a branch, and a run of it on a
+  change request needs the token of the model. The test runs the program that the action runs, with the
+  same flags. Check 7 covers the action itself.
 
 ## Acceptance checks
 
-## Automatic checks
+### Automatic checks
 
-1. In the four workflow files the list of tools is closed: the flag `--permission-mode dontAsk`, and no read
-   tool without its folder. test: `tests/test_workflows.py::ReviewerBoundary.test_the_list_of_tools_is_closed`
-2. The four files refuse the same patterns, each with a space before its flag, so that the name of a repo
-   with such letters in it is not refused. test: `tests/test_workflows.py::ReviewerBoundary.test_the_ways_to_write_are_refused`
+1. In the four workflow files the list of tools is closed: the flag `--permission-mode dontAsk`, each read
+   tool with its folder, and the five commands of the shell. test: `tests/test_workflows.py::ReviewerBoundary.test_the_list_of_tools_is_closed`
+2. The four files refuse the output file of `git diff` and `git log` and the form with no index, also in a
+   short form of the flag, and `--oneline` stays open. test: `tests/test_workflows.py::ReviewerBoundary.test_the_ways_to_write_a_file_are_refused`
 3. The checkout of each reviewer keeps no credentials. test: `tests/test_workflows.py::ReviewerBoundary.test_the_checkout_keeps_no_credentials`
-4. The documents and both manifests carry the boundary. test: `tests/test_workflows.py::ReviewerBoundary.test_the_documents_and_the_version_carry_the_boundary`
+4. A step posts the final answer of the reviewer from the marker line on, and posts nothing with no marker
+   or with no record of the run. test: `tests/test_workflows.py::ReviewerBoundary.test_a_step_posts_the_final_answer_of_the_reviewer`
+5. The documents and both manifests carry the boundary. test: `tests/test_workflows.py::ReviewerBoundary.test_the_documents_and_the_version_carry_the_boundary`
+6. With the flags of the template, on a machine of the code host, each read and each command that a review
+   needs passes; each case of a write, of a read outside the three folders, of a read of the environment,
+   and of a second command is refused; no result holds a token; no file is written. The workflow
+   `reviewer-boundary` of this repo runs it. command: `python3 tests/probe/reviewer_probe.py`
 
-## Manual checks
+### Manual checks
 
-5. The test on the code host, by the author, before the change request: with the flags of the templates,
-   each read and each command that a review needs passes, and each refused case is refused. It is manual
-   because it needs a machine of the code host and a branch of its own. Its record is a comment on #131.
-6. The two reviewers post their reports on the change request of this work item, which runs them with the
-   new flags. The leader reads that both reports are there. It is manual because the reviewers run with
-   the model.
+7. The two reviewers post their reports on the change request of this work item, which runs them through
+   the action with the new flags. The leader reads that both reports are there after the last push. It is
+   manual because the reviewers run with the model.

@@ -25,20 +25,18 @@ NO_REPORT = "the reviewer posted no report"
 MARKER = "<!-- charter-intent-review -->"
 HEAD, OTHER = "1111111111111111111111111111111111111111", "2222222222222222222222222222222222222222"
 HEAD_SHA = "${{ github.event.pull_request.head.sha }}"
-# reviewer-boundary: each read tool names its folder. The folder of the change, and the folder of the Charter
-# scripts, where the skill is.
-READ_ONLY = {"Read(./**)", "Read(/${{ runner.temp }}/charter/**)", "Glob(./**)", "Grep(./**)"}
-# reviewer-boundary: the ways in which an allowed command writes a file, changes a comment, or sends data.
-REFUSED = ("Read(//proc/**)", "Read(./.git/**)", "Bash(git diff* --output*)", "Bash(git log* --output*)",
-           "Bash(git diff* --no-index*)", "Bash(gh pr comment* --edit-last*)", "Bash(gh pr comment* --delete-last*)",
-           "Bash(gh api* -X*)", "Bash(gh api* --method*)", "Bash(gh api* -f*)", "Bash(gh api* -F*)",
-           "Bash(gh api* --field*)", "Bash(gh api* --raw-field*)", "Bash(gh api* --input*)")
+# reviewer-boundary: each read tool names its folder. The folder of the change, the folder of the Charter
+# scripts, where the skill is, and the folder of the earlier reports.
+READ_ONLY = {"Read(./**)", "Read(/${{ runner.temp }}/charter/**)", "Read(/${{ runner.temp }}/review/**)",
+             "Glob(./**)", "Grep(./**)"}
+# reviewer-boundary: the shell of a reviewer. Each command reads; none writes to the code host, and none reads a
+# file by itself for a flag such as `--body-file` or `--input`.
+SHELL = ("Bash(git diff:*)", "Bash(git log:*)", "Bash(gh issue view:*)", "Bash(gh issue list:*)", "Bash(gh pr view:*)")
+# The output file of `git diff` and `git log`, and `git diff` with no index, also in a short form of the flag.
+REFUSED = ("Read(//proc/**)", "Read(./.git/**)", "Bash(git diff* --ou*)", "Bash(git log* --ou*)", "Bash(git diff* --no-i*)")
 REVIEWERS = ("review-intents.yml", "review-code.yml")
-# A command that only reads or only posts the one comment.
-ALLOWED_COMMANDS = re.compile(
-    r"^Bash\((git diff|git log|gh issue view|gh issue list|gh pr view|gh pr comment):\*\)$|"
-    r"^Bash\(gh api repos/\$\{\{ github\.repository \}\}/issues/\*/comments\*\)$"
-)
+EARLIER_STEP, POST_STEP = "Give the earlier reports to the reviewer", "Post the report of the reviewer"
+ALLOWED_COMMANDS = re.compile("^(" + "|".join(re.escape(command) for command in SHELL) + ")$")
 
 
 def run_block(workflow: str, step: str) -> str:
@@ -146,9 +144,10 @@ class ReviewIntents(unittest.TestCase):
                 prompt = re.search(r"prompt: \|\n((?:            .*\n)+)", text)
                 self.assertIsNotNone(prompt, "no prompt")
                 for part in ("Read files with the Read tool", "A denied command is no reason to stop",
-                             "ends only after it is posted",
-                             "gh pr comment ${{ github.event.pull_request.number }} --body-file - <<'REPORT'"):
+                             "The report is your final answer", "A later step of the workflow posts it"):
                     self.assertIn(part, prompt.group(1))
+                # reviewer-boundary: the workflow posts the report, with the form that takes each character as it is.
+                self.assertIn('gh pr comment "$PR_NUMBER" --body-file "$RUNNER_TEMP/review/report.md"', run_block(text, POST_STEP))
 
 
 class ReviewRounds(unittest.TestCase):
@@ -165,8 +164,11 @@ class ReviewRounds(unittest.TestCase):
                 self.assertIn("Change no earlier comment", prompt)
                 self.assertNotIn("PATCH", text)
                 tools = re.search(r'--allowedTools "([^"]+)"', text).group(1)
-                self.assertIn("Bash(gh pr comment:*)", tools.split(","))
-                self.assertFalse([tool for tool in tools.split(",") if "-X" in tool], tools)
+                self.assertFalse([tool for tool in tools.split(",") if "-X" in tool or "gh pr comment" in tool or "gh api" in tool], tools)
+                post = run_block(text, POST_STEP)
+                self.assertEqual(post.count("gh pr comment"), 1)
+                for flag in ("--edit-last", "--delete-last"):
+                    self.assertNotIn(flag, post)
 
     def test_the_run_fails_when_no_report_was_added(self):
         """review-rounds, check 6: the last step, run with `bash -e` and a fake of the code host."""
@@ -363,8 +365,8 @@ class CodeReviewer(unittest.TestCase):
             with self.subTest(file=name):
                 tools = re.search(r'--allowedTools "([^"]+)"', text).group(1).split(",")
                 for tool in tools:
-                    self.assertTrue(tool in READ_ONLY or ALLOWED_COMMANDS.match(tool), f"tool not read-only or comment: {tool}")
-                self.assertIn("Bash(gh pr comment:*)", tools)
+                    self.assertTrue(tool in READ_ONLY or ALLOWED_COMMANDS.match(tool), f"tool not read-only: {tool}")
+                self.assertIn("gh pr comment", run_block(text, POST_STEP))
                 self.assertIn("contents: read", text)
                 self.assertNotIn("PATCH", text)
                 self.assertEqual(set(re.findall(r"secrets\.(\w+)", text)), CODE_SECRETS)
@@ -481,26 +483,34 @@ class ReviewerBoundary(unittest.TestCase):
              for folder in (WORKFLOWS, TEMPLATES) for name in REVIEWERS}
 
     def test_the_list_of_tools_is_closed(self):
-        """reviewer-boundary, check 1: no question is answered with yes, and each read tool names its folder."""
+        """reviewer-boundary, check 1: no question is answered with yes, each read tool names its folder, and
+        the shell has the five commands that read. No allowed command writes to the code host or takes a file."""
         for name, text in self.files.items():
             with self.subTest(file=name):
-                args = text[text.index("          claude_args: >-\n"):text.index("      - name: " + GUARD_STEP)]
+                args = text[text.index("          claude_args: >-\n"):text.index("      - name: " + POST_STEP)]
                 self.assertIn("            --permission-mode dontAsk\n", args)
                 tools = re.search(r'--allowedTools "([^"]+)"', args).group(1).split(",")
                 self.assertEqual({tool for tool in tools if not tool.startswith("Bash(")}, READ_ONLY)
-                for bare in ("Read", "Glob", "Grep", "Bash", "Write", "Edit"):
-                    self.assertNotIn(bare, tools)
+                self.assertEqual(tuple(tool for tool in tools if tool.startswith("Bash(")), SHELL)
+                for word in ("comment", "api", "review", "merge", "edit", "close", "create", "push", "commit"):
+                    self.assertFalse([tool for tool in tools if tool.startswith("Bash(") and word in tool], word)
 
-    def test_the_ways_to_write_are_refused(self):
-        """reviewer-boundary, check 2: the list of the refused patterns, each with a space before its flag, so
-        that the name of a repo with `-f` in it is not refused."""
+    def test_the_ways_to_write_a_file_are_refused(self):
+        """reviewer-boundary, check 2: the output file of `git diff` and `git log` and the form with no index,
+        each from the first letters that git can take for the flag; `--oneline` stays open."""
         for name, text in self.files.items():
             with self.subTest(file=name):
                 refused = re.search(r'--disallowedTools "([^"]+)"', text).group(1).split(",")
                 self.assertEqual(tuple(refused), REFUSED)
-                for pattern in refused:
-                    if pattern.startswith("Bash("):
-                        self.assertRegex(pattern, r"^Bash\((git diff|git log|gh pr comment|gh api)\* -{1,2}[A-Za-z-]+\*\)$")
+        patterns = [re.compile("^" + ".*".join(re.escape(part) for part in rule[5:-1].split("*")) + "$", re.S)
+                    for rule in REFUSED if rule.startswith("Bash(")]
+        for command in ("git diff --output=x HEAD", "git diff HEAD --output x", "git diff --outpu=x HEAD", "git diff --ou=x",
+                        "git log -1 --output=x", "git log --out x -1", "git diff --no-index a b", "git diff --no-ind a b"):
+            with self.subTest(command=command):
+                self.assertTrue(any(pattern.match(command) for pattern in patterns), command)
+        for command in ("git log --oneline -3", "git diff origin/main...HEAD", "git diff --name-only HEAD~1", "git log -1 --format=%s"):
+            with self.subTest(command=command):
+                self.assertFalse(any(pattern.match(command) for pattern in patterns), command)
 
     def test_the_checkout_keeps_no_credentials(self):
         """reviewer-boundary, check 3: the reviewer reads the folder of the checkout, so no token stays in it."""
@@ -510,16 +520,57 @@ class ReviewerBoundary(unittest.TestCase):
                               "          persist-credentials: false\n", text)
                 self.assertEqual(text.count("uses: actions/checkout@"), 1)
 
+    def test_a_step_posts_the_final_answer_of_the_reviewer(self):
+        """reviewer-boundary, check 4: the step takes the text from the marker line on and posts it; with no
+        marker, or with no record of the run, it posts nothing. The step is the same in the template and in this
+        repo, and it stands after the reviewer and before the last step."""
+        for name, marker in (("review-intents.yml", MARKER), ("review-code.yml", CODE_MARKER)):
+            text, template = (WORKFLOWS / name).read_text(), (TEMPLATES / name).read_text()
+            step = run_block(text, POST_STEP)
+            self.assertEqual(step, run_block(template, POST_STEP))
+            self.assertLess(text.index("uses: anthropics/claude-code-action"), text.index("- name: " + POST_STEP))
+            self.assertLess(text.index("- name: " + POST_STEP), text.index("- name: " + GUARD_STEP))
+            self.assertLess(text.index("- name: " + EARLIER_STEP), text.index("uses: anthropics/claude-code-action"))
+            self.assertIn(marker, run_block(text, EARLIER_STEP))
+            report = f"{marker}\nCommit: {HEAD}\n\nA line with `code` and \"quotes\" and $HOME in it.\nHighest open severity: low"
+            cases = ((json.dumps([{"type": "system"}, {"type": "result", "result": "Here is the report.\n" + report}]), report),
+                     (json.dumps({"type": "result", "result": report}), report),
+                     (json.dumps([{"type": "result", "result": "I found nothing to report."}]), None),
+                     (None, None))
+            for record, posted in cases:
+                with self.subTest(file=name, record=(record or "none")[:40]):
+                    folder = Path(tempfile.mkdtemp())
+                    try:
+                        (folder / "bin").mkdir()
+                        gh = folder / "bin" / "gh"
+                        gh.write_text('#!/bin/sh\necho "$@" > "$CALLS"\ncp "$5" "$POSTED"\n')
+                        gh.chmod(0o755)
+                        execution = folder / "execution.json"
+                        if record is not None:
+                            execution.write_text(record)
+                        env = {"PATH": f"{folder / 'bin'}:{os.environ['PATH']}", "RUNNER_TEMP": str(folder / "temp"),
+                               "PR_NUMBER": "7", "EXECUTION_FILE": str(execution), "CALLS": str(folder / "calls"),
+                               "POSTED": str(folder / "posted")}
+                        result = subprocess.run(["bash", "-e", "-c", step], cwd=folder, capture_output=True, text=True, env=env)
+                        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+                        if posted is None:
+                            self.assertFalse((folder / "calls").exists(), result.stdout)
+                        else:
+                            self.assertEqual((folder / "calls").read_text().split()[:4], ["pr", "comment", "7", "--body-file"])
+                            self.assertEqual((folder / "posted").read_text().rstrip("\n"), posted)
+                    finally:
+                        shutil.rmtree(folder, ignore_errors=True)
+
     def test_the_documents_and_the_version_carry_the_boundary(self):
-        """reviewer-boundary, check 4."""
+        """reviewer-boundary, check 5."""
         contract = " ".join((ROOT / "docs" / "contract.md").read_text().split())
-        for part in ("`--permission-mode dontAsk`", "the folder of the change and the folder of the Charter scripts",
-                     "`persist-credentials: false`", "`git diff --output`"):
+        for part in ("`--permission-mode dontAsk`", "no command that writes to the code host", "`persist-credentials: false`",
+                     "its final answer", "`tests/probe/reviewer_probe.py`"):
             self.assertIn(part, contract)
         self.assertIn("| E14 |", (ROOT / "docs" / "decisions.md").read_text())
         for plugin in ("charter", "charter-practices"):
             version = json.loads((ROOT / plugin / ".claude-plugin" / "plugin.json").read_text())["version"]
-            self.assertGreaterEqual(tuple(int(part) for part in version.split(".")), (0, 3, 20))
+            self.assertEqual(version, "0.3.20")
 
 
 class VerdictMerges(unittest.TestCase):

@@ -417,15 +417,22 @@ blocks nothing; a person merges. It runs with a token of the owner's subscriptio
 fork gets no secret and no review.
 
 The reviewer reads text that it did not write, so its tools are a closed list. The flag
-`--permission-mode dontAsk` refuses each tool call that the list does not allow. The read tools take the
-folder of the change and the folder of the Charter scripts, where the skill is, and no other path. The
-shell takes `git diff`, `git log`, three read commands of `gh`, `gh pr comment`, and `gh api` on the
-comments of the repo. A second list refuses the ways in which those commands write a file, change a
-comment, or send data: `git diff --output` and `git log --output`, `git diff --no-index`,
-`gh pr comment --edit-last` and `--delete-last`, and `gh api` with a method, a field, or an input file.
-The checkout has `persist-credentials: false`, so the token of the workflow is in no file that the
-reviewer can read. A test on a machine of the code host, with a local server in the place of the model,
-showed each of these refusals with Claude Code 2.1.332 (decision E14).
+`--permission-mode dontAsk` refuses each tool call that the list does not allow. The read tools take
+three folders and no other path: the folder of the change, the folder of the Charter scripts, where the
+skill is, and the folder of the earlier reports, which a step before the reviewer writes. The shell takes
+five commands that read: `git diff`, `git log`, `gh issue view`, `gh issue list`, and `gh pr view`. The
+reviewer has no command that writes to the code host, and none that reads a file by itself for a flag.
+Its report is its final answer: a step after it takes the text from the marker line on and posts it as a
+new comment. A second list refuses the output file of `git diff` and `git log` and the form of `git diff`
+with no index, from the first letters that git can take for the flag. The checkout has
+`persist-credentials: false`, so the token of the workflow is in no file of the folder. The action
+takes the settings and the instruction files of a change request from its base branch (the security page of
+the action, "Which files come from the base branch on pull requests"), so a change cannot open the list.
+
+The script `tests/probe/reviewer_probe.py` tests the boundary: it starts Claude Code with the flags of the
+template and a local server in the place of the model, which answers with a fixed list of tool calls, and
+it fails when a case that must be refused passes, when a result holds a token, or when a file is written.
+In this repo the workflow `reviewer-boundary` runs it on each change of a reviewer workflow (decision E14).
 
 A reading that an agent drafts for a person, such as the error analysis of an eval round, is reviewed
 before the person reads it (decision C11): the skill `charter-practices/skills/evidence-review/SKILL.md`
