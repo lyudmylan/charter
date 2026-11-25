@@ -560,7 +560,7 @@ change requests, one line each, for a sample review.
 ## The setup step
 
 `charter-setup` sets a repo up in one command. The plugin `charter` ships it in `bin/`, with
-`charter-check`, `charter-gate`, `charter-facts-github`, and `charter-run`; Claude Code puts that folder on the path of
+`charter-update`, `charter-check`, `charter-gate`, `charter-facts-github`, and `charter-run`; Claude Code puts that folder on the path of
 the shell while the plugin is enabled (the plugin documentation, "Executables"; claude.ai and Cowork do
 not install a plugin with a `bin/` folder, so that way of distribution is not open to Charter). From a
 clone of the Charter repo, the same scripts are `charter/scripts/charter_*.py`.
@@ -591,6 +591,31 @@ does not substitute their text. A file that holds a marker line is refused, and 
 Without the flag the block is empty. The steps run in the `tests` workflow, which holds no secret. Its job
 `product` has the same block with the same steps, and so has the workflow `run`, before the agent starts.
 An update of the repo keeps the block.
+
+### The update of a repo
+
+`charter-update` moves a repo that is set up to the version of the installed Charter. It runs in the root
+of the repo and changes the working folder; a person or an agent opens the change request, in the tier of
+the files.
+
+```
+charter-update [--target DIR] [--check] [--old-templates DIR]
+```
+
+- A file that holds no content of the repo gets the text of the new version: the five workflows and the
+  templates of an intent and of a plan. The block of the toolchain stays as the repo has it.
+- The command fetches the templates of the version that the contract names, at its tag, and compares each
+  such file with them. A file that is the text of the old version is updated with no more words. For a file
+  that the repo changed it by hand, the command writes the new text and prints the lines of the repo, so
+  that the person puts them back where they still fit. When the old version cannot be fetched, each
+  changed file is named as not compared.
+- A file that holds content of the repo is not changed. In the contract only the version line moves. The
+  command names each field that the contract template of the new version adds, and each rule that its
+  rules file cites and the rules file of the repo does not.
+- `--check` prints the same lines and writes no file.
+
+The command refuses a contract that names a newer version than the installed Charter. After it, the
+person runs `charter-check all charter.toml`.
 
 ## The checker
 
