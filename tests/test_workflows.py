@@ -25,7 +25,15 @@ NO_REPORT = "the reviewer posted no report"
 MARKER = "<!-- charter-intent-review -->"
 HEAD, OTHER = "1111111111111111111111111111111111111111", "2222222222222222222222222222222222222222"
 HEAD_SHA = "${{ github.event.pull_request.head.sha }}"
-READ_ONLY = {"Read", "Glob", "Grep"}
+# reviewer-boundary: each read tool names its folder. The folder of the change, and the folder of the Charter
+# scripts, where the skill is.
+READ_ONLY = {"Read(./**)", "Read(/${{ runner.temp }}/charter/**)", "Glob(./**)", "Grep(./**)"}
+# reviewer-boundary: the ways in which an allowed command writes a file, changes a comment, or sends data.
+REFUSED = ("Read(//proc/**)", "Read(./.git/**)", "Bash(git diff* --output*)", "Bash(git log* --output*)",
+           "Bash(git diff* --no-index*)", "Bash(gh pr comment* --edit-last*)", "Bash(gh pr comment* --delete-last*)",
+           "Bash(gh api* -X*)", "Bash(gh api* --method*)", "Bash(gh api* -f*)", "Bash(gh api* -F*)",
+           "Bash(gh api* --field*)", "Bash(gh api* --raw-field*)", "Bash(gh api* --input*)")
+REVIEWERS = ("review-intents.yml", "review-code.yml")
 # A command that only reads or only posts the one comment.
 ALLOWED_COMMANDS = re.compile(
     r"^Bash\((git diff|git log|gh issue view|gh issue list|gh pr view|gh pr comment):\*\)$|"
@@ -465,6 +473,53 @@ def run_merge(script: str, folder: Path, env: dict[str, str], record: dict | Non
 
 def merge_env(token: str = MERGE_TOKEN) -> dict[str, str]:
     return {"GH_TOKEN": token, "PR_NUMBER": "7", "PR_SHA": HEAD, "GITHUB_REPOSITORY": "owner/name"}
+
+
+class ReviewerBoundary(unittest.TestCase):
+    """Intent: reviewer-boundary. The two reviewer workflows, the templates and the ones of this repo."""
+    files = {str((folder / name).relative_to(ROOT)): (folder / name).read_text()
+             for folder in (WORKFLOWS, TEMPLATES) for name in REVIEWERS}
+
+    def test_the_list_of_tools_is_closed(self):
+        """reviewer-boundary, check 1: no question is answered with yes, and each read tool names its folder."""
+        for name, text in self.files.items():
+            with self.subTest(file=name):
+                args = text[text.index("          claude_args: >-\n"):text.index("      - name: " + GUARD_STEP)]
+                self.assertIn("            --permission-mode dontAsk\n", args)
+                tools = re.search(r'--allowedTools "([^"]+)"', args).group(1).split(",")
+                self.assertEqual({tool for tool in tools if not tool.startswith("Bash(")}, READ_ONLY)
+                for bare in ("Read", "Glob", "Grep", "Bash", "Write", "Edit"):
+                    self.assertNotIn(bare, tools)
+
+    def test_the_ways_to_write_are_refused(self):
+        """reviewer-boundary, check 2: the list of the refused patterns, each with a space before its flag, so
+        that the name of a repo with `-f` in it is not refused."""
+        for name, text in self.files.items():
+            with self.subTest(file=name):
+                refused = re.search(r'--disallowedTools "([^"]+)"', text).group(1).split(",")
+                self.assertEqual(tuple(refused), REFUSED)
+                for pattern in refused:
+                    if pattern.startswith("Bash("):
+                        self.assertRegex(pattern, r"^Bash\((git diff|git log|gh pr comment|gh api)\* -{1,2}[A-Za-z-]+\*\)$")
+
+    def test_the_checkout_keeps_no_credentials(self):
+        """reviewer-boundary, check 3: the reviewer reads the folder of the checkout, so no token stays in it."""
+        for name, text in self.files.items():
+            with self.subTest(file=name):
+                self.assertIn("      - uses: actions/checkout@v7\n        with:\n          fetch-depth: 0\n"
+                              "          persist-credentials: false\n", text)
+                self.assertEqual(text.count("uses: actions/checkout@"), 1)
+
+    def test_the_documents_and_the_version_carry_the_boundary(self):
+        """reviewer-boundary, check 4."""
+        contract = " ".join((ROOT / "docs" / "contract.md").read_text().split())
+        for part in ("`--permission-mode dontAsk`", "the folder of the change and the folder of the Charter scripts",
+                     "`persist-credentials: false`", "`git diff --output`"):
+            self.assertIn(part, contract)
+        self.assertIn("| E14 |", (ROOT / "docs" / "decisions.md").read_text())
+        for plugin in ("charter", "charter-practices"):
+            version = json.loads((ROOT / plugin / ".claude-plugin" / "plugin.json").read_text())["version"]
+            self.assertGreaterEqual(tuple(int(part) for part in version.split(".")), (0, 3, 20))
 
 
 class VerdictMerges(unittest.TestCase):

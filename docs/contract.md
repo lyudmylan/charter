@@ -416,6 +416,17 @@ blocks nothing; a person merges. It runs with a token of the owner's subscriptio
 `CLAUDE_CODE_OAUTH_TOKEN`, and with read-only tools plus the comment commands. A change request from a
 fork gets no secret and no review.
 
+The reviewer reads text that it did not write, so its tools are a closed list. The flag
+`--permission-mode dontAsk` refuses each tool call that the list does not allow. The read tools take the
+folder of the change and the folder of the Charter scripts, where the skill is, and no other path. The
+shell takes `git diff`, `git log`, three read commands of `gh`, `gh pr comment`, and `gh api` on the
+comments of the repo. A second list refuses the ways in which those commands write a file, change a
+comment, or send data: `git diff --output` and `git log --output`, `git diff --no-index`,
+`gh pr comment --edit-last` and `--delete-last`, and `gh api` with a method, a field, or an input file.
+The checkout has `persist-credentials: false`, so the token of the workflow is in no file that the
+reviewer can read. A test on a machine of the code host, with a local server in the place of the model,
+showed each of these refusals with Claude Code 2.1.332 (decision E14).
+
 A reading that an agent drafts for a person, such as the error analysis of an eval round, is reviewed
 before the person reads it (decision C11): the skill `charter-practices/skills/evidence-review/SKILL.md`
 runs two passes by fresh agents in the session of the author, and puts the disagreements, with the
