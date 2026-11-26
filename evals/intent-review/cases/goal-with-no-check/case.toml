@@ -1,6 +1,6 @@
 expected = "blocks"
 source = "The reviewer gave this finding in the first round, the author corrected the intent, and the leader merged the change request."
-finding = ["check 5", "evidence record"]
+finding = [["evidence record"]]
 change_request = 111
 base = "6051dd0db700c1eb8a58b6c89f903d79755a0215"
 head = "c0986dacd521b93c7aed3ed09dfe0c582e43e1cc"

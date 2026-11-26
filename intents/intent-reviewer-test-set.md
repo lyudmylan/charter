@@ -15,17 +15,24 @@ the right answer.
   the threshold of the contract or above, or `passes`. Each case says where its answer comes from.
 - Two forms of a case. A case of this repo names its commits. A case of an adopter holds its files, with the
   name of the product replaced.
-- 25 cases: 14 with the answer `blocks` and 11 with the answer `passes`; 18 of this repo and 7 of an
-  adopter; 9 of a later round. A `blocks` case is a finding that the author corrected and the leader merged.
-  A `passes` case is a state that the leader merged with a report below the threshold.
+- 25 cases; 18 of this repo and 7 of an adopter; 9 of a later round. 17 are counted: 14 with the answer
+  `blocks` and 3 with the answer `passes`. A `blocks` case is a finding that the author corrected and the
+  leader merged. A `passes` case is a state that the leader merged with a report below the threshold, and
+  that the reviewer passed again in each of three runs of the set.
+- 8 cases are contested. Each is a merged state with a report below the threshold then, and the reviewer of
+  today blocked it in one run of three or more, with a finding that two agents that are not the author
+  found right in fact. The reviewer does not grade itself: such a case keeps its answer, the command runs
+  it and shows it apart, and it is no part of the count until the leader says its answer.
 - The command `python3 evals/intent-review/run.py`. It gives each case to the reviewer in the form of the
   workflow `review-intents`: the prompt, the limit of turns, and the tool list come from the template of
   the workflow, and the skill comes from the folder of the repo.
 - The reviewer reads nothing on the code host: a stand-in for its command answers from the files of the
   case. The answers of the set are in no folder that the reviewer reads. The settings and the instruction
   file of the person who starts the command stay out of the run.
-- A grader in code. It reads the line of the highest open severity against `review.threshold`. Where a
-  `blocks` case names a subject, it also reads whether a finding at the threshold names that subject.
+- A grader in code. It reads the line of the highest open severity against `review.threshold`. Each
+  `blocks` case names its subject: one or more ways to name it, each a list of patterns, and one finding at
+  the threshold must hold each pattern of a way. A match of words is a rough measure of the subject.
+- The command grades the reports of an earlier run again, with no run of the model: `--reports <folder>`.
 - The report: the number of right answers, of false alarms, of misses, of answers on another subject, and
   of runs with no report, with one row for each case. The command keeps each report of the reviewer.
 - `docs/contract.md`, `docs/product.md`, and `README.md` name the command.
@@ -39,6 +46,8 @@ the right answer.
 - A grader that is a model.
 - A case of a finding that the reviewer missed and that showed later as a defect. The record of the three
   repos names no such case yet.
+- The answer of the 8 contested cases. The work item on the closed list of questions, #153, settles them:
+  the leader says for each kind of finding whether it blocks.
 
 ## Acceptance checks
 
@@ -60,18 +69,22 @@ the right answer.
    1; one case runs by its name. test: `tests/test_reviewer_eval.py::TheRun.test_the_result_counts_each_kind_and_keeps_each_report`,
    `tests/test_reviewer_eval.py::TheRun.test_a_case_with_no_report_ends_the_command_with_1`, and
    `tests/test_reviewer_eval.py::TheRun.test_one_case_by_its_name_and_a_name_that_is_no_case`
-8. Each case of the set has its parts, and the set is balanced: 18 cases or more, 8 or more of each answer,
-   4 or more of an adopter, 3 or more of a later round. test: `tests/test_reviewer_eval.py::TheSet.test_each_case_of_the_set_has_its_parts_and_the_set_is_balanced`
+8. Each case of the set has its parts: 18 cases or more; among the counted ones 8 or more with `blocks`
+   and 3 or more with `passes`; 4 or more of an adopter; 3 or more of a later round; each `blocks` case
+   names its subject. test: `tests/test_reviewer_eval.py::TheSet.test_each_case_of_the_set_has_its_parts_and_the_set_is_balanced`
 9. The documents name the command. test: `tests/test_reviewer_eval.py::TheSet.test_the_documents_name_the_command`
+
+10. A contested case runs, its report is kept, and it is no part of the count. test: `tests/test_reviewer_eval.py::TheRun.test_a_contested_case_runs_and_is_no_part_of_the_count`
+11. The reports of an earlier run are graded again with no run of the model. test: `tests/test_reviewer_eval.py::TheRun.test_the_reports_of_an_earlier_run_are_graded_again_with_no_model_call`
 
 ### Manual checks
 
-10. One full run of the set with the reviewer itself. The author starts it after the word of the leader,
-    because the 25 runs of the model are on the account of the leader. Its record is the folder
-    `evals/intent-review/record/` of this change request: the report, the result file, and each report of
-    the reviewer. Code writes the record. It is manual because no test may call the model.
-11. The leader reads three cases and says for each whether the answer that the case holds is right: one
-    `blocks` case, one `passes` case, and one case where the full run gave another answer than the case,
-    when there is one. The summary of each case is drafted by the agent, reviewed by an agent that is not
-    the author, confirmed by the leader. It is manual because it sets the measure for the grader. Its
-    record is a comment on #140.
+12. One full run of the set with the reviewer itself, and two more runs of the cases with the answer
+    `passes`. The author starts them after the word of the leader, because the runs of the model are on the
+    account of the leader. Their record is the folder `evals/intent-review/record/` of this change request:
+    the report, the result file, and each report of the reviewer. Code writes the record. It is manual
+    because no test may call the model.
+13. The leader reads three cases and says for each whether the answer that the case holds is right: one
+    `blocks` case, one `passes` case, and one contested case. The summary of each case is drafted by the
+    agent, reviewed by an agent that is not the author, confirmed by the leader. It is manual because it
+    sets the measure for the grader. Its record is a comment on #140.

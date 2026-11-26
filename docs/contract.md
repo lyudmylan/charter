@@ -443,9 +443,12 @@ replaced. The command gives each case to the reviewer in the form of the workflo
 turns, and the tool list come from the template, and the skill comes from the folder of the repo. A stand-in
 for the command of the code host answers from the files of the case, and the settings of the person who
 starts the command stay out of the run. Code grades each report: the line of the highest open severity
-against `review.threshold`, and, where the case names a subject, a finding at the threshold that names it.
-The report counts the right answers, the false alarms, the misses, and the runs with no report, and it keeps
-each report of the reviewer. Each case is one run of the model on the account of the person who starts the
+against `review.threshold`, and, for a case with the answer `blocks`, a finding at the threshold that holds
+the words of its subject. The report counts the right answers, the false alarms, the misses, the answers on
+another subject, and the runs with no report, and it keeps each report of the reviewer. A case with the field
+`contested` runs and is no part of the count: its answer waits for a person, because the reviewer does not
+grade itself. With `--reports <folder>` the command grades the reports of an earlier run again and calls no
+model. Each case is one run of the model on the account of the person who starts the
 command, so no workflow runs the set. `evals/intent-review/record/` holds the record of a full run.
 
 A reading that an agent drafts for a person, such as the error analysis of an eval round, is reviewed

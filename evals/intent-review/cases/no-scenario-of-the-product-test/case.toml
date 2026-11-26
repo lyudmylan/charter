@@ -1,6 +1,6 @@
 expected = "blocks"
 source = "The reviewer gave this finding in the first round, the author corrected the intent, and the leader merged the change request."
-finding = ["product test", "tests/product.py", "the log", "AGENTS.md"]
+finding = [["product test|tests/product.py", "scenario"], ["log", "branch|expire"], ["AGENTS.md"]]
 change_request = 114
 base = "f1fd5ba2f708b7f117d638d2810a5608eb22694b"
 head = "706ac22c28497041e89d710cdf31fdc821d9d816"

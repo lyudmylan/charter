@@ -66,7 +66,8 @@ class Fixture(unittest.TestCase):
             os.environ.pop(key, None) if value is None else os.environ.__setitem__(key, value)
         self.temp.cleanup()
 
-    def case(self, name: str, expected: str, answer: str, earlier: bool = False, finding: str = "") -> Path:
+    def case(self, name: str, expected: str, answer: str, earlier: bool = False, finding: str = "",
+             contested: bool = False) -> Path:
         folder = self.cases / name
         shutil.rmtree(folder, ignore_errors=True)
         for state, text in (("base", ""), ("head", "# Intent\n\nThe second text.\n")):
@@ -83,7 +84,8 @@ class Fixture(unittest.TestCase):
             (folder / "earlier-report.md").write_text(f"{run.MARKER}\nCommit: an-old-commit\n\nHighest open severity: medium\n")
         (folder / "issue.md").write_text("#7 The issue of the case\n\nIts text.\n\n-----\n\n#9 A second issue\n\nMore text.\n")
         (folder / "stand-in-answer.md").write_text(answer)
-        fields = [f'expected = "{expected}"', 'source = "a test"'] + ([f"finding = ['{finding}']"] if finding else [])
+        fields = [f'expected = "{expected}"', 'source = "a test"'] + ([f"finding = [['{finding}']]"] if finding else [])
+        fields += ['contested = "a fresh read gave a finding"'] if contested else []
         (folder / "case.toml").write_text("\n".join(fields) + "\n")
         return folder
 
@@ -148,6 +150,12 @@ class Workspace(Fixture):
         (self.cases / "one" / "earlier").mkdir()
         with self.assertRaises(run.CannotRun):
             run.read_case(self.cases / "one")
+        folder = self.case("one", "blocks", "")
+        for field, message in (("finding = ['check 2']", "list of lists"), ('contested = " "', "why the answer waits")):
+            (folder / "case.toml").write_text(f'expected = "blocks"\nsource = "a test"\n{field}\n')
+            with self.assertRaises(run.CannotRun) as raised:
+                run.read_case(folder)
+            self.assertIn(message, str(raised.exception))
 
 
 class TheRun(Fixture):
@@ -208,6 +216,43 @@ class TheRun(Fixture):
         self.assertTrue(kept.startswith(run.MARKER))
         self.assertNotIn("A sentence before the report", kept)
 
+    def test_a_contested_case_runs_and_is_no_part_of_the_count(self):
+        # check 10
+        medium = "1. **medium**, `intents/part.md`, check 2: the check proves nothing."
+        self.case("a-counted", "passes", report("low"))
+        self.case("b-waits", "passes", report("medium", medium), contested=True)
+        self.case("c-waits", "passes", report("none"), contested=True)
+        code, text, out = self.start()
+        self.assertEqual(code, 0)
+        self.assertIn("Cases: 1. Right: 1.", text)
+        self.assertIn("False alarms: 0.", text)
+        self.assertIn("Contested cases: 2, no part of the count. The reviewer blocked 1 of them.", text)
+        self.assertIn("| `b-waits` | passes | medium | not counted |", text)
+        rows = json.loads((out / "result.json").read_text())["cases"]
+        self.assertEqual([row["contested"] for row in rows], [False, True, True])
+        self.assertTrue((out / "reports" / "b-waits.md").is_file())
+
+    def test_the_reports_of_an_earlier_run_are_graded_again_with_no_model_call(self):
+        # check 11
+        medium = "1. **medium**, `intents/part.md`, check 2: the check proves nothing."
+        self.case("one", "blocks", report("medium", medium), finding="check 2")
+        code, text, out = self.start()
+        self.assertIn("Right: 1.", text)
+        calls = len(list(self.record.iterdir()))
+        (self.cases / "one" / "case.toml").write_text('expected = "blocks"\nsource = "a test"\nfinding = [["the goal"]]\n')
+        again = self.work / "again"
+        done = subprocess.run(["python3", str(RUN), "--cases", str(self.cases), "--reports", str(out), "--out", str(again)],
+                              capture_output=True, text=True, cwd=ROOT, check=False)
+        self.assertEqual(done.returncode, 0, done.stdout)
+        self.assertIn("Right: 0.", done.stdout)
+        self.assertIn("Another subject: 1.", done.stdout)
+        self.assertIn("Cost that the runs report: 0.25 USD", done.stdout)
+        self.assertEqual(len(list(self.record.iterdir())), calls)
+        self.assertEqual(json.loads((again / "result.json").read_text())["claude"], "stand-in 0")
+        done = subprocess.run(["python3", str(RUN), "--cases", str(self.cases), "--reports", str(self.work / "none")],
+                              capture_output=True, text=True, cwd=ROOT, check=False)
+        self.assertEqual(done.returncode, 2)
+
     def test_a_case_with_no_report_ends_the_command_with_1(self):
         # check 7
         self.case("one", "passes", "I could not review this.")
@@ -249,18 +294,23 @@ class Grader(unittest.TestCase):
     def test_the_subject_of_a_finding_at_the_threshold(self):
         # check 5
         text = report("medium", "1. **low**, check 9: a small thing about the goal.\n"
-                                "2. **medium** — `intents/part.md`, check 2: no test proves it.")
-        case = {"expected": "blocks", "finding": ["check 2"]}
+                                "2. **medium** — `intents/part.md`, check 2: no test proves it.\n"
+                                "3. **medium**, the scope: a sentence about the record.")
+        case = {"expected": "blocks", "finding": [["check 2"]]}
         self.assertEqual(run.grade(case, text, "medium")["result"], run.RIGHT)
         # The subject is in a finding below the threshold only: that finding does not block.
-        case = {"expected": "blocks", "finding": ["the goal"]}
+        case = {"expected": "blocks", "finding": [["the goal"]]}
         self.assertEqual(run.grade(case, text, "medium")["result"], run.OTHER_SUBJECT)
-        case = {"expected": "blocks", "finding": ["no such words", "no TEST proves"]}
+        # One of two ways names the subject.
+        case = {"expected": "blocks", "finding": [["no such words"], ["check 2", "no TEST proves"]]}
         self.assertEqual(run.grade(case, text, "medium")["result"], run.RIGHT)
+        # Each pattern of a way must be in one finding: two findings that hold one each do not name it.
+        case = {"expected": "blocks", "finding": [["check 2", "the record"]]}
+        self.assertEqual(run.grade(case, text, "medium")["result"], run.OTHER_SUBJECT)
         # The other forms in which the reviewer writes the number and the severity of a finding.
         for line in ("**1. medium — the text of the change request**\n\nIt differs from check 2.",
                      "1. medium: check 2 proves nothing.", "1. **High**, check 2."):
-            got = run.grade({"expected": "blocks", "finding": ["check 2"]}, report("medium", line), "medium")
+            got = run.grade({"expected": "blocks", "finding": [["check 2"]]}, report("medium", line), "medium")
             self.assertEqual(got["result"], run.RIGHT, line)
 
 
@@ -269,8 +319,12 @@ class TheSet(unittest.TestCase):
         # check 8
         cases = [run.read_case(folder) for folder in sorted(run.CASES.iterdir()) if folder.is_dir()]
         self.assertGreaterEqual(len(cases), 18)
-        for answer in (run.BLOCKS, run.PASSES):
-            self.assertGreaterEqual(sum(1 for case in cases if case["expected"] == answer), 8, answer)
+        counted = [case for case in cases if "contested" not in case]
+        self.assertGreaterEqual(sum(1 for case in counted if case["expected"] == run.BLOCKS), 8)
+        self.assertGreaterEqual(sum(1 for case in counted if case["expected"] == run.PASSES), 3)
+        for case in cases:
+            if case["expected"] == run.BLOCKS:
+                self.assertTrue(case.get("finding"), f"{case['name']}: a blocks case names its subject")
         self.assertGreaterEqual(sum(1 for case in cases if not case["commits"]), 4, "cases of an adopter")
         self.assertGreaterEqual(sum(1 for case in cases if case["has_earlier"]), 3, "cases of a later round")
         for case in cases:

@@ -1,5 +1,6 @@
 expected = "passes"
 source = "The leader merged this state, and the report of the reviewer on it was below the threshold."
+contested = "In three runs on 2026-11-26 the reviewer blocked this state 3 of 3 times. Two agents that are not the author found the blocking finding right in fact. Whether it is at the threshold is for the leader to say."
 change_request = 119
 base = "42b79cd5e523dad034fcd051b19736db591f512c"
 head = "029ac8a7120cef45f71ab322d8cf23bb65911477"

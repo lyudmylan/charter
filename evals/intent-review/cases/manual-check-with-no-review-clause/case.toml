@@ -1,6 +1,6 @@
 expected = "blocks"
 source = "The reviewer gave this finding in the first round, the author corrected the intent, and the leader merged the change request."
-finding = ["check 5", "manual", "behaviour", "runtime"]
+finding = [["check 5", "drafted|reviewed by an agent"], ["check 5", "behaviou?r|runtime"]]
 change_request = 134
 base = "2dbf6af3b1defd5b0b581009f89c08a5da507457"
 head = "8b18ef9ac4d1a7be846193c84f1711b7c2e7d89f"

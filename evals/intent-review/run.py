@@ -8,7 +8,9 @@ the form of the workflow `review-intents`: the prompt, the limit of turns, and t
 template of that workflow, and the skill comes from this folder of the repo. A stand-in for the command of
 the code host answers from the files of the case, so a run reads nothing on the code host. Code grades the
 report: the line of the highest open severity against the threshold of the contract, and the subject of the
-finding where the case names one. It ends with 1 when a case gave no report, and with 2 when it cannot run.
+finding where the case names one. A case with the field `contested` is run and shown, and it is no part of
+the count: its answer waits for a person. With `--reports` the command grades the reports of an earlier run
+again and calls no model. It ends with 1 when a case gave no report, and with 2 when it cannot run.
 
 Each case is one run of the model, on the account of the person who starts the command.
 """
@@ -93,8 +95,15 @@ def read_case(folder: Path) -> dict:
     earlier = "earlier" in case if commits else (folder / "earlier").is_dir()
     if earlier != (folder / "earlier-report.md").is_file():
         raise CannotRun(f"{folder.name}: an earlier round needs its state and the file earlier-report.md, both")
-    for pattern in case.get("finding", []):
-        re.compile(pattern)
+    # The subject of a case: a list of ways to name it. A way is a list of patterns, and one finding at the
+    # threshold must hold each pattern of the way.
+    for way in case.get("finding", []):
+        if not isinstance(way, list) or not way or not all(isinstance(pattern, str) for pattern in way):
+            raise CannotRun(f"{folder.name}: the field finding is a list of lists of patterns")
+        for pattern in way:
+            re.compile(pattern)
+    if "contested" in case and not str(case["contested"]).strip():
+        raise CannotRun(f"{folder.name}: the field contested says why the answer waits for a person")
     return {**case, "name": folder.name, "folder": folder, "commits": commits, "has_earlier": earlier}
 
 
@@ -218,10 +227,11 @@ def grade(case: dict, report: str, threshold: str) -> dict:
     answer = BLOCKS if LEVELS.index(severity) >= LEVELS.index(threshold) else PASSES
     if answer != case["expected"]:
         return {"result": FALSE_ALARM if answer == BLOCKS else MISS, "severity": severity}
-    patterns = case.get("finding", [])
-    if answer == BLOCKS and patterns:
+    ways = case.get("finding", [])
+    if answer == BLOCKS and ways:
         open_ones = [text for level, text in findings(report) if LEVELS.index(level) >= LEVELS.index(threshold)]
-        if not any(re.search(p, text, re.I | re.S) for p in patterns for text in open_ones):
+        named = lambda way, text: all(re.search(pattern, text, re.I | re.S) for pattern in way)  # noqa: E731
+        if not any(named(way, text) for way in ways for text in open_ones):
             return {"result": OTHER_SUBJECT, "severity": severity}
     return {"result": RIGHT, "severity": severity}
 
@@ -232,16 +242,41 @@ def run_case(case: dict, model: str, threshold: str, keep: Path) -> dict:
         got = review(case, build(case, work), model)
         report = report_of(got.pop("answer"))
         (keep / f"{case['name']}.md").write_text(report or f"no report: {got.get('error', 'the final answer holds no marker line')}\n")
-        return {"case": case["name"], "expected": case["expected"], **grade(case, report, threshold), **got}
+        return row(case, report, threshold, got)
     finally:
         shutil.rmtree(work, ignore_errors=True)
 
 
+def row(case: dict, report: str, threshold: str, facts: dict) -> dict:
+    return {"case": case["name"], "expected": case["expected"], "contested": "contested" in case,
+            **grade(case, report, threshold), **facts}
+
+
+def grade_again(cases: list, earlier: Path, threshold: str) -> tuple:
+    """The rows of an earlier run, with its reports graded again. No model call."""
+    try:
+        old = json.loads((earlier / "result.json").read_text())
+    except (OSError, ValueError) as error:
+        raise CannotRun(f"{earlier} holds no result of a run: {error}") from error
+    facts = {r["case"]: {k: r[k] for k in ("turns", "cost", "denied", "error") if k in r} for r in old["cases"]}
+    rows = []
+    for case in cases:
+        path = earlier / "reports" / f"{case['name']}.md"
+        if case["name"] in facts and path.is_file():
+            rows.append(row(case, report_of(path.read_text()), threshold, facts[case["name"]]))
+    if not rows:
+        raise CannotRun(f"{earlier} holds no report of a case of the set")
+    return rows, old.get("model") or MODEL, old.get("claude") or "not recorded"
+
+
 def summary(rows: list, threshold: str, model: str, version: str) -> str:
-    count = lambda name: sum(1 for row in rows if row["result"] == name)  # noqa: E731
+    counted = [row for row in rows if not row.get("contested")]
+    waiting = [row for row in rows if row.get("contested")]
+    count = lambda name: sum(1 for row in counted if row["result"] == name)  # noqa: E731
     cost = sum(row.get("cost") or 0 for row in rows)
+    blocked = sum(1 for row in waiting if row["severity"] and LEVELS.index(row["severity"]) >= LEVELS.index(threshold))
     lines = ["# The test set of the intent reviewer: one run", "",
-             f"Cases: {len(rows)}. Right: {count(RIGHT)}. The threshold of the contract: {threshold}.",
+             f"Cases: {len(counted)}. Right: {count(RIGHT)}. The threshold of the contract: {threshold}.",
              f"False alarms: {count(FALSE_ALARM)}. Misses: {count(MISS)}. Another subject: {count(OTHER_SUBJECT)}. "
              f"No report: {count(NO_REPORT)}.",
              f"Model: {model}. Claude Code: {version}. Cost that the runs report: {cost:.2f} USD.",
@@ -249,8 +284,14 @@ def summary(rows: list, threshold: str, model: str, version: str) -> str:
              "A miss: the right answer blocks, and the reviewer gave no such finding.",
              "Another subject: the reviewer blocks, and no finding at the threshold names the subject of the case.",
              "", "| Case | Right answer | Highest open severity | Result | Turns |", "|---|---|---|---|---|"]
-    for row in rows:
-        lines.append(f"| `{row['case']}` | {row['expected']} | {row['severity'] or '-'} | {row['result']} | {row.get('turns') or '-'} |")
+    line = lambda row, answer, result: (  # noqa: E731
+        f"| `{row['case']}` | {answer} | {row['severity'] or '-'} | {result} | {row.get('turns') or '-'} |")
+    lines += [line(row, row["expected"], row["result"]) for row in counted]
+    if waiting:
+        lines += ["", f"Contested cases: {len(waiting)}, no part of the count. The reviewer blocked {blocked} of them.",
+                  "The answer of a contested case waits for a person: the case says why.",
+                  "", "| Case | Answer that is contested | Highest open severity | Result | Turns |", "|---|---|---|---|---|"]
+        lines += [line(row, row["expected"], NO_REPORT if row["result"] == NO_REPORT else "not counted") for row in waiting]
     return "\n".join(lines) + "\n"
 
 
@@ -261,9 +302,10 @@ def main(argv: list | None = None) -> int:
     parser.add_argument("--jobs", type=int, default=2, help="the number of cases that run at one time")
     parser.add_argument("--cases", type=Path, default=CASES, help="the folder of the cases")
     parser.add_argument("--out", type=Path, help="the folder of the result; a new folder under results/ without it")
+    parser.add_argument("--reports", type=Path, help="the folder of an earlier run: grade its reports again, with no model call")
     args = parser.parse_args(argv)
     try:
-        if not shutil.which(os.environ.get("CHARTER_EVAL_CLAUDE", "claude")):
+        if not args.reports and not shutil.which(os.environ.get("CHARTER_EVAL_CLAUDE", "claude")):
             raise CannotRun("Claude Code is not on the path")
         folders = sorted(p for p in args.cases.iterdir() if p.is_dir()) if args.cases.is_dir() else []
         if args.case:
@@ -275,18 +317,23 @@ def main(argv: list | None = None) -> int:
             raise CannotRun(f"no case under {args.cases}")
         cases = [read_case(folder) for folder in folders]
         threshold = tomllib.loads((ROOT / "charter.toml").read_text()).get("review", {}).get("threshold", "medium")
-        out = args.out or HERE / "results" / datetime.now(timezone.utc).strftime("%Y-%m-%dT%H-%M-%SZ")
-        (out / "reports").mkdir(parents=True, exist_ok=True)
-        with ThreadPoolExecutor(max_workers=max(1, args.jobs)) as pool:
-            rows = list(pool.map(lambda case: run_case(case, args.model, threshold, out / "reports"), cases))
+        out = args.out or args.reports or HERE / "results" / datetime.now(timezone.utc).strftime("%Y-%m-%dT%H-%M-%SZ")
+        if args.reports:
+            rows, model, version = grade_again(cases, args.reports, threshold)
+        else:
+            (out / "reports").mkdir(parents=True, exist_ok=True)
+            with ThreadPoolExecutor(max_workers=max(1, args.jobs)) as pool:
+                rows = list(pool.map(lambda case: run_case(case, args.model, threshold, out / "reports"), cases))
+            model = args.model
+            version = subprocess.run([os.environ.get("CHARTER_EVAL_CLAUDE", "claude"), "--version"],
+                                     capture_output=True, text=True, check=False).stdout.strip()
     except CannotRun as error:
         print(f"cannot run: {error}")
         return 2
-    version = subprocess.run([os.environ.get("CHARTER_EVAL_CLAUDE", "claude"), "--version"], capture_output=True,
-                             text=True, check=False).stdout.strip()
-    text = summary(rows, threshold, args.model, version)
+    out.mkdir(parents=True, exist_ok=True)
+    text = summary(rows, threshold, model, version)
     (out / "report.md").write_text(text)
-    (out / "result.json").write_text(json.dumps({"threshold": threshold, "model": args.model, "claude": version,
+    (out / "result.json").write_text(json.dumps({"threshold": threshold, "model": model, "claude": version,
                                                  "cases": rows}, indent=1) + "\n")
     print(text)
     print(f"The result is in {out.relative_to(ROOT) if out.is_relative_to(ROOT) else out}")

@@ -1,6 +1,6 @@
 expected = "blocks"
 source = "The reviewer gave this finding in the first round, the author corrected the intent, and the leader merged the change request."
-finding = ["flawed", "#93"]
+finding = [["flawed", "severity line"], ["flawed", "check 3"], ["#93", "token"]]
 change_request = 110
 base = "67d1e515a00db339e7642bb78ad12696352277fc"
 head = "e5fd1113406a11d693acccfe3646753737bfaadd"

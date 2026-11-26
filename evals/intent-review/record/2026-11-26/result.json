@@ -6,6 +6,7 @@
   {
    "case": "adopter-after-the-correction-endpoint",
    "expected": "passes",
+   "contested": true,
    "result": "false alarm",
    "severity": "medium",
    "turns": 23,
@@ -15,6 +16,7 @@
   {
    "case": "adopter-after-the-correction-product-test",
    "expected": "passes",
+   "contested": false,
    "result": "right",
    "severity": "none",
    "turns": 21,
@@ -24,6 +26,7 @@
   {
    "case": "adopter-after-the-correction-time-limit",
    "expected": "passes",
+   "contested": false,
    "result": "right",
    "severity": "low",
    "turns": 20,
@@ -33,6 +36,7 @@
   {
    "case": "adopter-behaviour-with-no-check",
    "expected": "blocks",
+   "contested": false,
    "result": "right",
    "severity": "blocker",
    "turns": 27,
@@ -42,6 +46,7 @@
   {
    "case": "adopter-definition-in-two-places",
    "expected": "blocks",
+   "contested": false,
    "result": "right",
    "severity": "high",
    "turns": 34,
@@ -51,6 +56,7 @@
   {
    "case": "adopter-pass-rule-with-parts-not-tested",
    "expected": "blocks",
+   "contested": false,
    "result": "right",
    "severity": "high",
    "turns": 24,
@@ -60,6 +66,7 @@
   {
    "case": "adopter-scope-sentence-with-no-check",
    "expected": "blocks",
+   "contested": false,
    "result": "right",
    "severity": "high",
    "turns": 27,
@@ -69,6 +76,7 @@
   {
    "case": "after-the-correction-code-reviewer",
    "expected": "passes",
+   "contested": true,
    "result": "false alarm",
    "severity": "high",
    "turns": 25,
@@ -78,6 +86,7 @@
   {
    "case": "after-the-correction-no-status-line",
    "expected": "passes",
+   "contested": false,
    "result": "right",
    "severity": "none",
    "turns": 18,
@@ -87,6 +96,7 @@
   {
    "case": "after-the-correction-product-test",
    "expected": "passes",
+   "contested": true,
    "result": "right",
    "severity": "low",
    "turns": 24,
@@ -96,6 +106,7 @@
   {
    "case": "after-the-correction-toolchain",
    "expected": "passes",
+   "contested": true,
    "result": "false alarm",
    "severity": "medium",
    "turns": 17,
@@ -105,6 +116,7 @@
   {
    "case": "after-the-correction-update-a-repo",
    "expected": "passes",
+   "contested": true,
    "result": "false alarm",
    "severity": "medium",
    "turns": 17,
@@ -114,6 +126,7 @@
   {
    "case": "condition-stated-without-its-limit",
    "expected": "blocks",
+   "contested": false,
    "result": "right",
    "severity": "high",
    "turns": 22,
@@ -123,6 +136,7 @@
   {
    "case": "first-round-runs-wait-in-order",
    "expected": "passes",
+   "contested": true,
    "result": "false alarm",
    "severity": "high",
    "turns": 16,
@@ -132,6 +146,7 @@
   {
    "case": "first-round-status-lines-removed",
    "expected": "passes",
+   "contested": true,
    "result": "false alarm",
    "severity": "high",
    "turns": 21,
@@ -141,7 +156,8 @@
   {
    "case": "goal-with-no-check",
    "expected": "blocks",
-   "result": "right",
+   "contested": false,
+   "result": "other subject",
    "severity": "high",
    "turns": 28,
    "cost": 0.3778195,
@@ -150,6 +166,7 @@
   {
    "case": "intent-against-the-product-document",
    "expected": "blocks",
+   "contested": false,
    "result": "other subject",
    "severity": "blocker",
    "turns": 23,
@@ -159,6 +176,7 @@
   {
    "case": "items-of-the-issue-left-out",
    "expected": "blocks",
+   "contested": false,
    "result": "right",
    "severity": "high",
    "turns": 24,
@@ -168,6 +186,7 @@
   {
    "case": "manual-check-with-no-review-clause",
    "expected": "blocks",
+   "contested": false,
    "result": "right",
    "severity": "high",
    "turns": 26,
@@ -177,6 +196,7 @@
   {
    "case": "merged-state-one-closing-line",
    "expected": "passes",
+   "contested": true,
    "result": "false alarm",
    "severity": "medium",
    "turns": 17,
@@ -186,6 +206,7 @@
   {
    "case": "no-scenario-of-the-product-test",
    "expected": "blocks",
+   "contested": false,
    "result": "right",
    "severity": "medium",
    "turns": 27,
@@ -195,6 +216,7 @@
   {
    "case": "one-name-for-two-facts",
    "expected": "blocks",
+   "contested": false,
    "result": "other subject",
    "severity": "high",
    "turns": 26,
@@ -204,6 +226,7 @@
   {
    "case": "rule-differs-between-intent-and-plan",
    "expected": "blocks",
+   "contested": false,
    "result": "right",
    "severity": "high",
    "turns": 23,
@@ -213,6 +236,7 @@
   {
    "case": "scope-against-out-of-scope",
    "expected": "blocks",
+   "contested": false,
    "result": "right",
    "severity": "high",
    "turns": 25,
@@ -222,6 +246,7 @@
   {
    "case": "scope-with-no-check",
    "expected": "blocks",
+   "contested": false,
    "result": "right",
    "severity": "high",
    "turns": 30,

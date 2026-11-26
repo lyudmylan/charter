@@ -6,6 +6,7 @@
   {
    "case": "adopter-after-the-correction-endpoint",
    "expected": "passes",
+   "contested": true,
    "result": "right",
    "severity": "none",
    "turns": 23,
@@ -15,6 +16,7 @@
   {
    "case": "adopter-after-the-correction-product-test",
    "expected": "passes",
+   "contested": false,
    "result": "right",
    "severity": "none",
    "turns": 20,
@@ -24,6 +26,7 @@
   {
    "case": "adopter-after-the-correction-time-limit",
    "expected": "passes",
+   "contested": false,
    "result": "right",
    "severity": "low",
    "turns": 23,
@@ -33,6 +36,7 @@
   {
    "case": "after-the-correction-code-reviewer",
    "expected": "passes",
+   "contested": true,
    "result": "false alarm",
    "severity": "medium",
    "turns": 21,
@@ -42,6 +46,7 @@
   {
    "case": "after-the-correction-no-status-line",
    "expected": "passes",
+   "contested": false,
    "result": "right",
    "severity": "low",
    "turns": 14,
@@ -51,6 +56,7 @@
   {
    "case": "after-the-correction-product-test",
    "expected": "passes",
+   "contested": true,
    "result": "false alarm",
    "severity": "medium",
    "turns": 22,
@@ -60,6 +66,7 @@
   {
    "case": "after-the-correction-toolchain",
    "expected": "passes",
+   "contested": true,
    "result": "right",
    "severity": "none",
    "turns": 15,
@@ -69,6 +76,7 @@
   {
    "case": "after-the-correction-update-a-repo",
    "expected": "passes",
+   "contested": true,
    "result": "right",
    "severity": "none",
    "turns": 16,
@@ -78,6 +86,7 @@
   {
    "case": "first-round-runs-wait-in-order",
    "expected": "passes",
+   "contested": true,
    "result": "false alarm",
    "severity": "high",
    "turns": 22,
@@ -87,6 +96,7 @@
   {
    "case": "first-round-status-lines-removed",
    "expected": "passes",
+   "contested": true,
    "result": "false alarm",
    "severity": "medium",
    "turns": 15,
@@ -96,6 +106,7 @@
   {
    "case": "merged-state-one-closing-line",
    "expected": "passes",
+   "contested": true,
    "result": "false alarm",
    "severity": "medium",
    "turns": 18,
