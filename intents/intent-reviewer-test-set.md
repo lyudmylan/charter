@@ -86,9 +86,9 @@ the right answer.
 11. The reports of an earlier run are graded again with no run of the model, and without `--out` no file
     changes. test: `tests/test_reviewer_eval.py::TheRun.test_the_reports_of_an_earlier_run_are_graded_again_with_no_model_call`
 12. No file of a case holds a path of a computer, a mail address, a token, or a link to a session. test: `tests/test_reviewer_eval.py::TheSet.test_no_file_of_a_case_holds_private_material`
-13. No file of a case holds a text pattern of the contract, the names of other projects too. command:
-    `python3 evals/intent-review/run.py --text`. The command needs the source of the organization, so the
-    author runs it before each push.
+13. No file of a case holds a text pattern of the contract, the names of other projects too. The command
+    needs the source of the organization, so the author runs it before each push.
+    command: `python3 evals/intent-review/run.py --text`
 
 ### Manual checks
 
