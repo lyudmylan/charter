@@ -15,7 +15,7 @@ The intent, the plan, and the code reach the leader together, and the merge of t
    merge. The file stays under the limit of lines.
 4. `docs/contract.md`, `docs/product.md`, `docs/decisions.md`, `AGENTS.md`, `charter/templates/AGENTS.md`.
 5. `tests/product.py`: the scenario "plan of a milestone".
-6. Both manifests: 0.3.23. The version 0.3.22 is the one of the change for #153, which is open.
+6. Both manifests: 0.3.23, or the next number that is free at the merge.
 
 ## Files
 
@@ -45,6 +45,10 @@ The intent, the plan, and the code reach the leader together, and the merge of t
 - This repo gets no plan file for the milestone in work.
 
 ## What this change does not show
+
+A change request that changes only a plan of a milestone goes to the reviewer of the code, as each file
+outside `intents/` and `plans/` does, and not to the intent reviewer. A review of a plan against the product
+document is no part of this work item.
 
 No code reads the lines `Tier:` and `Needs:` yet. The plan is a file that the leader approves and that a
 check reads; the reviewer, the start of the work, and the tiers use it in the work items #142, #144, and

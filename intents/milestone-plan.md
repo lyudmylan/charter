@@ -24,6 +24,7 @@ leader approves its work items.
   `Tier:`; an issue that the plan holds two times; a value of `Tier:` that is not `high`; a need in none of
   the three forms, or one that names the work item itself or an issue that is no work item of the plan; a
   line under a work item that starts with another word and a colon, or that continues no line `Done:`.
+  A heading of another level ends the work item; a line that starts with `#` and is no heading does not.
 - The tier. The contract of this repo holds `milestones/**` in `tiers.high.paths` and in
   `boundary.no_write`, and so does each contract that the setup step writes: the leader merges each change
   of a plan, and a run of an agent without a person does not change it.
@@ -49,6 +50,12 @@ leader approves its work items.
 - The approval of an intent. Its change request still goes to the leader, because `intents/**` stays in
   the high tier.
 
+This intent narrows the issue #141 in two points, and the leader confirms the narrowing with the merge.
+The issue says that each line `Needs:` names a thing that exists: the check reads the form of a need and
+the work items of the same plan, not the tracker and not the versions of Charter. The issue says that
+`Tier: high` sends the change of the work item to the leader: this work item gives the line and its check,
+and #148 makes the verdict read it.
+
 ## Acceptance checks
 
 ## Automatic checks
@@ -56,10 +63,9 @@ leader approves its work items.
 1. A plan in the form passes, and the command `milestone` prints the name of the milestone and each work
    item with its lines `Tier:` and `Needs:`. A file that is not there ends the command with the code 2.
    test: `tests/test_charter_check.py::MilestonePlan.test_a_plan_in_the_form_passes_and_the_command_prints_its_work_items`
-2. Each fault of the form fails with a reason that names it: the first line; no work item; a heading of a
-   work item in another form; no text in a line `Done:`; two lines `Done:`; two lines `Tier:`; a value of
-   `Tier:` that is not `high`; an issue two times; a line that starts with another word and a colon; a line
-   that continues no line `Done:`.
+2. Each fault of the form that the scope lists fails with a reason that names it, except the faults of a
+   need, which check 4 holds. A line that starts with `#` and is no heading does not end the work item: the
+   lines after it are read.
    test: `tests/test_charter_check.py::MilestonePlan.test_each_fault_of_the_form_fails_with_its_reason`
 3. A line `Done:` continues on the next lines up to a blank line, and a text outside a work item is free,
    before the first work item and after a heading of another level.

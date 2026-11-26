@@ -435,7 +435,8 @@ Needs: #<issue>
 | `Needs:` | none or more | one thing that must be true before the work item starts: `#<issue>` of another work item of this plan, `Charter <version>`, or `the word of the leader` |
 
 `charter-check milestone <file>` checks this form and prints the work items, and `all` checks each plan of
-the folder. The check fails for a first line in another form, a plan with no work item, a work item with
+the folder. The check fails for a first line in another form, a plan with no work item, a heading of the level of a
+work item in another form, a work item with
 no line `Done:` or with two, an issue that the plan holds two times, a value of `Tier:` that is not `high`,
 a line `Needs:` in none of the three forms or with an issue that is no other work item of the plan, and a
 line under a work item that starts with another word and a colon, or that continues no line `Done:`. The check reads the file only: it does

@@ -364,6 +364,13 @@ class MilestonePlan(Temp):
             "an issue two times": (PLAN.replace("### #142", "### #141"), "#141 is a work item of the plan 2 times"),
             "a word that is no line of the form": (PLAN.replace("Tier: high", "Teir: high"), "line 10: #141: `Teir:` is no line of a work item"),
             "a text after a line Needs": (PLAN + "and one more text\n", "line 17: #142: the line starts with no"),
+            "a heading of the level of a work item": (PLAN.replace("## Work items", "### Work items"),
+                                                      "line 5: a heading of a work item has the form"),
+            # A line that starts with `#` and is no heading does not end the work item: the lines after it are read.
+            "a line that starts with a number mark": (PLAN.replace("Needs: #141\n", "#141 comes first\nNeeds: #99\n"),
+                                                      "#142: `Needs: #99` names no other work item"),
+            "a wrong word after such a line": (PLAN.replace("Tier: high", "#140 is merged\nTeir: high"),
+                                               "line 11: #141: `Teir:` is no line of a work item"),
         }
         for name, (text, reason) in cases.items():
             with self.subTest(case=name):

@@ -59,6 +59,7 @@ CMD_MILESTONE = "milestone"
 MILESTONES_DIR = "milestones"
 MILESTONE_TITLE = "# Milestone: "
 WORK_ITEM = re.compile(r"### #(\d+) (\S.*)")
+HEADING = re.compile(r"(#{1,6})(?:\s|$)")           # a heading of Markdown: `#141 first` is a line of text, not a heading
 PLAN_LINE = re.compile(r"(Done|Tier|Needs):(?:\s+(.*))?")
 OTHER_WORD = re.compile(r"([A-Za-z]+):(?:\s|$)")     # a line that starts as a line of the form, with another word
 KEY_DONE, KEY_TIER, KEY_NEEDS = "Done", "Tier", "Needs"
@@ -708,8 +709,8 @@ def read_milestone(text: str) -> tuple[str, list[WorkItem], list[str]]:
         if heading:
             item, continues = WorkItem(int(heading.group(1)), heading.group(2).strip()), False
             items.append(item)
-        elif line.startswith("#"):
-            if line.startswith("###") and not line.startswith("####"):
+        elif HEADING.match(line):
+            if len(HEADING.match(line).group(1)) == 3:
                 problems.append(msg("plan_bad_heading", line=number))
             item, continues = None, False
         elif not line:
