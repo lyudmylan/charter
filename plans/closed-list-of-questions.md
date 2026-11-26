@@ -47,7 +47,7 @@ The intent, the plan, and the code reach the leader together, and the merge of t
 
 ## Tests
 
-- `tests/test_review.py`: `TheList`, one test; `Answers`, three tests; `TheChange`, four tests;
+- `tests/test_review.py`: `TheList`, two tests; `Answers`, three tests; `TheChange`, four tests;
   `TheWorkflow`, three tests.
 - `tests/test_reviewer_eval.py`: the tests of `TheRun` and of `Grader` that the intent names.
 

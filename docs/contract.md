@@ -464,7 +464,8 @@ of the fetched Charter, in this repo the scripts of the base branch, never the c
   automatic check names a test or a command, and each named test file is in the repo when the plan of the
   intent is. The reviewer gets these answers as a file.
 - After the reviewer, `charter-review close --report <file> --base <ref>` checks that the report answers each
-  question for each intent that the change adds and for the intent of each plan that it adds or changes. It
+  question for each intent that the change adds and for the intent of each plan that it adds or changes, and
+  that it holds the section "Answers". It
   adds each answer of code that does not hold, and it writes the line `Highest open severity: <level>`: the
   highest severity of a question that does not hold; `low` with a note or an answer `unknown` and no such
   question; `none` with neither. A report that lacks an answer is not complete: the step posts nothing, and

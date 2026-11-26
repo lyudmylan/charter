@@ -34,7 +34,8 @@ does not hold blocks, and code gives the severity.
   The step that posts the report closes it first: it adds each answer of code that does not hold and writes
   the severity line. A report that lacks an answer is not posted, so the run fails and is no round. The two
   steps run the scripts of the fetched Charter, and in this repo the scripts of the base branch.
-- The verdict reads the severity line as before: code wrote that line from the answers.
+- The verdict reads the severity line as before, with no change of its code: code wrote that line from
+  the answers.
 - The test set of the intent reviewer. Its command closes each report as the workflow does, and it looks
   for the subject of a case in the answers that do not hold. A report that lacks an answer is "form not
   read". A report of before this change is graded as before.
@@ -51,7 +52,8 @@ does not hold blocks, and code gives the severity.
 - The reviewer of the code. It gets the form after its own test set, #147.
 - Two runs of the reviewer for each change, with a block only when both agree.
 - A change to the cases of the test set beyond their answer and their subject.
-- A reviewer that reads the report of code for more than the names of the tests of Q3.
+- An answer of code to another question than Q3. The issue asks for each question that code can answer;
+  the form of a manual check and of an issue differs between repos, so code reads the names of Q3 only.
 
 ## Acceptance checks
 
@@ -68,8 +70,8 @@ does not hold blocks, and code gives the severity.
    note or an answer `unknown`; `none` with neither; a closed answer blocks nothing; the line that the
    reviewer wrote does not count.
    test: `tests/test_review.py::Answers.test_the_severity_comes_from_the_list`
-4. A report that lacks an answer, a heading of an expected intent, or the sentence of a question that does
-   not hold is not complete.
+4. A report that lacks an answer, a heading of an expected intent, the sentence of a question that does
+   not hold, or the section "Answers" is not complete.
    test: `tests/test_review.py::Answers.test_a_report_that_lacks_an_answer_is_not_complete`
 5. A report answers for each intent that the change adds and for the intent of each plan that it adds or
    changes.
@@ -77,12 +79,14 @@ does not hold blocks, and code gives the severity.
 6. Code answers the names of the checks, and the command `before` prints these answers for the reviewer.
    test: `tests/test_review.py::TheChange.test_code_answers_the_names_of_the_checks`
    test: `tests/test_review.py::TheChange.test_the_text_for_the_reviewer`
-7. The command `close` adds the answer of code, writes the severity line as the last line, and leaves a
-   report that is not complete as it is, with the exit code 1.
+7. The command `close` adds the answer of code under the heading of its intent, also when another intent
+   holds the same answer; it writes the severity line as the last line; it leaves a report that is not
+   complete as it is, with the exit code 1. The verdict reads the severity line of each report.
    test: `tests/test_review.py::TheChange.test_the_command_closes_a_report`
+   test: `tests/test_charter_facts_github.py::ReviewReports.test_each_report_gives_its_severity_in_order`
 8. In the workflow and in its template, the step before the reviewer writes the answers of code, the step
    that posts the report closes it and posts no report that is not complete, and no step runs code of the
-   change.
+   change. With a version of Charter that has no such script, the report is posted as the reviewer wrote it.
    test: `tests/test_review.py::TheWorkflow.test_the_step_posts_a_report_with_the_severity_of_code`
    test: `tests/test_review.py::TheWorkflow.test_code_answers_before_the_reviewer_and_runs_no_code_of_the_change`
    test: `tests/test_review.py::TheWorkflow.test_the_scripts_of_the_base_branch`
@@ -92,8 +96,10 @@ does not hold blocks, and code gives the severity.
    test: `tests/test_reviewer_eval.py::Grader.test_the_subject_of_a_finding_at_the_threshold`
 10. No case of the test set is contested, and each case with the answer `blocks` names its subject.
     test: `tests/test_reviewer_eval.py::TheSet.test_each_case_of_the_set_has_its_parts_and_the_set_is_balanced`
-11. The command `charter-review` is a command of the plugin, and the product test runs it on a report: the
-    scenario "severity of a report of the reviewer".
+11. The command `charter-review` is a command of the plugin, both manifests name the version 0.3.22 or a
+    later one, and the product test runs the command on a report: the scenario "severity of a report of the
+    reviewer".
+    test: `tests/test_review.py::TheList.test_both_manifests_name_the_version`
     test: `tests/test_setup.py::Commands.test_the_four_commands_exist_and_the_manifests_agree`
     command: `python3 tests/product.py`
 
@@ -107,6 +113,8 @@ does not hold blocks, and code gives the severity.
 13. One full run of the test set with the reviewer itself, and two more runs of the cases with the answer
     `passes`. The author starts them after the word of the leader, because the runs of the model are on the
     account of the leader. The bar: no case with the answer `blocks` is a miss; fewer runs of a `passes`
-    case are blocked than on 2026-11-26, when 14 of 27 runs were blocked for the 9 of these cases that had
-    three runs; no more than 2 runs give a report that is not complete. Code writes the record, `evals/intent-review/record/`. Not
+    case are blocked than on 2026-11-26; fewer `passes` cases get two different answers in their three
+    runs than on that day; no more than 2 runs give a report that is not complete. On 2026-11-26, 9 of the
+    11 cases that have the answer `passes` today had three runs: 14 of these 27 runs were blocked, and 3 of
+    the 9 cases got two different answers. Code writes the record, `evals/intent-review/record/`. Not
     automatic: no test may call the model.

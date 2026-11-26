@@ -55,6 +55,7 @@ SECTION = re.compile(r"^#{1,6}\s*[`*]*(" + re.escape(INTENTS_DIR) + r"[A-Za-z0-9
 ANSWER = re.compile(r"^\s*(?:[-*+]\s+)?[`*]*Q\s?(\d+)[`*]*\s*[:.]?[`*]*\s*[`*]*(" + "|".join(sorted(ANSWERS, key=len, reverse=True))
                     + r")\b[`*]*\s*[:.,]?\s*(.*)$", re.IGNORECASE)
 NOTES_HEADING = re.compile(r"^#{1,6}\s*Notes\b", re.IGNORECASE)
+ANSWERS_HEADING = re.compile(r"^#{1,6}\s*Answers\b", re.IGNORECASE | re.MULTILINE)
 NOTE_ITEM = re.compile(r"^\s*(?:[-*+]|\d+[.)])\s+(.*\S)\s*$")
 NO_NOTE = re.compile(r"^[`*_]*(none|no notes?|nothing)[`*_]*\.?$", re.IGNORECASE)
 SEVERITY_LINE = re.compile(r"^Highest open severity:.*$", re.IGNORECASE | re.MULTILINE)
@@ -63,13 +64,15 @@ SEVERITY_FORM = "Highest open severity: {severity}"
 # The checks of an intent, in the form of the template.
 AUTOMATIC, MANUAL = re.compile(r"^#{1,6}\s*Automatic checks\b", re.I | re.M), re.compile(r"^#{1,6}\s*Manual checks\b", re.I | re.M)
 CHECK_LINE = re.compile(r"^(\d+)\. ")
-NAMES_A_PROOF = re.compile(r"\b(?:test|command):")
+# The name of a proof: the word, then a value in marks of code, a place to fill in, or a path.
+NAMES_A_PROOF = re.compile(r"(?:^|\s)(?:test|command):\s*(?:[`<]|\S*[/.]\S)", re.MULTILINE)
 TEST_FILE = re.compile(r"\btest:\s*`?([^\s`:]+)")
 
 MSG = {
     "git": "git could not list the change against {base}: {detail}",
     "no_report": "no report file: {path}",
     "no_answers": "the report holds no answer of the form `- Q<n>: holds`",
+    "no_part": "the report holds no section \"Answers\"",
     "no_section": "{intent}: the report holds no heading with this intent",
     "no_answer": "{intent}: no answer to Q{number}",
     "no_question": "{intent}: Q{number} is no question of the list",
@@ -203,12 +206,14 @@ def has_a_note(report: str) -> bool:
     return False
 
 
-def problems(answers: dict, outside: list[int], expected: list[str]) -> list[str]:
+def problems(answers: dict, outside: list[int], expected: list[str], report: str | None = None) -> list[str]:
     """Why a report is not complete; empty when each expected intent, and each intent of a heading, has an
-    answer to each question of the list."""
+    answer to each question of the list. With the text of the report: it holds the section "Answers", also
+    for a change that needs no answer, so a report in another form is never read as one with no finding."""
+    found = [msg("no_part")] if report is not None and not ANSWERS_HEADING.search(report) else []
     if not answers and not outside and not expected:
-        return []
-    found = [msg("outside", number=number) for number in outside]
+        return found
+    found += [msg("outside", number=number) for number in outside]
     if not answers and not outside:
         found.append(msg("no_answers"))
     found += [msg("no_section", intent=intent) for intent in expected if intent not in answers]
@@ -242,14 +247,19 @@ def severity_of(report: str) -> str:
 
 
 def with_the_answers_of_code(report: str, root: Path) -> str:
-    """The report, with each answer of code that does not hold under the heading of its intent."""
+    """The report, with each answer of code that does not hold under the heading of its intent. A reason
+    that the section of that intent holds already is not added again."""
+    lines = report.splitlines()
     out = []
-    for line in report.splitlines():
+    for at, line in enumerate(lines):
         out.append(line)
         section = SECTION.match(line)
         reasons = answers_of_code(section.group(1), root) if section else None
-        out += [msg("code_fails", question=QUESTION_OF_CODE, fails=FAILS, reason=reason, by=BY_CODE) for reason in reasons or ()
-                if reason not in report]
+        if reasons:
+            end = next((i for i in range(at + 1, len(lines)) if HEADING.match(lines[i])), len(lines))
+            held = "\n".join(lines[at + 1:end])
+            out += [msg("code_fails", question=QUESTION_OF_CODE, fails=FAILS, reason=reason, by=BY_CODE) for reason in reasons
+                    if reason not in held]
     return "\n".join(out) + "\n"
 
 
@@ -257,7 +267,7 @@ def closed(report: str, expected: list[str], root: Path) -> tuple[str | None, li
     """The report with the answers of code and the severity line as its last line, or None with the reasons
     why the report is not complete."""
     answers, outside = read_answers(report)
-    found = problems(answers, outside, expected)
+    found = problems(answers, outside, expected, report)
     if found:
         return None, found
     text = SEVERITY_LINE.sub("", with_the_answers_of_code(report, root)).rstrip() + "\n\n"
