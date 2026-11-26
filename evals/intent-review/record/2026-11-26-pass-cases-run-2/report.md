@@ -1,12 +1,13 @@
 # The test set of the intent reviewer: one run
 
 Cases: 3. Right: 3. The threshold of the contract: medium.
-False alarms: 0. Misses: 0. Another subject: 0. No report: 0.
+False alarms: 0. Misses: 0. Another subject: 0. Form not read: 0. No report: 0.
 Model: sonnet. Claude Code: 2.1.332 (Claude Code). Cost that the runs report: 2.47 USD.
 
 A false alarm: the right answer passes, and the reviewer gave a finding at the threshold or above.
 A miss: the right answer blocks, and the reviewer gave no such finding.
 Another subject: the reviewer blocks, and no finding at the threshold names the subject of the case.
+Form not read: the reviewer blocks, and the command reads no finding at the threshold in the report.
 
 | Case | Right answer | Highest open severity | Result | Turns |
 |---|---|---|---|---|

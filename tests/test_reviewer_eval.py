@@ -206,7 +206,7 @@ class TheRun(Fixture):
         code, text, out = self.start("--jobs", "3")
         self.assertEqual(code, 0)
         self.assertIn("Cases: 5. Right: 2.", text)
-        self.assertIn("False alarms: 1. Misses: 1. Another subject: 1. No report: 0.", text)
+        self.assertIn("False alarms: 1. Misses: 1. Another subject: 1. Form not read: 0. No report: 0.", text)
         self.assertIn("Cost that the runs report: 1.25 USD", text)
         result = json.loads((out / "result.json").read_text())
         self.assertEqual([row["result"] for row in result["cases"]],
@@ -249,6 +249,15 @@ class TheRun(Fixture):
         self.assertIn("Cost that the runs report: 0.25 USD", done.stdout)
         self.assertEqual(len(list(self.record.iterdir())), calls)
         self.assertEqual(json.loads((again / "result.json").read_text())["claude"], "stand-in 0")
+        # Without --out the command prints the result and changes no file of the earlier run.
+        before = (out / "report.md").read_text()
+        done = subprocess.run(["python3", str(RUN), "--cases", str(self.cases), "--reports", str(out)],
+                              capture_output=True, text=True, cwd=ROOT, check=False)
+        self.assertEqual(done.returncode, 0, done.stdout)
+        self.assertIn("Another subject: 1.", done.stdout)
+        self.assertIn("Nothing is written", done.stdout)
+        self.assertEqual((out / "report.md").read_text(), before)
+        self.assertIn("Right: 1.", before)
         done = subprocess.run(["python3", str(RUN), "--cases", str(self.cases), "--reports", str(self.work / "none")],
                               capture_output=True, text=True, cwd=ROOT, check=False)
         self.assertEqual(done.returncode, 2)
@@ -272,6 +281,23 @@ class TheRun(Fixture):
         code, text, _ = self.start("--case", "three")
         self.assertEqual(code, 2)
         self.assertIn("cannot run: no such case: three", text)
+
+
+class Template(Fixture):
+    def test_a_template_that_the_command_cannot_read_cannot_run(self):
+        # check 6
+        old = run.TEMPLATE
+        try:
+            for change, message in ((lambda text: text.replace("${{ github.base_ref }}", "${{ github.new_value }}"),
+                                     "does not know: github.new_value"),
+                                    (lambda text: text.replace("--disallowedTools", "--otherTools"), "no flag --disallowedTools")):
+                run.TEMPLATE = self.work / "review-intents.yml"
+                run.TEMPLATE.write_text(change(old.read_text()))
+                with self.assertRaises(run.CannotRun) as raised:
+                    run.workflow_form(self.work, "0" * 40)
+                self.assertIn(message, str(raised.exception))
+        finally:
+            run.TEMPLATE = old
 
 
 class Grader(unittest.TestCase):
@@ -307,9 +333,14 @@ class Grader(unittest.TestCase):
         # Each pattern of a way must be in one finding: two findings that hold one each do not name it.
         case = {"expected": "blocks", "finding": [["check 2", "the record"]]}
         self.assertEqual(run.grade(case, text, "medium")["result"], run.OTHER_SUBJECT)
+        # A report that blocks in a form that the command cannot read is no answer on the subject.
+        table = report("high", "| 1 | high | check 2 proves nothing |")
+        self.assertEqual(run.grade({"expected": "blocks", "finding": [["check 2"]]}, table, "medium")["result"],
+                         run.FORM_NOT_READ)
         # The other forms in which the reviewer writes the number and the severity of a finding.
         for line in ("**1. medium — the text of the change request**\n\nIt differs from check 2.",
-                     "1. medium: check 2 proves nothing.", "1. **High**, check 2."):
+                     "1. medium: check 2 proves nothing.", "1. **High**, check 2.", "### 1. high: check 2.",
+                     "- **Finding 1: medium** check 2.", "#### 2) Medium, check 2"):
             got = run.grade({"expected": "blocks", "finding": [["check 2"]]}, report("medium", line), "medium")
             self.assertEqual(got["result"], run.RIGHT, line)
 
@@ -332,6 +363,22 @@ class TheSet(unittest.TestCase):
             for key in ("base", "head", "earlier"):
                 if key in case:
                     self.assertRegex(case[key], r"^[0-9a-f]{40}$", case["name"])
+
+    def test_no_file_of_a_case_holds_private_material(self):
+        # check 12. The names of other projects are in the source of the organization, so the command of
+        # check 13 reads them; this test holds the forms that need no list.
+        forms = {"a path of a computer": r"/(Users|home)/[\w.-]+/", "a mail address": r"[\w.+-]+@[\w-]+\.(com|org|net|io)\b",
+                 "a token": r"\b(ghp_|github_pat_|sk-ant-|AKIA)[A-Za-z0-9_-]{8,}", "a link to a session": r"claude\.ai/code/session"}
+        hits = []
+        for path in sorted(run.CASES.rglob("*")):
+            if not path.is_file():
+                continue
+            try:
+                text = path.read_text()
+            except UnicodeDecodeError:
+                continue
+            hits += [f"{path.relative_to(run.CASES)}: {name}" for name, form in forms.items() if run.re.search(form, text)]
+        self.assertEqual(hits, [])
 
     def test_the_documents_name_the_command(self):
         # check 9

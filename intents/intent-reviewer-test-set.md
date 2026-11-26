@@ -15,8 +15,9 @@ the right answer.
   the threshold of the contract or above, or `passes`. Each case says where its answer comes from.
 - Two forms of a case. A case of this repo names its commits. A case of an adopter holds its files, with the
   name of the product replaced.
-- 25 cases; 18 of this repo and 7 of an adopter; 9 of a later round. 17 are counted: 14 with the answer
-  `blocks` and 3 with the answer `passes`. A `blocks` case is a finding that the author corrected and the
+- At this change the set holds 25 cases: 18 of this repo and 7 of an adopter; 9 of a later round. 17 are
+  counted: 14 with the answer `blocks` and 3 with the answer `passes`. Check 8 holds the lower bounds, so a
+  later case needs no change of this intent. A `blocks` case is a finding that the author corrected and the
   leader merged. A `passes` case is a state that the leader merged with a report below the threshold, and
   that the reviewer passed again in each of three runs of the set.
 - 8 cases are contested. Each is a merged state with a report below the threshold then, and the reviewer of
@@ -33,6 +34,12 @@ the right answer.
   `blocks` case names its subject: one or more ways to name it, each a list of patterns, and one finding at
   the threshold must hold each pattern of a way. A match of words is a rough measure of the subject.
 - The command grades the reports of an earlier run again, with no run of the model: `--reports <folder>`.
+  It prints the result, and it writes files only when `--out` names a folder.
+- A report that blocks in a form that the grader cannot read gets its own result, "form not read".
+- No case holds private material or the name of another project. A test holds the forms of private
+  material. The names of other projects are in the source of the organization, so the command
+  `python3 evals/intent-review/run.py --text` checks each file of the cases against the text patterns of
+  the contract.
 - The report: the number of right answers, of false alarms, of misses, of answers on another subject, and
   of runs with no report, with one row for each case. The command keeps each report of the reviewer.
 - `docs/contract.md`, `docs/product.md`, and `README.md` name the command.
@@ -64,7 +71,9 @@ the right answer.
 5. The grader gives the right result for each pair of an answer and a severity line, for a report with no
    severity line, and for a finding on another subject. test: `tests/test_reviewer_eval.py::Grader.test_the_severity_line_against_the_threshold`
    and `tests/test_reviewer_eval.py::Grader.test_the_subject_of_a_finding_at_the_threshold`
-6. A case with a missing part cannot run, and the command names the part. test: `tests/test_reviewer_eval.py::Workspace.test_a_case_with_a_missing_part_cannot_run`
+6. A case with a missing part cannot run, and the command names the part; a template of the workflow that
+   the command cannot read cannot run. test: `tests/test_reviewer_eval.py::Workspace.test_a_case_with_a_missing_part_cannot_run`
+   and `tests/test_reviewer_eval.py::Template.test_a_template_that_the_command_cannot_read_cannot_run`
 7. The report counts each kind of result and keeps each report; a run with no report ends the command with
    1; one case runs by its name. test: `tests/test_reviewer_eval.py::TheRun.test_the_result_counts_each_kind_and_keeps_each_report`,
    `tests/test_reviewer_eval.py::TheRun.test_a_case_with_no_report_ends_the_command_with_1`, and
@@ -73,18 +82,22 @@ the right answer.
    and 3 or more with `passes`; 4 or more of an adopter; 3 or more of a later round; each `blocks` case
    names its subject. test: `tests/test_reviewer_eval.py::TheSet.test_each_case_of_the_set_has_its_parts_and_the_set_is_balanced`
 9. The documents name the command. test: `tests/test_reviewer_eval.py::TheSet.test_the_documents_name_the_command`
-
 10. A contested case runs, its report is kept, and it is no part of the count. test: `tests/test_reviewer_eval.py::TheRun.test_a_contested_case_runs_and_is_no_part_of_the_count`
-11. The reports of an earlier run are graded again with no run of the model. test: `tests/test_reviewer_eval.py::TheRun.test_the_reports_of_an_earlier_run_are_graded_again_with_no_model_call`
+11. The reports of an earlier run are graded again with no run of the model, and without `--out` no file
+    changes. test: `tests/test_reviewer_eval.py::TheRun.test_the_reports_of_an_earlier_run_are_graded_again_with_no_model_call`
+12. No file of a case holds a path of a computer, a mail address, a token, or a link to a session. test: `tests/test_reviewer_eval.py::TheSet.test_no_file_of_a_case_holds_private_material`
+13. No file of a case holds a text pattern of the contract, the names of other projects too. command:
+    `python3 evals/intent-review/run.py --text`. The command needs the source of the organization, so the
+    author runs it before each push.
 
 ### Manual checks
 
-12. One full run of the set with the reviewer itself, and two more runs of the cases with the answer
+14. One full run of the set with the reviewer itself, and two more runs of the cases with the answer
     `passes`. The author starts them after the word of the leader, because the runs of the model are on the
     account of the leader. Their record is the folder `evals/intent-review/record/` of this change request:
     the report, the result file, and each report of the reviewer. Code writes the record. It is manual
     because no test may call the model.
-13. The leader reads three cases and says for each whether the answer that the case holds is right: one
+15. The leader reads three cases and says for each whether the answer that the case holds is right: one
     `blocks` case, one `passes` case, and one contested case. The summary of each case is drafted by the
     agent, reviewed by an agent that is not the author, confirmed by the leader. It is manual because it
     sets the measure for the grader. Its record is a comment on #140.
