@@ -128,6 +128,14 @@ def steps(repo: Path, work: Path) -> bool:
     if not step("answer to a finding, a person", command("charter-gate", *decision, "--by", "person", cwd=repo), 0,
                 "start=true", "issue=1", "branch=run/1", "round=1", absent=("start=false",)):
         return False
+    # A report of the intent reviewer: one question does not hold, and the line of the reviewer says `none`.
+    review = work / "review.md"
+    review.write_text("<!-- charter-intent-review -->\nCommit: " + HEAD + "\n\n## Answers\n\n### intents/app.md\n"
+                      + "".join(f"- Q{n}: holds\n" for n in (1, 3, 4, 5, 6, 7, 8))
+                      + '- Q2: does not hold: "The app prints a line.": no check names it.\n\nHighest open severity: none\n')
+    if not step("severity of a report of the reviewer", command("charter-review", "severity", "--report", str(review), cwd=repo), 0,
+                "Highest open severity: medium", absent=("none",)):
+        return False
     facts = work / "facts.json"
     facts.write_text(json.dumps(FACTS))
     return step("verdict", command("charter-gate", "verdict", "--facts", str(facts), "--contract", CONTRACT, *SOURCE,

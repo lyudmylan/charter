@@ -62,9 +62,10 @@ class IntentReviewSkill(unittest.TestCase):
         check_skill(self, "intent-review")
 
     def test_severity_and_the_closing_line(self):
-        """review-loop, check 1: each severity is defined, and the report ends with the fixed line."""
+        """review-loop, check 1: each severity is defined, and the report ends with the fixed line. Since
+        closed-list, the list of the questions gives the severity of a finding, and a note has `low`."""
         text = (SKILLS / "intent-review" / "SKILL.md").read_text()
-        for level in ("blocker", "high", "medium", "low"):
+        for level in ("high", "medium", "low"):
             self.assertIn(f"`{level}`", text)
         self.assertIn("`Highest open severity: blocker|high|medium|low|none`", text)
         self.assertIn("Dropped finding:", text)

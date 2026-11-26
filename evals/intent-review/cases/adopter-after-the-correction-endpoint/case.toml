@@ -1,3 +1,2 @@
 expected = "passes"
-source = "A change request of an adopter, with the name of the product replaced. The leader merged this state, and the report of the reviewer on it was below the threshold."
-contested = "In three runs on 2026-11-26 the reviewer blocked this state 2 of 3 times. Two agents that are not the author found the blocking finding right in fact. Whether it is at the threshold is for the leader to say."
+source = "A change request of an adopter, with the name of the product replaced. The leader merged this state, and the report of the reviewer on it was below the threshold. By the closed list of questions (#153): a fresh read says that the type check does not prove the rule on the imports. Another check tries that rule for the files that the product loads, and the sentence did not change in this round: a note."

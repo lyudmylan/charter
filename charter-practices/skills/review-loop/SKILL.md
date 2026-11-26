@@ -17,11 +17,11 @@ change request says what it did with each finding. With `person` or no value, an
 1. Wait for the reviewer: `gh pr checks <number> --watch`. Right after a push it can answer that no checks are reported: ask again. When
    the check `review-intents` fails, rerun it once, `gh run rerun <run-id>`; a failed run is no round. Then read the newest report:
    `gh api repos/<owner>/<repo>/issues/<number>/comments --jq '[.[] | select(.body | startswith("<!-- charter-intent-review -->"))] | last | .body'`.
-2. Decide each finding at the threshold or above, in the order of the report:
+2. Decide each finding at the threshold or above, in the order of the report; a finding is a line `- Q<n>: does not hold` of the section "Answers":
    - correct: change the intent, in the smallest way that answers the finding;
    - drop: when the finding contradicts a decision of the leader or a fact of the code, add one line `Dropped finding: <reason>` to the
      text of the change request with `gh pr edit <number> --body-file`; name the finding in the reason, so that the reviewer and the leader recognize it.
-   A finding below the threshold: correct it when it is one line of work; else leave it.
+   A note, or a finding below the threshold: correct it when it is one line of work; else leave it. An answer `unknown`: give the reviewer what it could not read.
    Mark nothing as false: only the leader writes `False finding: <reason>`.
 3. Run the two commands of `AGENTS.md` ("Before a push"). Commit: `Answer the findings of review round <n>`. Push. The reviewer runs again.
 

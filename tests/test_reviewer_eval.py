@@ -42,8 +42,19 @@ print(json.dumps({"type": "result", "result": text, "num_turns": 3, "total_cost_
 
 
 def report(severity: str, finding: str = "") -> str:
+    """A report of before the closed list: numbered findings, and the severity line of the reviewer."""
     return (f"A sentence before the report.\n{run.MARKER}\nCommit: 0000\n\n## Findings\n\n{finding}\n\n"
             f"Highest open severity: {severity}\n")
+
+
+def answered(fails: dict | None = None, note: str = "", leave_out: int = 0, line: str = "none") -> str:
+    """A report in the form of the closed list, for the intent of the fixture: each question holds, but the
+    ones of `fails`, a question number with the text of its answer. The severity line is what the reviewer
+    wrote; code writes it again."""
+    fails = fails or {}
+    lines = [f"- Q{n}: does not hold: {fails[n]}" if n in fails else f"- Q{n}: holds" for n in run.cr.QUESTIONS if n != leave_out]
+    return (f"A sentence before the report.\n{run.MARKER}\nCommit: 0000\n\n## Answers\n\n### intents/part.md\n" + "\n".join(lines)
+            + f"\n\n## Notes\n\n- {note or 'none'}\n\nHighest open severity: {line}\n")
 
 
 class Fixture(unittest.TestCase):
@@ -161,7 +172,7 @@ class Workspace(Fixture):
 class TheRun(Fixture):
     def test_the_reviewer_starts_in_the_form_of_the_workflow(self):
         # check 3
-        self.case("one", "passes", report("low"))
+        self.case("one", "passes", answered(note="`intents/part.md`: a word."))
         code, _, _ = self.start()
         self.assertEqual(code, 0)
         got = self.recorded("one")
@@ -186,7 +197,7 @@ class TheRun(Fixture):
 
     def test_the_stand_in_of_the_code_host_answers_from_the_case(self):
         # check 4
-        self.case("one", "passes", report("none"))
+        self.case("one", "passes", answered())
         self.start()
         got = self.recorded("one")
         self.assertIn("The issue of the case", got["issue"])
@@ -197,25 +208,30 @@ class TheRun(Fixture):
 
     def test_the_result_counts_each_kind_and_keeps_each_report(self):
         # check 7
-        medium = "1. **medium**, `intents/part.md`, check 2: the check proves nothing."
-        self.case("a-right", "blocks", report("medium", medium), earlier=True, finding="check 2")
-        self.case("b-alarm", "passes", report("medium", medium))
-        self.case("c-miss", "blocks", report("low"))
-        self.case("d-subject", "blocks", report("medium", medium), finding="the goal")
-        self.case("e-right", "passes", report("none"))
+        medium = {2: '"The scope says it.": check 2 names no behaviour of it.'}
+        self.case("a-right", "blocks", answered(medium), earlier=True, finding="check 2")
+        self.case("b-alarm", "passes", answered(medium))
+        self.case("c-miss", "blocks", answered(note="`intents/part.md`: a count is wrong."))
+        self.case("d-subject", "blocks", answered(medium), finding="the goal")
+        self.case("e-right", "passes", answered())
+        self.case("f-form", "blocks", answered(medium, leave_out=8))
         code, text, out = self.start("--jobs", "3")
         self.assertEqual(code, 0)
-        self.assertIn("Cases: 5. Right: 2.", text)
-        self.assertIn("False alarms: 1. Misses: 1. Another subject: 1. Form not read: 0. No report: 0.", text)
+        self.assertIn("Cases: 6. Right: 2.", text)
+        self.assertIn("False alarms: 1. Misses: 1. Another subject: 1. Form not read: 1. No report: 0.", text)
         # Each counted case is in one of the six numbers.
         first = run.re.search(r"Cases: (\d+)\. Right: (\d+)\.", text)
         others = run.re.search(r"False alarms: (\d+)\. Misses: (\d+)\. Another subject: (\d+)\. Form not read: (\d+)\. "
                                r"No report: (\d+)\.", text)
         self.assertEqual(int(first.group(1)), int(first.group(2)) + sum(int(n) for n in others.groups()))
-        self.assertIn("Cost that the runs report: 1.25 USD", text)
+        self.assertIn("Cost that the runs report: 1.50 USD", text)
         result = json.loads((out / "result.json").read_text())
         self.assertEqual([row["result"] for row in result["cases"]],
-                         ["right", "false alarm", "miss", "other subject", "right"])
+                         ["right", "false alarm", "miss", "other subject", "right", "form not read"])
+        self.assertEqual([row["severity"] for row in result["cases"]], ["medium", "medium", "low", "medium", "none", None])
+        # closed-list, check 9: the kept report is the one that the workflow posts: code wrote its severity line.
+        self.assertTrue((out / "reports" / "a-right.md").read_text().endswith("\nHighest open severity: medium\n"))
+        self.assertIn("Not complete: intents/part.md: no answer to Q8", (out / "reports" / "f-form.md").read_text())
         self.assertEqual((out / "report.md").read_text() + "\n", text.split("The result is in")[0])
         kept = (out / "reports" / "a-right.md").read_text()
         self.assertTrue(kept.startswith(run.MARKER))
@@ -223,10 +239,9 @@ class TheRun(Fixture):
 
     def test_a_contested_case_runs_and_is_no_part_of_the_count(self):
         # check 10
-        medium = "1. **medium**, `intents/part.md`, check 2: the check proves nothing."
-        self.case("a-counted", "passes", report("low"))
-        self.case("b-waits", "passes", report("medium", medium), contested=True)
-        self.case("c-waits", "passes", report("none"), contested=True)
+        self.case("a-counted", "passes", answered(note="`intents/part.md`: a word."))
+        self.case("b-waits", "passes", answered({2: '"The scope says it.": check 2 names no behaviour of it.'}), contested=True)
+        self.case("c-waits", "passes", answered(), contested=True)
         code, text, out = self.start()
         self.assertEqual(code, 0)
         self.assertIn("Cases: 1. Right: 1.", text)
@@ -239,8 +254,7 @@ class TheRun(Fixture):
 
     def test_the_reports_of_an_earlier_run_are_graded_again_with_no_model_call(self):
         # check 11
-        medium = "1. **medium**, `intents/part.md`, check 2: the check proves nothing."
-        self.case("one", "blocks", report("medium", medium), finding="check 2")
+        self.case("one", "blocks", answered({2: '"The scope says it.": check 2 names no behaviour of it.'}), finding="check 2")
         code, text, out = self.start()
         self.assertIn("Right: 1.", text)
         calls = len(list(self.record.iterdir()))
@@ -273,13 +287,15 @@ class TheRun(Fixture):
         self.case("two", "passes", f"{run.MARKER}\nA report with no severity line.\n")
         code, text, out = self.start()
         self.assertEqual(code, 1)
-        self.assertIn("No report: 2.", text)
+        # A final answer with no marker line is no report. One with the marker and no answer has a form that
+        # the command does not read (closed-list, check 9).
+        self.assertIn("Form not read: 1. No report: 1.", text)
         self.assertIn("no report", (out / "reports" / "one.md").read_text())
 
     def test_one_case_by_its_name_and_a_name_that_is_no_case(self):
         # check 7
-        self.case("one", "passes", report("low"))
-        self.case("two", "passes", report("low"))
+        self.case("one", "passes", answered())
+        self.case("two", "passes", answered())
         code, text, _ = self.start("--case", "two")
         self.assertEqual(code, 0)
         self.assertIn("Cases: 1.", text)
@@ -367,6 +383,14 @@ class Grader(unittest.TestCase):
         # Each pattern of a way must be in one finding: two findings that hold one each do not name it.
         case = {"expected": "blocks", "finding": [["check 2", "the record"]]}
         self.assertEqual(run.grade(case, text, "medium")["result"], run.OTHER_SUBJECT)
+        # closed-list, check 9: in the form of the closed list, the subject is in an answer that does not hold.
+        closed = answered({2: '"The scope says it.": check 2 names no behaviour of it.\n  Proposed: a new check.'},
+                          note="`intents/part.md`: the goal has two sentences.", line="low")
+        for way, result in ((["check 2", "Proposed"], run.RIGHT), (["the goal"], run.OTHER_SUBJECT)):
+            got = run.grade({"expected": "blocks", "finding": [way]}, closed, "medium")
+            self.assertEqual((got["result"], got["severity"]), (result, "medium"), way)
+        self.assertEqual(run.grade({"expected": "passes"}, answered(note="a word", line="high"), "medium")["severity"], "low")
+        self.assertEqual(run.grade({"expected": "blocks"}, answered({2: '"a": b'}, leave_out=5), "medium")["result"], run.FORM_NOT_READ)
         # A report that blocks in a form that the command cannot read is no answer on the subject.
         table = report("high", "| 1 | high | check 2 proves nothing |")
         self.assertEqual(run.grade({"expected": "blocks", "finding": [["check 2"]]}, table, "medium")["result"],
@@ -387,6 +411,9 @@ class TheSet(unittest.TestCase):
         counted = [case for case in cases if "contested" not in case]
         self.assertGreaterEqual(sum(1 for case in counted if case["expected"] == run.BLOCKS), 8)
         self.assertGreaterEqual(sum(1 for case in counted if case["expected"] == run.PASSES), 3)
+        # closed-list, check 10: the rule of the closed list gave each contested case its answer.
+        self.assertEqual([case["name"] for case in cases if "contested" in case], [])
+        self.assertGreaterEqual(sum(1 for case in cases if case["expected"] == run.PASSES), 8)
         for case in cases:
             if case["expected"] == run.BLOCKS:
                 self.assertTrue(case.get("finding"), f"{case['name']}: a blocks case names its subject")

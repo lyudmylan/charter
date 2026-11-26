@@ -59,7 +59,7 @@ In a review, look also for broken contracts between parts of the system, and for
 change made stale. [documents.necessary]
 Stop and ask a person after the limits of the contract: failed runs of the acceptance checks, review
 rounds, or refusals in sequence. [limits.acceptance_loop] [limits.review_loop] [limits.refusals]
-The intent reviewer gives each finding a severity. A finding at the threshold or above keeps the
+The intent reviewer answers a closed list of questions for each intent; a question that does not hold is a finding, with the severity of the list, and each other thing is a note. A finding at the threshold or above keeps the
 author-reviewer loop open; below it, or at the limit, the loop ends and a person decides. The author side
 is the skill `review-loop`. [review.threshold] [limits.review_loop]
 The reviewer of the code, the workflow `review-code`, reviews each change of a file outside `intents/` and
