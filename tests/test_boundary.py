@@ -26,7 +26,7 @@ ORG = SAMPLES / "organization.toml"
 REPO = SAMPLES / "repo.toml"
 SETUP_FLAGS = ["--repo", "sample", "--source", "https://example.com/org/rules", "--source-version", "v1",
                "--leader", "alice", "--quality", "python3 -m unittest discover -s tests"]
-DEFAULT_NO_WRITE = ["charter.toml", "AGENTS.md", "CLAUDE.md", "intents/**", ".github/**", ".claude/**"]
+DEFAULT_NO_WRITE = ["charter.toml", "AGENTS.md", "CLAUDE.md", "intents/**", "milestones/**", ".github/**", ".claude/**"]
 DEFAULT_NO_READ = [".env", ".env.*", "**/.env", "**/.env.*"]
 SOURCE = f"--{cc.ARG_SOURCE}"
 

@@ -32,6 +32,18 @@ class TrackerSkill(unittest.TestCase):
         """tracker-skill, check 1."""
         check_skill(self, "tracker")
 
+    def test_the_skill_holds_the_form_of_a_milestone_plan(self):
+        """milestone-plan, check 7: the file, each line of the form, the three needs, the command, and the merge."""
+        text = " ".join((SKILLS / "tracker" / "SKILL.md").read_text().split())
+        for part in ("Its plan is one file, `milestones/<name>.md`", "line 1 `# Milestone: <name>`", "`### #<issue> <title>`",
+                     "`Done: <what done means, in the words of a user>`, which can continue on the next lines when no such line starts with a word and a colon",
+                     "`Tier: high` (the leader merges its change, whatever its files)",
+                     "`#<issue>` of the plan, `Charter <version>`, or `the word of the leader`",
+                     "`python3 charter/scripts/charter_check.py milestone <file>`",
+                     "The merge of the leader approves its work items; a change of the plan is its own change request."):
+            with self.subTest(part=part):
+                self.assertIn(part, text)
+
     def test_the_two_link_forms_are_named(self):
         """code-host, check 3 (#76): the instruction file, its template, the tracker skill, and the contract
         document name both link forms."""
