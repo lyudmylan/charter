@@ -311,7 +311,7 @@ def summary(rows: list, threshold: str, model: str, version: str) -> str:
     return "\n".join(lines) + "\n"
 
 
-def text_check(cases: Path) -> int:
+def text_check(cases: Path, contract: Path | None = None, source: Path | None = None) -> int:
     """Each file of the cases against the text patterns of the contract: private material, the names of other
     projects, links to a session. One call of the checker on one text that holds each file."""
     files = sorted(path for path in cases.rglob("*") if path.is_file())
@@ -326,14 +326,17 @@ def text_check(cases: Path) -> int:
     with tempfile.TemporaryDirectory() as folder:
         whole = Path(folder) / "cases.txt"
         whole.write_text("\n".join(lines) + "\n")
-        done = subprocess.run([sys.executable, str(ROOT / "charter" / "scripts" / "charter_check.py"), "text", str(whole),
-                               "--contract", str(ROOT / "charter.toml")], capture_output=True, text=True, check=False)
+        command = [sys.executable, str(ROOT / "charter" / "scripts" / "charter_check.py"), "text", str(whole),
+                   "--contract", str(contract or ROOT / "charter.toml")] + (["--source", str(source)] if source else [])
+        done = subprocess.run(command, capture_output=True, text=True, check=False)
     hits = re.findall(r":(\d+): (matches a pattern of [\w.]+)", done.stdout)
     for number, what in hits:
         path, line = origin[int(number) - 1]
         print(f"fail: {path.relative_to(cases)}:{line}: {what}")
-    if done.returncode and not hits:
-        print(f"cannot run: {' '.join((done.stdout + done.stderr).split())[:300]}")
+    # The checker says pass with 0 and gives a line for each hit. Each other end is no answer: a message that
+    # this command does not read must not count as "no hit".
+    if (done.returncode != 0 and not hits) or (done.returncode == 0 and "pass" not in done.stdout):
+        print(f"cannot run: the checker gave no answer that this command reads: {' '.join((done.stdout + done.stderr).split())[:300]}")
         return 2
     print(f"{len(files)} files of the cases, {len(hits)} lines with a pattern of the contract")
     return 1 if hits else 0
@@ -350,9 +353,11 @@ def main(argv: list | None = None) -> int:
                         "model call; it prints the result and writes it only when --out names a folder")
     parser.add_argument("--text", action="store_true", help="check each file of the cases against the text patterns of "
                         "the contract, with no model call")
+    parser.add_argument("--contract", type=Path, help="with --text: another contract than the one of this repo")
+    parser.add_argument("--source", type=Path, help="with --text: the organization file, when it is not in the cache")
     args = parser.parse_args(argv)
     if args.text:
-        return text_check(args.cases)
+        return text_check(args.cases, args.contract, args.source)
     try:
         if not args.reports and not shutil.which(os.environ.get("CHARTER_EVAL_CLAUDE", "claude")):
             raise CannotRun("Claude Code is not on the path")

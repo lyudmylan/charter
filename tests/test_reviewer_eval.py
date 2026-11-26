@@ -207,6 +207,11 @@ class TheRun(Fixture):
         self.assertEqual(code, 0)
         self.assertIn("Cases: 5. Right: 2.", text)
         self.assertIn("False alarms: 1. Misses: 1. Another subject: 1. Form not read: 0. No report: 0.", text)
+        # Each counted case is in one of the six numbers.
+        first = run.re.search(r"Cases: (\d+)\. Right: (\d+)\.", text)
+        others = run.re.search(r"False alarms: (\d+)\. Misses: (\d+)\. Another subject: (\d+)\. Form not read: (\d+)\. "
+                               r"No report: (\d+)\.", text)
+        self.assertEqual(int(first.group(1)), int(first.group(2)) + sum(int(n) for n in others.groups()))
         self.assertIn("Cost that the runs report: 1.25 USD", text)
         result = json.loads((out / "result.json").read_text())
         self.assertEqual([row["result"] for row in result["cases"]],
@@ -281,6 +286,35 @@ class TheRun(Fixture):
         code, text, _ = self.start("--case", "three")
         self.assertEqual(code, 2)
         self.assertIn("cannot run: no such case: three", text)
+
+
+class TextOfTheCases(Fixture):
+    """The sample contract and the sample organization file of the tests stand in for the ones of the repo."""
+
+    def text(self, *args: str) -> tuple:
+        samples = ROOT / "tests" / "samples"
+        done = subprocess.run(["python3", str(RUN), "--text", "--cases", str(self.cases), "--contract",
+                               str(samples / "repo.toml"), "--source", str(samples / "organization.toml"), *args],
+                              capture_output=True, text=True, cwd=ROOT, check=False)
+        return done.returncode, done.stdout
+
+    def test_a_file_of_a_case_with_a_pattern_of_the_contract_fails(self):
+        # check 13
+        folder = self.case("one", "passes", "")
+        self.assertEqual(self.text(), (0, "8 files of the cases, 0 lines with a pattern of the contract\n"))
+        (folder / "head" / "docs").mkdir(exist_ok=True)
+        (folder / "head" / "docs" / "notes.md").write_text("A clean line.\nWrite to a@example.com\n")
+        code, out = self.text()
+        self.assertEqual(code, 1)
+        self.assertIn("fail: one/head/docs/notes.md:2: matches a pattern of text.private_material_patterns", out)
+        self.assertIn("1 lines with a pattern of the contract", out)
+
+    def test_an_answer_of_the_checker_that_the_command_cannot_read_is_no_pass(self):
+        # check 13
+        self.case("one", "passes", "")
+        code, out = self.text("--contract", str(self.work / "no-contract.toml"))
+        self.assertEqual(code, 2)
+        self.assertIn("cannot run", out)
 
 
 class Template(Fixture):

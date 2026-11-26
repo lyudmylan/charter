@@ -44,7 +44,7 @@ The intent, the plan, and the code reach the leader together, and the merge of t
 
 ## Tests
 
-- `tests/test_reviewer_eval.py`: `Workspace`, four tests; `TheRun`, seven tests; `Template`, one test;
+- `tests/test_reviewer_eval.py`: `Workspace`, four tests; `TheRun`, seven tests; `TextOfTheCases`, two tests; `Template`, one test;
   `Grader`, two tests; `TheSet`, three tests.
 
 ## What the set does not show

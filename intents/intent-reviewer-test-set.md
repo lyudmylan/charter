@@ -40,8 +40,9 @@ the right answer.
   material. The names of other projects are in the source of the organization, so the command
   `python3 evals/intent-review/run.py --text` checks each file of the cases against the text patterns of
   the contract.
-- The report: the number of right answers, of false alarms, of misses, of answers on another subject, and
-  of runs with no report, with one row for each case. The command keeps each report of the reviewer.
+- The report: the number of right answers, of false alarms, of misses, of answers on another subject, of
+  reports in a form that the grader cannot read, and of runs with no report, with one row for each case.
+  Each counted case is in one of these six numbers. The command keeps each report of the reviewer.
 - `docs/contract.md`, `docs/product.md`, and `README.md` name the command.
 
 ## Out of scope
@@ -87,7 +88,9 @@ the right answer.
     changes. test: `tests/test_reviewer_eval.py::TheRun.test_the_reports_of_an_earlier_run_are_graded_again_with_no_model_call`
 12. No file of a case holds a path of a computer, a mail address, a token, or a link to a session. test: `tests/test_reviewer_eval.py::TheSet.test_no_file_of_a_case_holds_private_material`
 13. No file of a case holds a text pattern of the contract, the names of other projects too. The command
-    needs the source of the organization, so the author runs it before each push.
+    needs the source of the organization, so the author runs it before each push. A file with such a
+    pattern ends it with 1, and an answer of the checker that it cannot read ends it with 2. test: `tests/test_reviewer_eval.py::TextOfTheCases.test_a_file_of_a_case_with_a_pattern_of_the_contract_fails`
+    and `tests/test_reviewer_eval.py::TextOfTheCases.test_an_answer_of_the_checker_that_the_command_cannot_read_is_no_pass`
     command: `python3 evals/intent-review/run.py --text`
 
 ### Manual checks
