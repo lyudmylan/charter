@@ -1,0 +1,106 @@
+{
+ "threshold": "medium",
+ "model": "sonnet",
+ "claude": "2.1.332 (Claude Code)",
+ "cases": [
+  {
+   "case": "adopter-after-the-correction-endpoint",
+   "expected": "passes",
+   "result": "false alarm",
+   "severity": "medium",
+   "turns": 24,
+   "cost": 0.18879669999999998,
+   "denied": 0
+  },
+  {
+   "case": "adopter-after-the-correction-product-test",
+   "expected": "passes",
+   "result": "right",
+   "severity": "low",
+   "turns": 20,
+   "cost": 0.1732468,
+   "denied": 0
+  },
+  {
+   "case": "adopter-after-the-correction-time-limit",
+   "expected": "passes",
+   "result": "right",
+   "severity": "low",
+   "turns": 26,
+   "cost": 0.2694636,
+   "denied": 0
+  },
+  {
+   "case": "after-the-correction-code-reviewer",
+   "expected": "passes",
+   "result": "false alarm",
+   "severity": "medium",
+   "turns": 26,
+   "cost": 0.3706895,
+   "denied": 0
+  },
+  {
+   "case": "after-the-correction-no-status-line",
+   "expected": "passes",
+   "result": "right",
+   "severity": "none",
+   "turns": 18,
+   "cost": 0.17896979999999998,
+   "denied": 0
+  },
+  {
+   "case": "after-the-correction-product-test",
+   "expected": "passes",
+   "result": "false alarm",
+   "severity": "medium",
+   "turns": 18,
+   "cost": 0.2465763,
+   "denied": 0
+  },
+  {
+   "case": "after-the-correction-toolchain",
+   "expected": "passes",
+   "result": "right",
+   "severity": "low",
+   "turns": 13,
+   "cost": 0.2196166,
+   "denied": 0
+  },
+  {
+   "case": "after-the-correction-update-a-repo",
+   "expected": "passes",
+   "result": "false alarm",
+   "severity": "medium",
+   "turns": 17,
+   "cost": 0.197579,
+   "denied": 0
+  },
+  {
+   "case": "first-round-runs-wait-in-order",
+   "expected": "passes",
+   "result": "false alarm",
+   "severity": "medium",
+   "turns": 17,
+   "cost": 0.2158447,
+   "denied": 0
+  },
+  {
+   "case": "first-round-status-lines-removed",
+   "expected": "passes",
+   "result": "false alarm",
+   "severity": "medium",
+   "turns": 21,
+   "cost": 0.21001250000000002,
+   "denied": 0
+  },
+  {
+   "case": "merged-state-one-closing-line",
+   "expected": "passes",
+   "result": "false alarm",
+   "severity": "medium",
+   "turns": 24,
+   "cost": 0.2847501,
+   "denied": 0
+  }
+ ]
+}
