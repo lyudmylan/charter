@@ -434,6 +434,20 @@ template and a local server in the place of the model, which answers with a fixe
 it fails when a case that must be refused passes, when a result holds a token, or when a file is written.
 In this repo the workflow `reviewer-boundary` runs it on each change of a reviewer workflow (decision E14).
 
+The script `evals/intent-review/run.py` measures the judgment of the reviewer: the test set of the intent
+reviewer. Each folder under `evals/intent-review/cases/` is one real change request: the repo before the
+change, the changed intents and plans, the text of the issue, the report of the earlier round when the case
+is a later round, and the answer that is right, `blocks` or `passes`, with the place where that answer comes
+from. A case names commits of this repo, or it holds the files of an adopter with the name of the product
+replaced. The command gives each case to the reviewer in the form of the workflow: the prompt, the limit of
+turns, and the tool list come from the template, and the skill comes from the folder of the repo. A stand-in
+for the command of the code host answers from the files of the case, and the settings of the person who
+starts the command stay out of the run. Code grades each report: the line of the highest open severity
+against `review.threshold`, and, where the case names a subject, a finding at the threshold that names it.
+The report counts the right answers, the false alarms, the misses, and the runs with no report, and it keeps
+each report of the reviewer. Each case is one run of the model on the account of the person who starts the
+command, so no workflow runs the set. `evals/intent-review/record/` holds the record of a full run.
+
 A reading that an agent drafts for a person, such as the error analysis of an eval round, is reviewed
 before the person reads it (decision C11): the skill `charter-practices/skills/evidence-review/SKILL.md`
 runs two passes by fresh agents in the session of the author, and puts the disagreements, with the

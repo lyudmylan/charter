@@ -1,0 +1,6 @@
+expected = "blocks"
+source = "The reviewer gave this finding in the first round, the author corrected the intent, and the leader merged the change request."
+finding = ["review_rounds"]
+change_request = 105
+base = "6ab091c3e6467f3fa8a7c58e177cc7684f6942dd"
+head = "997f6e078a7e0da21cf51601f9a5c44c8dcabe68"

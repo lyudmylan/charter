@@ -1,0 +1,16 @@
+{
+  "name": "an event that was closed starts nothing again",
+  "events": [
+    { "state": "open", "identity": "event-1", "startTime": "2026-11-20T08:00:00Z", "urgent": true },
+    { "state": "closed", "identity": "event-1", "startTime": "2026-11-20T08:00:00Z", "urgent": true },
+    { "state": "open", "identity": "event-1", "startTime": "2026-11-20T08:00:00Z", "urgent": true }
+  ],
+  "messages": [
+    {
+      "level": "knock",
+      "identity": "event-1",
+      "startTime": "2026-11-20T08:00:00Z",
+      "rule": "an urgent event gets a knock"
+    }
+  ]
+}

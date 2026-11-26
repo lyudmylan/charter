@@ -1,0 +1,6 @@
+expected = "blocks"
+source = "The reviewer gave this finding in the first round, the author corrected the intent, and the leader merged the change request."
+finding = ["code_blocks", "check 1", "check 2"]
+change_request = 107
+base = "08827d41a24bac407d50c1c5653131125b85672d"
+head = "7cc79a2c57c1cd58ea2f71887bafb07247c4e810"
