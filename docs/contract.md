@@ -407,6 +407,45 @@ only. Only the workflow `verdict` holds it. The address of the source comes from
 so a change request cannot send the token elsewhere. A change request that changes the source is a
 contract change: a person reviews it, and the new source applies after the merge.
 
+## The plan of a milestone
+
+The plan of a milestone is one file, `milestones/<name>.md`. It holds each work item of the milestone with
+one line that says what "done" means, in the words of a user. The merge of the file by the leader approves
+its work items (decision C13). The file is in the high tier, and a run of an agent without a person does
+not change it: the contract of this repo and the contract that the setup step writes hold `milestones/**`
+in `tiers.high.paths` and in `boundary.no_write`. A repo with a contract of an earlier version adds the
+pattern to the two fields, in a change request of a person.
+
+```
+# Milestone: <name>
+
+The goal of the milestone, in free text.
+
+### #<issue> <title>
+Done: <what "done" means, in the words of a user>
+Tier: high
+Needs: #<issue>
+```
+
+| Line | How many | What it says |
+|---|---|---|
+| `### #<issue> <title>` | one for each work item | the issue of the work item in the tracker, and its title |
+| `Done:` | one | what "done" means; the text can continue on the next lines |
+| `Tier: high` | none or one | the change of the work item goes to the leader, whatever its files |
+| `Needs:` | none or more | one thing that must be true before the work item starts: `#<issue>` of another work item of this plan, `Charter <version>`, or `the word of the leader` |
+
+`charter-check milestone <file>` checks this form and prints the work items, and `all` checks each plan of
+the folder. The check fails for a first line in another form, a plan with no work item, a work item with
+no line `Done:` or with two, an issue that the plan holds two times, a value of `Tier:` that is not `high`,
+a line `Needs:` in none of the three forms or with an issue that is no other work item of the plan, and a
+line under a work item that starts with another word and a colon, or that continues no line `Done:`. The check reads the file only: it does
+not ask the tracker for an issue, and it does not say whether a need holds.
+
+Two limits of this version. No code reads the lines `Tier:` and `Needs:` yet: the tier of a change comes
+from its file paths, and no step starts a work item from the plan. And the approval of the leader stands
+in two places: the merge of the plan approves what the milestone builds, and the change request of an
+intent still goes to the leader, because `intents/**` is in the high tier.
+
 ## The intent reviewer
 
 The workflow `.github/workflows/review-intents.yml` runs on each change request that changes `intents/**` or `plans/**`.
@@ -648,12 +687,13 @@ python3 charter/scripts/charter_check.py text README.md --contract charter.toml
 python3 charter/scripts/charter_check.py source charter.toml
 python3 charter/scripts/charter_check.py all charter.toml
 python3 charter/scripts/charter_check.py boundary charter.toml [--source PATH]
+python3 charter/scripts/charter_check.py milestone milestones/<name>.md
 ```
 
 `all` runs `check`, then `instructions` on `instructions.file`, then `text` on each file in
 `documents.text_checked`, relative to the contract. Then it looks in the folder of the contract for a file
-under a pattern of `documents.absent`, and each one is a failure that says where its content goes. It is
-the one command for the contract checks.
+under a pattern of `documents.absent`, and each one is a failure that says where its content goes. Then it
+checks the form of each plan of a milestone in `milestones/`. It is the one command for the contract checks.
 
 Exit codes: 0 pass, 1 fail, 2 the check could not run. With exit code 2 the message names the cause:
 no file, not a file, not UTF-8 text, not TOML, source not found, access denied, version not found.

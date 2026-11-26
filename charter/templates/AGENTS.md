@@ -23,6 +23,9 @@ path of the shell while the plugin is enabled.
 
 ## Plan before the code
 
+The plan of a milestone, `milestones/<name>.md`, holds each work item with one line that says what "done"
+means. The merge of the leader approves its work items; a change of the plan is its own change request.
+[tiers.high.paths]
 A work item has an intent in `intents/<part>.md`: the goal, what is in scope, what is out of scope, and
 the acceptance checks. `intents/_template.md` is the form. A person approves the intent through a change
 request before the work starts. The skill `tracker` writes the issue and the intent; the issue names the

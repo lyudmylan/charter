@@ -10,11 +10,13 @@ Commands:
   all CONTRACT                       Run check, then instructions on the declared instruction file, then text
                                      on each declared text-checked file, then look for a file under a path
                                      that the contract forbids, then, for a contract that declares code
-                                     paths, ask for a product test or a reason for none. The files are
-                                     relative to the contract.
+                                     paths, ask for a product test or a reason for none, then check the
+                                     form of each milestone plan. The files are relative to the contract.
   boundary CONTRACT                  Print the settings of Claude Code for a run without a person, as JSON,
                                      from the boundary of the effective contract. The paths are absolute,
                                      from the folder of the contract: the settings are for this checkout.
+  milestone FILE                     Check the form of the plan of a milestone, `milestones/<name>.md`, and
+                                     print its work items. `all` checks each plan of the folder too.
 
 Options:
   --schema PATH      The schema. Default: schema/contract.toml next to this script.
@@ -50,6 +52,20 @@ PASS, FAIL, CANNOT_RUN = 0, 1, 2
 # Commands.
 CMD_VALIDATE, CMD_CHECK, CMD_INSTRUCTIONS, CMD_TEXT, CMD_SOURCE, CMD_ALL = "validate", "check", "instructions", "text", "source", "all"
 CMD_BOUNDARY = "boundary"
+CMD_MILESTONE = "milestone"
+
+# The plan of a milestone, `milestones/<name>.md`: one file for each milestone. Each work item is a heading
+# with its issue, one line `Done:`, and the two lines that it can have, `Tier:` and `Needs:`.
+MILESTONES_DIR = "milestones"
+MILESTONE_TITLE = "# Milestone: "
+WORK_ITEM = re.compile(r"### #(\d+) (\S.*)")
+PLAN_LINE = re.compile(r"(Done|Tier|Needs):(?:\s+(.*))?")
+OTHER_WORD = re.compile(r"([A-Za-z]+):(?:\s|$)")     # a line that starts as a line of the form, with another word
+KEY_DONE, KEY_TIER, KEY_NEEDS = "Done", "Tier", "Needs"
+TIER_OF_THE_LEADER = "high"
+NEED_ITEM = re.compile(r"#(\d+)")
+NEED_VERSION = re.compile(r"Charter \d+\.\d+\.\d+")
+NEED_WORD = "the word of the leader"
 
 # Reserved tables and keys of a contract file.
 TABLE_SCHEMA = "schema"
@@ -192,6 +208,18 @@ MSG = {
     "not_a_file": "not a file: {path}",
     "not_utf8": "not UTF-8 text: {path}",
     "schema_not_table": "schema field {field} is not a table",
+    "plan_no_title": "line 1 is not `# Milestone: <name>`",
+    "plan_no_item": "the plan holds no work item: a work item is a heading `### #<issue> <title>`",
+    "plan_bad_heading": "line {line}: a heading of a work item has the form `### #<issue> <title>`",
+    "plan_text": "line {line}: #{issue}: the line starts with no `Done:`, `Tier:`, or `Needs:`, and it continues no line `Done:`",
+    "plan_word": "line {line}: #{issue}: `{word}:` is no line of a work item: the three are `Done:`, `Tier:`, and `Needs:`",
+    "plan_twice": "#{issue} is a work item of the plan {count} times",
+    "plan_no_done": "#{issue} has no line `Done:` that says what done means",
+    "plan_many": "#{issue} has {count} lines `{key}:`, and it can have one",
+    "plan_tier": "#{issue}: `Tier: {value}`: the one value of this line is `{high}`",
+    "plan_need": "#{issue}: `Needs: {value}` names no other work item of this plan, no `Charter <version>`, and not `{word}`",
+    "plan_pass": "{path}: the plan of the milestone {name!r}, {count} work items",
+    "plan_item": "#{issue} {title}{marks}",
 }
 
 # ---------------------------------------------------------------------------
@@ -653,6 +681,94 @@ def product_problems(e: Effective) -> list[str]:
     return []
 
 
+class WorkItem:
+    """One work item of the plan of a milestone: its issue, its title, and the values of its lines."""
+
+    def __init__(self, issue: int, title: str) -> None:
+        self.issue, self.title = issue, title
+        self.done: list[str] = []
+        self.tier: list[str] = []
+        self.needs: list[str] = []
+
+
+def read_milestone(text: str) -> tuple[str, list[WorkItem], list[str]]:
+    """The name of a milestone plan, its work items, and each problem of its form. A text outside a work item
+    is free: the goal of the milestone stands there. Under a work item each line starts with one of the three
+    words, or it continues the line `Done:` above it. A line that starts with another word and a colon is a fault:
+    a wrong word must not pass as a part of the line above it."""
+    lines = text.splitlines()
+    first = lines[0].strip() if lines else ""
+    name = first[len(MILESTONE_TITLE):].strip() if first.startswith(MILESTONE_TITLE) else ""
+    problems = [] if name else [msg("plan_no_title")]
+    items: list[WorkItem] = []
+    item, continues = None, False
+    for number, raw in enumerate(lines[1:], start=2):
+        line = raw.strip()
+        heading = WORK_ITEM.fullmatch(line)
+        if heading:
+            item, continues = WorkItem(int(heading.group(1)), heading.group(2).strip()), False
+            items.append(item)
+        elif line.startswith("#"):
+            if line.startswith("###") and not line.startswith("####"):
+                problems.append(msg("plan_bad_heading", line=number))
+            item, continues = None, False
+        elif not line:
+            continues = False
+        elif item is not None:
+            key = PLAN_LINE.fullmatch(line)
+            if key:
+                value = (key.group(2) or "").strip()
+                {KEY_DONE: item.done, KEY_TIER: item.tier, KEY_NEEDS: item.needs}[key.group(1)].append(value)
+                continues = key.group(1) == KEY_DONE
+            elif OTHER_WORD.match(line):
+                problems.append(msg("plan_word", line=number, issue=item.issue, word=OTHER_WORD.match(line).group(1)))
+                continues = False
+            elif continues:
+                item.done[-1] = f"{item.done[-1]} {line}".strip()
+            else:
+                problems.append(msg("plan_text", line=number, issue=item.issue))
+    if not items:
+        problems.append(msg("plan_no_item"))
+    issues = [item.issue for item in items]
+    for issue in sorted({issue for issue in issues if issues.count(issue) > 1}):
+        problems.append(msg("plan_twice", issue=issue, count=issues.count(issue)))
+    for item in items:
+        if not any(item.done):
+            problems.append(msg("plan_no_done", issue=item.issue))
+        for key, values in ((KEY_DONE, item.done), (KEY_TIER, item.tier)):
+            if len(values) > 1:
+                problems.append(msg("plan_many", issue=item.issue, count=len(values), key=key))
+        for value in item.tier:
+            if value != TIER_OF_THE_LEADER:
+                problems.append(msg("plan_tier", issue=item.issue, value=value, high=TIER_OF_THE_LEADER))
+        for value in item.needs:
+            other = NEED_ITEM.fullmatch(value)
+            known = (other and int(other.group(1)) in issues and int(other.group(1)) != item.issue)
+            if not (known or NEED_VERSION.fullmatch(value) or value == NEED_WORD):
+                problems.append(msg("plan_need", issue=item.issue, value=value, word=NEED_WORD))
+    return name, items, problems
+
+
+def milestone_problems(root: Path) -> list[str]:
+    """Each problem of the form of each plan in the folder of the milestone plans, with the path of its file."""
+    found = []
+    for path in sorted((root / MILESTONES_DIR).glob("*.md")):
+        _, _, problems = read_milestone(read_text(path))
+        found += [f"{MILESTONES_DIR}/{path.name}: {problem}" for problem in problems]
+    return found
+
+
+def cmd_milestone(args) -> int:
+    name, items, problems = read_milestone(read_text(args.file))
+    if report_failures([f"{args.file}: {problem}" for problem in problems]) == FAIL:
+        return FAIL
+    emit(OUT_PASS, msg("plan_pass", path=args.file, name=name, count=len(items)))
+    for item in items:
+        marks = [f"{KEY_TIER}: {value}" for value in item.tier] + [f"{KEY_NEEDS}: {value}" for value in item.needs]
+        print(msg("plan_item", issue=item.issue, title=item.title, marks="".join(f"; {mark}" for mark in marks)))
+    return PASS
+
+
 def is_folder_pattern(pattern: str) -> bool:
     """`dir/**` with no other wildcard: the one form that the write lists of the sandbox honour on Linux."""
     return pattern.endswith(FOLDER_PATTERN_END) and not has_wildcard(pattern[:-len(FOLDER_PATTERN_END)])
@@ -763,6 +879,7 @@ def cmd_all(args) -> int:
             problems += pattern_hits(e, path, read_text(path))
         problems += absent_hits(e, root)
         problems += product_problems(e)
+        problems += milestone_problems(root)
     if report_failures(problems) == FAIL:
         return FAIL
     emit(OUT_PASS, msg("all_pass", contract=args.contract))
@@ -816,13 +933,16 @@ def main(argv: list[str] | None = None) -> int:
         p.add_argument(f"--{ARG_SOURCE}", type=Path, default=None)
         p.add_argument(f"--{ARG_CACHE_DIR.replace('_', '-')}", dest=ARG_CACHE_DIR, type=Path, default=default_cache)
 
+    p = sub.add_parser(CMD_MILESTONE, help="check the form of the plan of a milestone and print its work items")
+    p.add_argument(ARG_FILE, type=Path)
+
     p = sub.add_parser(CMD_SOURCE, help="print the source of a repo contract and its cache path")
     p.add_argument(ARG_CONTRACT, type=Path)
     p.add_argument(f"--{ARG_CACHE_DIR.replace('_', '-')}", dest=ARG_CACHE_DIR, type=Path, default=default_cache)
 
     args = parser.parse_args(argv)
     commands = {CMD_VALIDATE: cmd_validate, CMD_CHECK: cmd_check, CMD_INSTRUCTIONS: cmd_instructions,
-                CMD_TEXT: cmd_text, CMD_SOURCE: cmd_source, CMD_ALL: cmd_all, CMD_BOUNDARY: cmd_boundary}
+                CMD_TEXT: cmd_text, CMD_SOURCE: cmd_source, CMD_ALL: cmd_all, CMD_BOUNDARY: cmd_boundary, CMD_MILESTONE: cmd_milestone}
     try:
         return commands[args.command](args)
     except CannotRun as e:

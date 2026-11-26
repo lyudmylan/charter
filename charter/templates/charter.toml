@@ -29,7 +29,7 @@ agent = [%{agent}]
 
 # Risk tiers. The first tier whose paths match a file applies.
 [tiers.high]
-paths = [%{high_paths}]  # the contract, the rules, the approved intents, and the workflows
+paths = [%{high_paths}]  # the contract, the rules, the approved intents, the plans of the milestones, and the workflows
 review = "deep"
 approver = "leader"
 approvals = 1
@@ -60,7 +60,7 @@ absent = ["docs/adr/**", "doc/adr/**", "doc/arch/adr-*.md", "docs/decisions/**"]
 # never reads a file under no_read. The plan of a work item, plans/<part>.md, is under no pattern and passes.
 # Add the package files of the repo, for example package.json and its lock file.
 [boundary]
-no_write = ["charter.toml", "AGENTS.md", "CLAUDE.md", "intents/**", ".github/**", ".claude/**"]
+no_write = ["charter.toml", "AGENTS.md", "CLAUDE.md", "intents/**", "milestones/**", ".github/**", ".claude/**"]
 no_read = [".env", ".env.*", "**/.env", "**/.env.*"]
 
 [instructions]

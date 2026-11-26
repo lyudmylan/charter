@@ -25,7 +25,7 @@ agent = ["claude-code"]
 
 # Risk tiers. The first tier whose paths match a file applies.
 [tiers.high]
-paths = ["charter.toml", "charter/**", "tests/**", "intents/**", "AGENTS.md", ".github/**"]  # intents hold the approved acceptance checks
+paths = ["charter.toml", "charter/**", "tests/**", "intents/**", "milestones/**", "AGENTS.md", ".github/**"]  # intents hold the approved acceptance checks; a milestone plan holds the approved work items
 review = "deep"
 approver = "leader"
 approvals = 1
@@ -61,7 +61,7 @@ absent = ["docs/adr/**", "doc/adr/**", "doc/arch/adr-*.md", "docs/decisions/**"]
 # The boundary of a run of an agent without a person. Such a run never changes a file under no_write and
 # never reads a file under no_read. The plan of a work item, plans/<part>.md, is under no pattern and passes.
 [boundary]
-no_write = ["charter.toml", "AGENTS.md", "CLAUDE.md", "intents/**", ".github/**", ".claude/**"]
+no_write = ["charter.toml", "AGENTS.md", "CLAUDE.md", "intents/**", "milestones/**", ".github/**", ".claude/**"]
 no_read = [".env", ".env.*", "**/.env", "**/.env.*"]
 
 [instructions]

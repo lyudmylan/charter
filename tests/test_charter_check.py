@@ -310,6 +310,142 @@ class TextFiles(Temp):
         self.assertIn(":1: matches a pattern of text.private_material_patterns", out)
 
 
+PLAN = """# Milestone: Iteration 4
+
+The goal of the milestone, in free text. Tier: a word of this text is no line of a work item.
+
+## Work items
+
+### #141 The plan of a milestone is a file
+Done: a milestone plan is one file in the repo,
+  and the merge of the leader approves its work items.
+Tier: high
+
+### #142 The reviewer checks an intent against the "done" line
+Done: a finding names the part of the "done" line that no check proves.
+Needs: #141
+Needs: Charter 0.3.23
+Needs: the word of the leader
+"""
+
+
+class MilestonePlan(Temp):
+    """The plan of a milestone, `milestones/<name>.md`: the reader of its form, the command, and `all`."""
+
+    def check(self, text: str) -> tuple[int, str]:
+        return run(cc.CMD_MILESTONE, str(self.write("plan.md", text)))
+
+    def test_a_plan_in_the_form_passes_and_the_command_prints_its_work_items(self):
+        """milestone-plan, check 1."""
+        code, out = self.check(PLAN)
+        self.assertEqual(code, cc.PASS, out)
+        self.assertIn("the plan of the milestone 'Iteration 4', 2 work items", out)
+        self.assertIn("#141 The plan of a milestone is a file; Tier: high\n", out)
+        self.assertIn('#142 The reviewer checks an intent against the "done" line; Needs: #141; Needs: Charter 0.3.23; '
+                      "Needs: the word of the leader\n", out)
+        self.assertEqual(run(cc.CMD_MILESTONE, str(self.dir / "none.md"))[0], cc.CANNOT_RUN)
+
+    def test_each_fault_of_the_form_fails_with_its_reason(self):
+        """milestone-plan, check 2."""
+        item = "### #141 The plan of a milestone is a file\n"
+        cases = {
+            "the first line": (PLAN.replace("# Milestone: Iteration 4", "# Iteration 4"), "line 1 is not `# Milestone: <name>`"),
+            "a first line with no name": (PLAN.replace("# Milestone: Iteration 4", "# Milestone: "), "line 1 is not `# Milestone: <name>`"),
+            "no work item": ("# Milestone: Iteration 4\n\nA goal.\n", "the plan holds no work item"),
+            "a heading with no issue": (PLAN.replace("### #141 The", "### The"), "line 7: a heading of a work item has the form"),
+            "a heading with no title": (PLAN.replace(item, "### #141\n"), "line 7: a heading of a work item has the form"),
+            "no line Done": (PLAN.replace("Done: a finding names the part of the \"done\" line that no check proves.\n", ""),
+                             "#142 has no line `Done:`"),
+            "a line Done with no text": (PLAN.replace('Done: a finding names the part of the "done" line that no check proves.', "Done:"),
+                                         "#142 has no line `Done:`"),
+            "two lines Done": (PLAN + "Done: a second text.\n", "#142 has 2 lines `Done:`, and it can have one"),
+            "two lines Tier": (PLAN.replace("Tier: high\n", "Tier: high\nTier: high\n"), "#141 has 2 lines `Tier:`, and it can have one"),
+            "another tier": (PLAN.replace("Tier: high", "Tier: low"), "#141: `Tier: low`: the one value of this line is `high`"),
+            "an issue two times": (PLAN.replace("### #142", "### #141"), "#141 is a work item of the plan 2 times"),
+            "a word that is no line of the form": (PLAN.replace("Tier: high", "Teir: high"), "line 10: #141: `Teir:` is no line of a work item"),
+            "a text after a line Needs": (PLAN + "and one more text\n", "line 17: #142: the line starts with no"),
+        }
+        for name, (text, reason) in cases.items():
+            with self.subTest(case=name):
+                code, out = self.check(text)
+                self.assertEqual(code, cc.FAIL, out)
+                self.assertIn(f"fail: {self.dir / 'plan.md'}: {reason}", out)
+                self.assertNotIn("pass:", out)
+
+    def test_a_line_done_continues_and_a_text_outside_a_work_item_is_free(self):
+        """milestone-plan, check 3."""
+        name, items, problems = cc.read_milestone(PLAN)
+        self.assertEqual((name, problems), ("Iteration 4", []))
+        self.assertEqual(items[0].done, ["a milestone plan is one file in the repo, and the merge of the leader approves its work items."])
+        self.assertEqual((items[0].issue, items[0].title, items[0].tier, items[0].needs),
+                         (141, "The plan of a milestone is a file", ["high"], []))
+        # A heading of another level ends the work item: the text under it is free again.
+        after = PLAN + "\n## Notes\n\nA free text after the work items.\n"
+        self.assertEqual(cc.read_milestone(after)[2], [])
+        # A blank line ends the line `Done:`: the text after it continues nothing.
+        apart = PLAN.replace("  and the merge of the leader", "\n  and the merge of the leader")
+        self.assertIn("line 10: #141: the line starts with no", "\n".join(cc.read_milestone(apart)[2]))
+
+    def test_a_line_needs_names_a_thing_of_one_of_three_forms(self):
+        """milestone-plan, check 4."""
+        self.assertEqual(cc.read_milestone(PLAN)[1][1].needs, ["#141", "Charter 0.3.23", cc.NEED_WORD])
+        for value in ("#99", "#142", "Charter 0.3", "Charter latest", "the first run", "#141 and #99", ""):
+            with self.subTest(value=value):
+                code, out = self.check(PLAN.replace("Needs: #141\n", f"Needs: {value}\n"))
+                self.assertEqual(code, cc.FAIL, out)
+                self.assertIn(f"#142: `Needs: {value}` names no other work item of this plan, no `Charter <version>`, and not "
+                              "`the word of the leader`", out)
+
+    def test_all_checks_each_plan_of_the_folder(self):
+        """milestone-plan, check 5: with no folder and with a plan in the form, `all` passes; a fault names its file."""
+        self.write("charter.toml", repo_with())
+        contract = [cc.CMD_ALL, str(self.dir / "charter.toml"), f"--{cc.ARG_SOURCE}", str(ORG)]
+        self.assertEqual(run(*contract)[0], cc.PASS)
+        (self.dir / cc.MILESTONES_DIR).mkdir()
+        self.write(f"{cc.MILESTONES_DIR}/iteration-4.md", PLAN)
+        code, out = run(*contract)
+        self.assertEqual(code, cc.PASS, out)
+        self.write(f"{cc.MILESTONES_DIR}/iteration-5.md", PLAN.replace("Tier: high", "Tier: low"))
+        code, out = run(*contract)
+        self.assertEqual(code, cc.FAIL, out)
+        self.assertIn("fail: milestones/iteration-5.md: #141: `Tier: low`", out)
+        self.assertNotIn("iteration-4.md", out)
+
+    def test_the_plan_is_in_the_high_tier_and_closed_to_a_run(self):
+        """milestone-plan, check 6: the contract of this repo, and the paths that the setup step gives a new contract."""
+        import tomllib
+        import charter_setup as cs
+        data = tomllib.loads((ROOT / "charter.toml").read_text())
+        for paths in (data["tiers"]["high"]["paths"], data["boundary"]["no_write"], cs.HIGH_TIER_PATHS):
+            self.assertTrue(cc.matches("milestones/iteration-4.md", paths), paths)
+        template = (ROOT / "charter" / "templates" / "charter.toml").read_text()
+        self.assertIn('"intents/**", "milestones/**"', next(line for line in template.splitlines() if line.startswith("no_write")))
+
+    def test_the_documents_hold_the_form_and_the_approval(self):
+        """milestone-plan, check 8."""
+        contract = " ".join((ROOT / "docs" / "contract.md").read_text().split())
+        for part in ("## The plan of a milestone", "`### #<issue> <title>`", "| `Done:` | one |", "| `Tier: high` | none or one |",
+                     "| `Needs:` | none or more |", "`Charter <version>`, or `the word of the leader`",
+                     "python3 charter/scripts/charter_check.py milestone milestones/<name>.md",
+                     "No code reads the lines `Tier:` and `Needs:` yet",
+                     "the change request of an intent still goes to the leader"):
+            with self.subTest(part=part):
+                self.assertIn(part, contract)
+        rule = "The merge of the leader approves its work items; a change of the plan is its own change request."
+        for path in (ROOT / "AGENTS.md", ROOT / "charter" / "templates" / "AGENTS.md"):
+            self.assertIn(rule, " ".join(path.read_text().split()), path)
+        self.assertIn("The leader approves the work items of a milestone with the merge of its plan",
+                      (ROOT / "docs" / "product.md").read_text())
+        self.assertIn("| C13 | The plan of a milestone is one file, `milestones/<name>.md`.", (ROOT / "docs" / "decisions.md").read_text())
+
+    def test_both_manifests_name_the_version(self):
+        """milestone-plan, check 10: 0.3.23 carries the check; a later version carries it too."""
+        versions = [json.loads((ROOT / plugin / ".claude-plugin" / "plugin.json").read_text())["version"]
+                    for plugin in ("charter", "charter-practices")]
+        self.assertEqual(versions[0], versions[1])
+        self.assertGreaterEqual(tuple(int(part) for part in versions[0].split(".")), (0, 3, 23))
+
+
 class AbsentPaths(Temp):
     """A repo in a temporary folder: the sample contract with a set of absent paths, and the files of a case."""
 

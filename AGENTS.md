@@ -21,6 +21,9 @@ source. Each rule below ends with the identifier of its rule in the contract.
 
 ## Before the code
 
+The plan of a milestone, `milestones/<name>.md`, holds each work item with one line that says what "done"
+means. The merge of the leader approves its work items; a change of the plan is its own change request.
+[tiers.high.paths]
 A work item has an intent, `intents/<part>.md`, approved through a change request; its issue names it
 with one line, `Intent: intents/<part>.md`. Before the code, the plan `plans/<part>.md`: the steps, the
 files to change, the tests to add, in the words of the author. The agent stops and asks the person

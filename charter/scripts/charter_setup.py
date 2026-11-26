@@ -71,7 +71,7 @@ TOOLCHAIN_VALUE = "toolchain"
 TOOLCHAIN_START = "# charter:toolchain:start"
 TOOLCHAIN_END = "# charter:toolchain:end"
 STEP_INDENT = "      "
-HIGH_TIER_PATHS = [CONTRACT_FILE, INSTRUCTIONS_FILE, "intents/**", ".github/**"]
+HIGH_TIER_PATHS = [CONTRACT_FILE, INSTRUCTIONS_FILE, "intents/**", f"{cc.MILESTONES_DIR}/**", ".github/**"]
 # The product test in the contract: the commands of the flag, or the reason for none.
 PRODUCT_LINE = "product = [{commands}]"
 NO_PRODUCT_LINE = "no_product_reason = {reason}"

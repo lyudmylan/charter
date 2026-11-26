@@ -51,6 +51,10 @@ ANSWER_FACTS = {
     "state": "open",
     "from_fork": False,
 }
+# The plan of a milestone: two work items, each with its line `Done:`; the second one waits for the first.
+PLAN_PATH = "milestones/first.md"
+PLAN_TEXT = ("# Milestone: First\n\n### #1 The app prints a line\nDone: a user starts the app and reads one line.\nTier: high\n\n"
+             "### #2 The app prints the time\nDone: the line holds the time of the start.\nNeeds: #1\n")
 # What an agent of a run wrote for its change request: a line that links the issue, then its text.
 AGENT_LINK, AGENT_TEXT = "Fixes #1", "The sample change."
 AGENT_ATTRIBUTION = "\U0001F916 Generated with [Claude Code](https://claude.com/claude-code)"
@@ -119,6 +123,28 @@ def steps(repo: Path, work: Path) -> bool:
                 f"fail: boundary: {CLOSED_PATH}: a run without a person cannot change this path",
                 absent=(f"{OPEN_PATH}:",)):
         return False
+    plan = repo / PLAN_PATH
+    plan.parent.mkdir()
+    plan.write_text(PLAN_TEXT)
+    if not step("plan of a milestone", command("charter-check", "milestone", PLAN_PATH, cwd=repo), 0,
+                "the plan of the milestone 'First', 2 work items", "#1 The app prints a line; Tier: high",
+                "#2 The app prints the time; Needs: #1"):
+        return False
+    if not step("plan of a milestone, contract checks", command("charter-check", "all", CONTRACT, *SOURCE, cwd=repo), 0,
+                "all contract checks"):
+        return False
+    plan_list = work / "plan.txt"
+    plan_list.write_text(f"{PLAN_PATH}\n")
+    if not step("plan of a milestone, closed to a run", command("charter-gate", "boundary", "--contract", CONTRACT, *SOURCE,
+                                                                "--changed", str(plan_list), cwd=repo), 1,
+                f"fail: boundary: {PLAN_PATH}: a run without a person cannot change this path"):
+        return False
+    plan.write_text(PLAN_TEXT.replace("Needs: #1", "Needs: #7"))
+    if not step("plan of a milestone, a need that names no work item", command("charter-check", "all", CONTRACT, *SOURCE,
+                                                                              cwd=repo), 1,
+                f"fail: {PLAN_PATH}: #2: `Needs: #7` names no other work item of this plan", absent=("all contract checks",)):
+        return False
+    plan.write_text(PLAN_TEXT)
     answer = work / "answer.json"
     answer.write_text(json.dumps(ANSWER_FACTS))
     decision = ["answer", "--facts", str(answer), "--contract", CONTRACT, *SOURCE]

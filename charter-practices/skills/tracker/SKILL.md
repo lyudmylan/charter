@@ -1,6 +1,6 @@
 ---
 name: tracker
-description: Plans and records work in the issue tracker the way this organization does it, with a milestone, epics, issues, and an intent for each work item that holds its goal, its scope, and its acceptance checks. Use when the user wants to plan an iteration, create or update a milestone, an epic, or an issue, or close an epic. Do not use for a code review, for an explanation of code or scripts, or for a change to the code itself.
+description: Plans and records work in the issue tracker the way this organization does it, with a milestone and its plan file, epics, issues, and an intent for each work item that holds its goal, its scope, and its acceptance checks. Use when the user wants to plan an iteration, create or update a milestone, an epic, or an issue, or close an epic. Do not use for a code review, for an explanation of code or scripts, or for a change to the code itself.
 ---
 
 # Tracker
@@ -13,11 +13,11 @@ conversation and record it in the epic or the work item it belongs to. Never ope
 
 ## Structure
 
-- A milestone is a goal, with its acceptance check in the description.
-- An epic is what we want to do. Label `epic`. Body: "What we want", the issues as a task list, "Decisions made".
-  The milestone "Roadmap" holds the epics of parts that are decided but not scheduled; their issues come when the part comes near.
-- An issue is one actionable item. Body: goal, in scope, out of scope, and one line that names its
-  intent: `Intent: intents/<part>.md`. Each change to a source file has an issue, also a small one.
+- A milestone is a goal, with its acceptance check in the description. Its plan is one file, `milestones/<name>.md`: line 1 `# Milestone: <name>`; for each work item a heading `### #<issue> <title>` and one line
+  `Done: <what done means, in the words of a user>`; where they apply, `Tier: high` (the leader merges its change, whatever its files) and a line `Needs:` for each thing that must be true before it starts: `#<issue>` of the plan,
+  `Charter <version>`, or `the word of the leader`. Check it with `python3 charter/scripts/charter_check.py milestone <file>`. The merge of the leader approves its work items; a change of the plan is its own change request.
+- An epic is what we want to do. Label `epic`. Body: "What we want", the issues as a task list, "Decisions made". The milestone "Roadmap" holds the epics of parts that are decided but not scheduled; their issues come when the part comes near.
+- An issue is one actionable item. Body: goal, in scope, out of scope, and one line that names its intent: `Intent: intents/<part>.md`. Each change to a source file has an issue, also a small one.
 
 ## The intent of a work item
 
