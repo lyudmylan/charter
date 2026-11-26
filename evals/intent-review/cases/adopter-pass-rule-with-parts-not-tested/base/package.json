@@ -1,0 +1,21 @@
+{
+  "name": "product",
+  "version": "0.0.0",
+  "description": "product judges when a person is needed in human-in-the-loop scenarios, and then it knocks",
+  "license": "Apache-2.0",
+  "private": true,
+  "type": "module",
+  "packageManager": "pnpm@12.4.2",
+  "engines": {
+    "node": ">=24"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
+  },
+  "devDependencies": {
+    "@types/node": "^24.0.0",
+    "typescript": "^7.0.2",
+    "vitest": "5.1.0"
+  }
+}

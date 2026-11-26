@@ -1,0 +1,2 @@
+expected = "passes"
+source = "A change request of an adopter, with the name of the product replaced. The leader merged this state, and the report of the reviewer on it was below the threshold."

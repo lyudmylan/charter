@@ -1,0 +1,3 @@
+expected = "blocks"
+source = "A change request of an adopter, with the name of the product replaced. The reviewer gave this finding in the first round, the author corrected the intent, and the leader merged the change request."
+finding = [["extra key|other value|four values"], ["level", "body"]]

@@ -1,0 +1,15 @@
+{
+  "name": "a repeat of an open event gets no second message",
+  "events": [
+    { "state": "open", "identity": "event-1", "startTime": "2026-11-20T08:00:00Z", "urgent": true },
+    { "state": "open", "identity": "event-1", "startTime": "2026-11-20T08:00:00Z", "urgent": true }
+  ],
+  "messages": [
+    {
+      "level": "knock",
+      "identity": "event-1",
+      "startTime": "2026-11-20T08:00:00Z",
+      "rule": "an urgent event gets a knock"
+    }
+  ]
+}

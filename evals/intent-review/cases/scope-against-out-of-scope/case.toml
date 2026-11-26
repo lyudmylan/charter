@@ -1,0 +1,7 @@
+expected = "blocks"
+source = "The reviewer gave this finding in the second round, on a change that the first answer added. The author corrected the intent, and the leader merged the change request."
+finding = [["merge by the verdict", "out of scope"]]
+change_request = 128
+base = "399c86add3caa3907fecdcc9057cf0e8bf00bc32"
+head = "0935967ab17503af82728dc90024b7a3f3c7a253"
+earlier = "402458b5270b0c8fe86bbeabb381662c9a621c36"
