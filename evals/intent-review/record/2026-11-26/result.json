@@ -1,0 +1,232 @@
+{
+ "threshold": "medium",
+ "model": "sonnet",
+ "claude": "2.1.332 (Claude Code)",
+ "cases": [
+  {
+   "case": "adopter-after-the-correction-endpoint",
+   "expected": "passes",
+   "result": "false alarm",
+   "severity": "medium",
+   "turns": 23,
+   "cost": 0.18778509999999998,
+   "denied": 0
+  },
+  {
+   "case": "adopter-after-the-correction-product-test",
+   "expected": "passes",
+   "result": "right",
+   "severity": "none",
+   "turns": 21,
+   "cost": 0.1667266,
+   "denied": 0
+  },
+  {
+   "case": "adopter-after-the-correction-time-limit",
+   "expected": "passes",
+   "result": "right",
+   "severity": "low",
+   "turns": 20,
+   "cost": 0.2090686,
+   "denied": 0
+  },
+  {
+   "case": "adopter-behaviour-with-no-check",
+   "expected": "blocks",
+   "result": "right",
+   "severity": "blocker",
+   "turns": 27,
+   "cost": 0.3040414,
+   "denied": 0
+  },
+  {
+   "case": "adopter-definition-in-two-places",
+   "expected": "blocks",
+   "result": "right",
+   "severity": "high",
+   "turns": 34,
+   "cost": 0.3207683,
+   "denied": 0
+  },
+  {
+   "case": "adopter-pass-rule-with-parts-not-tested",
+   "expected": "blocks",
+   "result": "right",
+   "severity": "high",
+   "turns": 24,
+   "cost": 0.19997009999999998,
+   "denied": 0
+  },
+  {
+   "case": "adopter-scope-sentence-with-no-check",
+   "expected": "blocks",
+   "result": "right",
+   "severity": "high",
+   "turns": 27,
+   "cost": 0.2084299,
+   "denied": 0
+  },
+  {
+   "case": "after-the-correction-code-reviewer",
+   "expected": "passes",
+   "result": "false alarm",
+   "severity": "high",
+   "turns": 25,
+   "cost": 0.3156306,
+   "denied": 0
+  },
+  {
+   "case": "after-the-correction-no-status-line",
+   "expected": "passes",
+   "result": "right",
+   "severity": "none",
+   "turns": 18,
+   "cost": 0.1792642,
+   "denied": 0
+  },
+  {
+   "case": "after-the-correction-product-test",
+   "expected": "passes",
+   "result": "right",
+   "severity": "low",
+   "turns": 24,
+   "cost": 0.25261849999999997,
+   "denied": 0
+  },
+  {
+   "case": "after-the-correction-toolchain",
+   "expected": "passes",
+   "result": "false alarm",
+   "severity": "medium",
+   "turns": 17,
+   "cost": 0.24839440000000002,
+   "denied": 0
+  },
+  {
+   "case": "after-the-correction-update-a-repo",
+   "expected": "passes",
+   "result": "false alarm",
+   "severity": "medium",
+   "turns": 17,
+   "cost": 0.1887707,
+   "denied": 0
+  },
+  {
+   "case": "condition-stated-without-its-limit",
+   "expected": "blocks",
+   "result": "right",
+   "severity": "high",
+   "turns": 22,
+   "cost": 0.43363270000000004,
+   "denied": 0
+  },
+  {
+   "case": "first-round-runs-wait-in-order",
+   "expected": "passes",
+   "result": "false alarm",
+   "severity": "high",
+   "turns": 16,
+   "cost": 0.1963899,
+   "denied": 0
+  },
+  {
+   "case": "first-round-status-lines-removed",
+   "expected": "passes",
+   "result": "false alarm",
+   "severity": "high",
+   "turns": 21,
+   "cost": 0.26327029999999996,
+   "denied": 1
+  },
+  {
+   "case": "goal-with-no-check",
+   "expected": "blocks",
+   "result": "right",
+   "severity": "high",
+   "turns": 28,
+   "cost": 0.3778195,
+   "denied": 0
+  },
+  {
+   "case": "intent-against-the-product-document",
+   "expected": "blocks",
+   "result": "other subject",
+   "severity": "blocker",
+   "turns": 23,
+   "cost": 0.22784010000000002,
+   "denied": 0
+  },
+  {
+   "case": "items-of-the-issue-left-out",
+   "expected": "blocks",
+   "result": "right",
+   "severity": "high",
+   "turns": 24,
+   "cost": 0.4356515,
+   "denied": 0
+  },
+  {
+   "case": "manual-check-with-no-review-clause",
+   "expected": "blocks",
+   "result": "right",
+   "severity": "high",
+   "turns": 26,
+   "cost": 0.3481552,
+   "denied": 0
+  },
+  {
+   "case": "merged-state-one-closing-line",
+   "expected": "passes",
+   "result": "false alarm",
+   "severity": "medium",
+   "turns": 17,
+   "cost": 0.2502254,
+   "denied": 0
+  },
+  {
+   "case": "no-scenario-of-the-product-test",
+   "expected": "blocks",
+   "result": "right",
+   "severity": "medium",
+   "turns": 27,
+   "cost": 0.37940520000000005,
+   "denied": 0
+  },
+  {
+   "case": "one-name-for-two-facts",
+   "expected": "blocks",
+   "result": "other subject",
+   "severity": "high",
+   "turns": 26,
+   "cost": 0.38148439999999995,
+   "denied": 0
+  },
+  {
+   "case": "rule-differs-between-intent-and-plan",
+   "expected": "blocks",
+   "result": "right",
+   "severity": "high",
+   "turns": 23,
+   "cost": 0.2946164,
+   "denied": 0
+  },
+  {
+   "case": "scope-against-out-of-scope",
+   "expected": "blocks",
+   "result": "right",
+   "severity": "high",
+   "turns": 25,
+   "cost": 0.3285592,
+   "denied": 0
+  },
+  {
+   "case": "scope-with-no-check",
+   "expected": "blocks",
+   "result": "right",
+   "severity": "high",
+   "turns": 30,
+   "cost": 0.5101345,
+   "denied": 0
+  }
+ ]
+}
