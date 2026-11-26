@@ -1,6 +1,6 @@
 expected = "blocks"
-source = "The reviewer gave this finding in the first round, the author corrected the intent, and the leader merged the change request."
-finding = [["code_blocks"], ["check 1", "check 2"]]
+source = "The reviewer gave this finding in the first round, the author corrected the intent, and the leader merged the change request. By the closed list of questions (#153): the subject is a goal or a scope sentence with no check (Q1, Q2) or two sentences that cannot both be true (Q7)."
+finding = [["code_blocks"], ["check 1", "check 2"], ["high tier", "intent"], ["refuse", "merge"]]
 change_request = 107
 base = "08827d41a24bac407d50c1c5653131125b85672d"
 head = "7cc79a2c57c1cd58ea2f71887bafb07247c4e810"

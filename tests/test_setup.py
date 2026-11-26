@@ -285,7 +285,7 @@ class DecisionFiles(Temp):
 class Commands(unittest.TestCase):
     def test_the_four_commands_exist_and_the_manifests_agree(self):
         """setup-step, check 5."""
-        for name in ("charter-setup", "charter-check", "charter-gate", "charter-facts-github", "charter-run", "charter-update"):
+        for name in ("charter-setup", "charter-check", "charter-gate", "charter-facts-github", "charter-run", "charter-update", "charter-review"):
             path = ROOT / "charter" / "bin" / name
             with self.subTest(command=name):
                 self.assertTrue(path.is_file(), name)

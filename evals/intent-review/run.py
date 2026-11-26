@@ -7,8 +7,10 @@ plans, the text of the issue, and the answer that is right. The command gives ea
 the form of the workflow `review-intents`: the prompt, the limit of turns, and the tool list come from the
 template of that workflow, and the skill comes from this folder of the repo. A stand-in for the command of
 the code host answers from the files of the case, so a run reads nothing on the code host. Code grades the
-report: the line of the highest open severity against the threshold of the contract, and the subject of the
-finding where the case names one. A case with the field `contested` is run and shown, and it is no part of
+report. The script `charter/scripts/charter_review.py` reads the answers to the closed list of questions, as
+the workflow does, and writes the line of the highest open severity; the command compares that line with the
+threshold of the contract, and it looks for the subject of the case in the answers that do not hold. A report
+that lacks an answer is "form not read". A report of before the closed list is graded by its own severity line. A case with the field `contested` is run and shown, and it is no part of
 the count: its answer waits for a person. With `--reports` the command grades the reports of an earlier run
 again and calls no model; it writes files only when `--out` names a folder. With `--text` it checks each
 file of the cases against the text patterns of the contract, with no run of the model: that needs the
@@ -32,6 +34,9 @@ from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
 ROOT = HERE.parent.parent
+sys.path.insert(0, str(ROOT / "charter" / "scripts"))
+import charter_review as cr  # noqa: E402
+
 CASES = HERE / "cases"
 TEMPLATE = ROOT / "charter" / "templates" / "review-intents.yml"
 MARKER = "<!-- charter-intent-review -->"
@@ -39,6 +44,7 @@ LEVELS = ["none", "low", "medium", "high", "blocker"]
 BLOCKS, PASSES = "blocks", "passes"
 RIGHT, FALSE_ALARM, MISS, OTHER_SUBJECT, NO_REPORT = "right", "false alarm", "miss", "other subject", "no report"
 FORM_NOT_READ = "form not read"
+NOT_COMPLETE = "Not complete:"   # the command writes this line under a report that lacks an answer
 CHANGE_REQUEST = "1"
 TIMEOUT_SECONDS = 1200
 SEVERITY = r"(none|low|medium|high|blocker)"
@@ -157,10 +163,13 @@ def build(case: dict, work: Path) -> dict:
         shutil.copytree(ROOT / part, temp / "charter" / part, ignore=shutil.ignore_patterns("evals", "__pycache__"))
     (temp / "review").mkdir()
     (temp / "review" / "earlier-reports.md").write_text(earlier_report + "\n\n=====\n\n" if earlier_report else "")
+    # The step of the workflow before the reviewer: the answers of code.
+    expected = cr.expected_intents("origin/main", workspace)
+    (temp / "review" / "answers-of-code.md").write_text(cr.text_for_the_reviewer(expected, workspace))
     (temp / "bin").mkdir()
     (temp / "bin" / "gh").write_text(STAND_IN_GH)
     (temp / "bin" / "gh").chmod(0o755)
-    return {"workspace": workspace, "temp": temp, "head": head}
+    return {"workspace": workspace, "temp": temp, "head": head, "expected": expected}
 
 
 def workflow_form(temp: Path, head: str) -> tuple:
@@ -230,32 +239,65 @@ def findings(report: str) -> list:
     return [(match.group(1).lower(), report[match.start():end]) for match, end in zip(found, ends)]
 
 
+def open_findings(report: str, threshold: str) -> list:
+    """The text of each finding at the threshold or above: an answer that does not hold, in the form of the
+    closed list, or a numbered finding, in a report of before it."""
+    answers, _ = cr.read_answers(report)
+    if answers:
+        return [f"Q{number}: {text}" for by_question in answers.values() for number, lines in by_question.items()
+                for answer, text in lines if answer == cr.FAILS and number in cr.QUESTIONS
+                and LEVELS.index(cr.QUESTIONS[number]) >= LEVELS.index(threshold)]
+    return [text for level, text in findings(report) if LEVELS.index(level) >= LEVELS.index(threshold)]
+
+
+def severity(report: str) -> str | None:
+    """The highest open severity: from the answers, as the workflow writes it, or from the severity line of
+    a report of before the closed list. None for a report with neither, and for one that is not complete."""
+    answers, outside = cr.read_answers(report)
+    if re.search(rf"(?m)^{NOT_COMPLETE}", report) or ((answers or outside) and cr.problems(answers, outside, [])):
+        return None
+    if answers:
+        return cr.severity_of(report)
+    lines = re.findall(rf"(?mi)^Highest open severity:\s*\**\s*{SEVERITY}\b", report)
+    return lines[-1].lower() if lines else None
+
+
 def grade(case: dict, report: str, threshold: str) -> dict:
     """The result of a case, by code. A report with no severity line is no report."""
-    lines = re.findall(rf"(?mi)^Highest open severity:\s*\**\s*{SEVERITY}\b", report)
-    if not lines:
-        return {"result": NO_REPORT, "severity": None}
-    severity = lines[-1].lower()
-    answer = BLOCKS if LEVELS.index(severity) >= LEVELS.index(threshold) else PASSES
+    level = severity(report)
+    if level is None:
+        not_read = NOT_COMPLETE in report or cr.read_answers(report) != ({}, [])
+        return {"result": FORM_NOT_READ if not_read else NO_REPORT, "severity": None}
+    answer = BLOCKS if LEVELS.index(level) >= LEVELS.index(threshold) else PASSES
     if answer != case["expected"]:
-        return {"result": FALSE_ALARM if answer == BLOCKS else MISS, "severity": severity}
+        return {"result": FALSE_ALARM if answer == BLOCKS else MISS, "severity": level}
     ways = case.get("finding", [])
     if answer == BLOCKS and ways:
-        open_ones = [text for level, text in findings(report) if LEVELS.index(level) >= LEVELS.index(threshold)]
+        open_ones = open_findings(report, threshold)
         if not open_ones:
             # The severity line blocks, and no finding at the threshold has a form that the command reads.
-            return {"result": FORM_NOT_READ, "severity": severity}
+            return {"result": FORM_NOT_READ, "severity": level}
         named = lambda way, text: all(re.search(pattern, text, re.I | re.S) for pattern in way)  # noqa: E731
         if not any(named(way, text) for way in ways for text in open_ones):
-            return {"result": OTHER_SUBJECT, "severity": severity}
-    return {"result": RIGHT, "severity": severity}
+            return {"result": OTHER_SUBJECT, "severity": level}
+    return {"result": RIGHT, "severity": level}
+
+
+def as_the_workflow_posts_it(report: str, built: dict) -> str:
+    """The step of the workflow after the reviewer: code adds its answers and writes the severity line. A
+    report that lacks an answer is not posted there; here it is kept, with the reasons under it."""
+    if not report:
+        return report
+    text, reasons = cr.closed(report, built["expected"], built["workspace"])
+    return text if text is not None else report.rstrip() + f"\n\n{NOT_COMPLETE} " + "; ".join(reasons) + "\n"
 
 
 def run_case(case: dict, model: str, threshold: str, keep: Path) -> dict:
     work = Path(tempfile.mkdtemp(prefix="charter-eval-"))
     try:
-        got = review(case, build(case, work), model)
-        report = report_of(got.pop("answer"))
+        built = build(case, work)
+        got = review(case, built, model)
+        report = as_the_workflow_posts_it(report_of(got.pop("answer")), built)
         (keep / f"{case['name']}.md").write_text(report or f"no report: {got.get('error', 'the final answer holds no marker line')}\n")
         return row(case, report, threshold, got)
     finally:
@@ -298,7 +340,7 @@ def summary(rows: list, threshold: str, model: str, version: str) -> str:
              "", "A false alarm: the right answer passes, and the reviewer gave a finding at the threshold or above.",
              "A miss: the right answer blocks, and the reviewer gave no such finding.",
              "Another subject: the reviewer blocks, and no finding at the threshold names the subject of the case.",
-             "Form not read: the reviewer blocks, and the command reads no finding at the threshold in the report.",
+             "Form not read: the report lacks an answer to a question of the list, or it blocks with no finding that the command reads.",
              "", "| Case | Right answer | Highest open severity | Result | Turns |", "|---|---|---|---|---|"]
     line = lambda row, answer, result: (  # noqa: E731
         f"| `{row['case']}` | {answer} | {row['severity'] or '-'} | {result} | {row.get('turns') or '-'} |")

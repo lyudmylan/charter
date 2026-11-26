@@ -411,8 +411,8 @@ contract change: a person reviews it, and the new source applies after the merge
 
 The workflow `.github/workflows/review-intents.yml` runs on each change request that changes `intents/**` or `plans/**`.
 An agent that is not the author follows the skill `charter-practices/skills/intent-review/SKILL.md` and
-posts one comment: a table with one row per intent, and the findings. Shadow mode: it approves nothing and
-blocks nothing; a person merges. It runs with a token of the owner's subscription, the secret
+posts one comment: its answers to a closed list of questions for each intent, and its notes. Shadow mode: it
+approves nothing and blocks nothing; a person merges. It runs with a token of the owner's subscription, the secret
 `CLAUDE_CODE_OAUTH_TOKEN`, and with read-only tools plus the comment commands. A change request from a
 fork gets no secret and no review.
 
@@ -429,6 +429,50 @@ with no index, from the first letters that git can take for the flag. The checko
 takes the settings and the instruction files of a change request from its base branch (the security page of
 the action, "Which files come from the base branch on pull requests"), so a change cannot open the list.
 
+### The closed list of questions
+
+A question on free text has no end: a second read of the same intent finds another reading of it. So the
+reviewer answers a closed list of eight questions for each intent, and only a question that does not hold
+is a finding. The skill holds the text of the questions; the script `charter/scripts/charter_review.py`,
+the command `charter-review`, holds the number and the severity of each one, and a test holds the two
+together.
+
+| Question | Severity | It holds when |
+|---|---|---|
+| Q1 | high | each sentence of the goal has an acceptance check that proves it |
+| Q2 | medium | each behaviour that the scope states has one check or more whose sentence names it |
+| Q3 | high | each automatic check names a test or a command that exists, and it tries each behaviour that its sentence names |
+| Q4 | medium | each manual check names who does it and why it is not automatic, with the clause of a drafted reading |
+| Q5 | medium | each item of the issue is in the scope of the intent or in its out-of-scope part |
+| Q6 | high | no sentence contradicts the product document, the instruction file, or a decision that an epic or a document records |
+| Q7 | medium | no sentence contradicts another sentence of the intent or of its plan |
+| Q8 | medium | a work item that changes the behaviour of the product names the scenario of the product test |
+
+An answer is `holds`, `does not hold` with the sentence that fails, `unknown`, or `closed` for a finding
+that a line `Dropped finding:` or `False finding:` of the change request answers. Each other thing that the
+reviewer sees is a note, of severity `low`, and blocks nothing. The skill names the kinds: a check whose test
+tries the behaviour of its sentence and not a detail or a rare case of it; a contradiction that shows only
+in a rare case; a fact in two places; one name for two things; a count or a name that is wrong; wording.
+The reviewer chooses no severity: the list gives it. A later round answers again each question that did not
+hold or was unknown, and each question for a changed line, and keeps each other answer.
+
+Code reads the form. A report holds a heading `### intents/<part>.md` for each intent, and under it one line
+for each question, `- Q<n>: <answer>`. Two steps of the workflow call the script, and they run the scripts
+of the fetched Charter, in this repo the scripts of the base branch, never the code of the change:
+
+- Before the reviewer, `charter-review before --base <ref>` answers the part of Q3 that code can answer: each
+  automatic check names a test or a command, and each named test file is in the repo when the plan of the
+  intent is. The reviewer gets these answers as a file.
+- After the reviewer, `charter-review close --report <file> --base <ref>` checks that the report answers each
+  question for each intent that the change adds and for the intent of each plan that it adds or changes, and
+  that it holds the section "Answers". It
+  adds each answer of code that does not hold, and it writes the line `Highest open severity: <level>`: the
+  highest severity of a question that does not hold; `low` with a note or an answer `unknown` and no such
+  question; `none` with neither. A report that lacks an answer is not complete: the step posts nothing, and
+  the run fails and is no round. The verdict reads the line that code wrote.
+
+`charter-review severity --report <file>` prints that line for a report, with no check against a change.
+
 The script `tests/probe/reviewer_probe.py` tests the boundary: it starts Claude Code with the flags of the
 template and a local server in the place of the model, which answers with a fixed list of tool calls, and
 it fails when a case that must be refused passes, when a result holds a token, or when a file is written.
@@ -442,9 +486,10 @@ from. A case names commits of this repo, or it holds the files of an adopter wit
 replaced. The command gives each case to the reviewer in the form of the workflow: the prompt, the limit of
 turns, and the tool list come from the template, and the skill comes from the folder of the repo. A stand-in
 for the command of the code host answers from the files of the case, and the settings of the person who
-starts the command stay out of the run. Code grades each report: the line of the highest open severity
-against `review.threshold`, and, for a case with the answer `blocks`, the subject: a way of patterns that one
-finding at the threshold holds in full. The report counts the right answers, the false alarms, the misses, the answers on
+starts the command stay out of the run. Code grades each report: it closes the report as the step of the workflow does, and compares the line of the
+highest open severity with `review.threshold`; for a case with the answer `blocks` it looks for the subject:
+a way of patterns that one answer `does not hold` holds in full. A report that lacks an answer counts as
+"form not read". A report of before the closed list is graded by its own severity line and its numbered findings. The report counts the right answers, the false alarms, the misses, the answers on
 another subject, and the runs with no report, and it keeps each report of the reviewer. A case with the field
 `contested` runs and is no part of the count: its answer waits for a person, because the reviewer does not
 grade itself. With `--reports <folder>` the command grades the reports of an earlier run again and calls no
@@ -459,8 +504,9 @@ evidence on each side, in the text of the change request under `## Disagreements
 
 ### The review loop
 
-Each finding carries a severity: `blocker`, `high`, `medium`, or `low`; the report ends with the line
-`Highest open severity: <level>`. The author answers each finding at `review.threshold` or above: a
+A finding of the intent reviewer is a question of its closed list that does not hold, with the severity of
+the list; a finding of the reviewer of the code carries `blocker`, `high`, `medium`, or `low`. A report ends
+with the line `Highest open severity: <level>`. The author answers each finding at `review.threshold` or above: a
 correction, or a line `Dropped finding: <reason>` in the change request, which closes the finding for the
 next round. The skill `charter-practices/skills/review-loop/SKILL.md` is the author side of the loop, for
 the agent in the session of the author.
@@ -578,7 +624,7 @@ change requests, one line each, for a sample review.
 ## The setup step
 
 `charter-setup` sets a repo up in one command. The plugin `charter` ships it in `bin/`, with
-`charter-update`, `charter-check`, `charter-gate`, `charter-facts-github`, and `charter-run`; Claude Code puts that folder on the path of
+`charter-update`, `charter-check`, `charter-gate`, `charter-facts-github`, `charter-run`, and `charter-review`; Claude Code puts that folder on the path of
 the shell while the plugin is enabled (the plugin documentation, "Executables"; claude.ai and Cowork do
 not install a plugin with a `bin/` folder, so that way of distribution is not open to Charter). From a
 clone of the Charter repo, the same scripts are `charter/scripts/charter_*.py`.

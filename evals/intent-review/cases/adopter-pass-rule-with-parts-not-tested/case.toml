@@ -1,3 +1,3 @@
 expected = "blocks"
-source = "A change request of an adopter, with the name of the product replaced. The reviewer gave this finding in the first round, the author corrected the intent, and the leader merged the change request."
-finding = [["reader"], ["check 5", "function|unit test"], ["exit code"]]
+source = "A change request of an adopter, with the name of the product replaced. The reviewer gave this finding in the first round, the author corrected the intent, and the leader merged the change request. By the closed list of questions (#153): two parts of the pass rule have no check (Q2), and check 5 cannot run as the scope is written (Q7). The third finding of the first report, a fact in the wrong place, is a note."
+finding = [["check 5", "function|unit test"], ["exit code"], ["pnpm test"]]

@@ -1,6 +1,6 @@
-expected = "passes"
-source = "The leader merged this state, and the report of the reviewer on it was below the threshold."
-contested = "In three runs on 2026-11-26 the reviewer blocked this state 3 of 3 times. Two agents that are not the author found the blocking finding right in fact. Whether it is at the threshold is for the leader to say."
+expected = "blocks"
+source = "The leader merged this state, and the report of the reviewer on it was below the threshold. By the closed list of questions (#153): an item of the issue, what the issue of a cancelled run shows, is in no part of the intent: Q5. Each of three fresh reads gave it."
+finding = [["#120|issue", "cancelled run"]]
 change_request = 121
 base = "e5625cc0f2d6a164fd94f6ea444b845ba8d2fec5"
 head = "38b10331da0a39c24a07b9bcb3d52bdfa14c32cd"
